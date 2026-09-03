@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Data Exchange{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Data Exchange</h1>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6"><i class="bi bi-upload"></i> Import</h2>
+        <p class="text-muted small">Uploaded files are staged and validated before anything reaches your live data — nothing is written until you review and commit.</p>
+        <a href="{{ url_for('data_exchange.import_contacts') }}" class="btn btn-primary btn-sm">Import Contacts from CSV</a>
+        <a href="{{ url_for('data_exchange.import_organizations') }}" class="btn btn-primary btn-sm">Import Organizations from CSV</a>
+        <a href="{{ url_for('data_exchange.import_suppliers') }}" class="btn btn-primary btn-sm">Import Suppliers from CSV</a>
+        <a href="{{ url_for('data_exchange.import_pois') }}" class="btn btn-primary btn-sm">Import Points of Interest from CSV</a>
+        <a href="{{ url_for('data_exchange.import_employees') }}" class="btn btn-primary btn-sm">Import Employees from CSV</a>
+        <a href="{{ url_for('data_exchange.import_service_taxonomy') }}" class="btn btn-primary btn-sm">Import Service Code Taxonomy from CSV</a>
+        <a href="{{ url_for('data_exchange.import_service_catalog') }}" class="btn btn-primary btn-sm">Import Services from CSV</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6"><i class="bi bi-download"></i> Export</h2>
+        <p class="text-muted small mb-2"><i class="bi bi-exclamation-triangle text-warning"></i> Exported files contain decrypted, plaintext data (they're your own backup). Store or delete them carefully.</p>
+        <form method="post" action="{{ url_for('data_exchange.create_export') }}" class="row g-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-7">
+            <select class="form-select form-select-sm" name="module" id="export-module" onchange="updateFormats()">
+              <option value="contacts">Contacts</option>
+              <option value="points_of_interest">Points of Interest</option>
+              <option value="documents">Documents</option>
+            </select>
+          </div>
+          <div class="col-5">
+            <select class="form-select form-select-sm" name="format" id="export-format">
+              <option value="json">JSON</option>
+              <option value="csv">CSV</option>
+              <option value="vcard">vCard</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <button class="btn btn-outline-primary btn-sm w-100" type="submit">Export & Download</button>
+          </div>
+        </form>
+        <script>
+          function updateFormats() {
+            var mod = document.getElementById('export-module').value;
+            var fmtSelect = document.getElementById('export-format');
+            var formats = {"contacts": ["json","csv","vcard"], "points_of_interest": ["json"], "documents": ["json"]}[mod];
+            fmtSelect.innerHTML = "";
+            formats.forEach(function(f) {
+              var opt = document.createElement("option");
+              opt.value = f; opt.textContent = f.toUpperCase();
+              fmtSelect.appendChild(opt);
+            });
+          }
+        </script>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-body">
+    <h2 class="h6">Recent import batches</h2>
+    <table class="table table-sm mb-0">
+      <thead><tr><th>File</th><th>Module</th><th>Status</th><th>Rows</th><th>Errors</th><th></th></tr></thead>
+      <tbody>
+        {% for b in batches %}
+        <tr>
+          <td>{{ b.file_name }}</td>
+          <td>{{ b.target_module }}</td>
+          <td><span class="badge bg-{{ {'Staged':'secondary','Validated':'warning','Committed':'success','Rejected':'danger'}[b.status] }}-subtle text-dark">{{ b.status }}</span></td>
+          <td>{{ b.row_count }}</td>
+          <td>{{ b.error_count }}</td>
+          <td><a href="{{ url_for('data_exchange.review_batch', batch_id=b.batch_id) }}" class="btn btn-sm btn-link py-0">Review</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-3">No imports yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body">
+    <h2 class="h6">Recent exports</h2>
+    <table class="table table-sm mb-0">
+      <thead><tr><th>When</th><th>Module</th><th>Format</th><th></th></tr></thead>
+      <tbody>
+        {% for j in jobs %}
+        <tr>
+          <td class="text-nowrap">{{ j.created_at }}</td>
+          <td>{{ j.module }}</td>
+          <td>{{ j.format|upper }}</td>
+          <td><a href="{{ url_for('data_exchange.download_export', export_id=j.export_id) }}" class="btn btn-sm btn-link py-0">Download again</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center text-muted py-3">No exports yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

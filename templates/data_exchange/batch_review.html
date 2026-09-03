@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Review Import Batch{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-0">Review Import — {{ batch.file_name }}</h1>
+    <span class="badge bg-{{ {'Staged':'secondary','Validated':'warning','Committed':'success','Rejected':'danger'}[batch.status] }}-subtle text-dark mt-1">{{ batch.status }}</span>
+  </div>
+  <div class="d-flex gap-2">
+    {% if batch.status not in ("Committed", "Rejected") %}
+    <form method="post" action="{{ url_for('data_exchange.commit_batch', batch_id=batch.batch_id) }}" onsubmit="return confirm('Commit all valid rows into ' + {{ batch.target_module | title | tojson }} + '?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check-lg"></i> Commit valid rows</button>
+    </form>
+    <form method="post" action="{{ url_for('data_exchange.reject_batch', batch_id=batch.batch_id) }}" onsubmit="return confirm('Reject this batch? Nothing will be imported.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit">Reject</button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('data_exchange.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0">
+      {% if batch.target_module == 'suppliers' %}
+      <thead><tr><th>Status</th><th>Name</th><th>Type / Sub-Type</th><th>Street / City / Province / Country</th><th>Phone</th><th>Error</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        {% set addr = r.parsed.get('address_parsed', {}) %}
+        <tr>
+          <td><span class="badge bg-{{ 'success' if r.validation_status == 'Valid' else 'danger' }}-subtle text-dark">{{ r.validation_status }}</span></td>
+          <td>{{ r.parsed.get('name', '') }}</td>
+          <td>{{ r.parsed.get('type', '') }}{% if r.parsed.get('subtype') %} / {{ r.parsed.get('subtype') }}{% endif %}</td>
+          <td class="small">
+            {{ addr.get('street', '') }}<br>
+            {{ addr.get('city_text', '') }}{% if addr.get('city_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing city"></i>{% endif %},
+            {{ addr.get('state_text', '') }}{% if addr.get('state_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing province/state"></i>{% endif %},
+            {{ addr.get('country_text', '') }}{% if addr.get('country_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing country"></i>{% endif %}
+          </td>
+          <td class="small">{{ r.parsed.get('phone', '') }} {% if r.parsed.get('phone_type') %}<span class="badge bg-light text-dark border">{{ r.parsed.get('phone_type') }}</span>{% endif %}</td>
+          <td class="text-danger small">{{ r.validation_errors or "" }}</td>
+          <td>
+            {% if r.committed_entity_id %}
+            <a href="{{ url_for('suppliers.view_supplier', supplier_id=r.committed_entity_id) }}">View supplier →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% elif batch.target_module == 'organizations' %}
+      <thead><tr><th>Status</th><th>Name</th><th>Type</th><th>Street / City / Province / Country</th><th>Phone</th><th>Email</th><th>Error</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        {% set addr = r.parsed.get('address_parsed', {}) %}
+        <tr>
+          <td><span class="badge bg-{{ 'success' if r.validation_status == 'Valid' else 'danger' }}-subtle text-dark">{{ r.validation_status }}</span></td>
+          <td>{{ r.parsed.get('name', '') }}</td>
+          <td>{{ r.parsed.get('type', '') }}</td>
+          <td class="small">
+            {{ addr.get('street', '') }}<br>
+            {{ addr.get('city_text', '') }}{% if addr.get('city_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing city"></i>{% endif %},
+            {{ addr.get('state_text', '') }}{% if addr.get('state_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing province/state"></i>{% endif %},
+            {{ addr.get('country_text', '') }}{% if addr.get('country_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing country"></i>{% endif %}
+          </td>
+          <td class="small">{{ r.parsed.get('phone', '') }}</td>
+          <td class="small">{{ r.parsed.get('email', '') }}</td>
+          <td class="text-danger small">{{ r.validation_errors or "" }}</td>
+          <td>
+            {% if r.committed_entity_id %}
+            <a href="{{ url_for('organizations.view_organization', org_id=r.committed_entity_id) }}">View organization →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% elif batch.target_module == 'points_of_interest' %}
+      <thead><tr><th>Status</th><th>Name</th><th>Type</th><th>City / Province / Country</th><th>Phone</th><th>Error</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="badge bg-{{ 'success' if r.validation_status == 'Valid' else 'danger' }}-subtle text-dark">{{ r.validation_status }}</span></td>
+          <td>{{ r.parsed.get('name', '') }}</td>
+          <td>{{ r.parsed.get('type', '') }}</td>
+          <td class="small">
+            {{ r.parsed.get('city_text') or r.parsed.get('city', '') }}{% if r.parsed.get('city_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing city"></i>{% endif %},
+            {{ r.parsed.get('state_text') or r.parsed.get('state', '') }}{% if r.parsed.get('state_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing province/state"></i>{% endif %},
+            {{ r.parsed.get('country', '') }}{% if r.parsed.get('country_id') %} <i class="bi bi-check-circle text-success" title="Matched to an existing country"></i>{% endif %}
+          </td>
+          <td class="small">{{ r.parsed.get('phone', '') }}</td>
+          <td class="text-danger small">{{ r.validation_errors or "" }}</td>
+          <td>
+            {% if r.committed_entity_id %}
+            <a href="{{ url_for('poi.view_poi', poi_id=r.committed_entity_id) }}">View POI →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% elif batch.target_module == 'contacts' %}
+      <thead><tr><th>Status</th><th>Name</th><th>Organization</th><th>Phone(s)</th><th>Email(s)</th><th>Error</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="badge bg-{{ 'success' if r.validation_status == 'Valid' else 'danger' }}-subtle text-dark">{{ r.validation_status }}</span></td>
+          <td>{{ r.parsed.get('full_name', '') }}</td>
+          <td class="small">{{ r.parsed.get('organization', '') }}</td>
+          <td class="small">
+            {% for p in r.parsed.get('phone_entries', []) %}
+            {{ p.number }} <span class="badge bg-light text-dark border">{{ p.phone_type }}</span>{% if not loop.last %}<br>{% endif %}
+            {% endfor %}
+          </td>
+          <td class="small">{{ r.parsed.get('email_list', []) | join(', ') }}</td>
+          <td class="text-danger small">{{ r.validation_errors or "" }}</td>
+          <td>
+            {% if r.committed_entity_id %}
+            <a href="{{ url_for('contacts.view_contact', contact_id=r.committed_entity_id) }}">View contact →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% elif batch.target_module == 'employees' %}
+      <thead><tr><th>Status</th><th>Name</th><th>Department</th><th>Job Title</th><th>Phone(s)</th><th>Email</th><th>Error</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="badge bg-{{ 'success' if r.validation_status == 'Valid' else 'danger' }}-subtle text-dark">{{ r.validation_status }}</span></td>
+          <td>{{ r.parsed.get('full_name', '') }}</td>
+          <td class="small">{{ r.parsed.get('department', '') }}</td>
+          <td class="small">{{ r.parsed.get('job_title', '') }}</td>
+          <td class="small">
+            {% for p in r.parsed.get('phone_entries', []) %}
+            {{ p.number }} <span class="badge bg-light text-dark border">{{ p.phone_type }}</span>{% if not loop.last %}<br>{% endif %}
+            {% endfor %}
+          </td>
+          <td class="small">{{ r.parsed.get('email_list', []) | join(', ') }}</td>
+          <td class="text-danger small">{{ r.validation_errors or "" }}</td>
+          <td>
+            {% if r.committed_entity_id %}
+            <a href="{{ url_for('hr.view_employee', employee_id=r.committed_entity_id) }}">View employee →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% elif batch.target_module == 'service_taxonomy' %}
+      <thead><tr><th>Status</th><th>Service Code</th><th>Category</th><th>Group</th><th>Sub-Group</th><th>Validity</th><th>Error</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="badge bg-{{ 'success' if r.validation_status == 'Valid' else 'danger' }}-subtle text-dark">{{ r.validation_status }}</span></td>
+          <td><code>{{ r.parsed.get('category_code', '') }}-{{ r.parsed.get('group_code', '') }}-{{ r.parsed.get('subgroup_code', '') }}</code></td>
+          <td class="small">{{ r.parsed.get('category_code', '') }} — {{ r.parsed.get('category_name', '') }}</td>
+          <td class="small">{{ r.parsed.get('group_name', '') }}</td>
+          <td class="small">{{ r.parsed.get('subgroup_name', '') }}</td>
+          <td>
+            {% set v = r.parsed.get('validity_status') %}
+            {% if v == 'active' %}<span class="badge bg-success-subtle text-success">Active</span>
+            {% elif v == 'under_review' %}<span class="badge bg-warning-subtle text-warning-emphasis">Under review</span>
+            {% elif v == 'deprecated' %}<span class="badge bg-danger-subtle text-danger">Deprecated</span>
+            {% else %}<span class="text-muted small">{{ r.parsed.get('validity_raw', '') }}</span>{% endif %}
+          </td>
+          <td class="text-danger small">{{ r.validation_errors or "" }}</td>
+          <td>
+            {% if r.committed_entity_id %}
+            <a href="{{ url_for('service_taxonomy_admin.edit_subgroup', subgroup_id=r.committed_entity_id) }}">View sub-group →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% elif batch.target_module == 'service_catalog' %}
+      <thead><tr><th>Status</th><th>Service Code</th><th>Description</th><th>Error</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="badge bg-{{ 'success' if r.validation_status == 'Valid' else 'danger' }}-subtle text-dark">{{ r.validation_status }}</span></td>
+          <td><code>{{ r.parsed.get('category_code', '') }}-{{ r.parsed.get('group_code', '') }}-{{ r.parsed.get('subgroup_code', '') }}</code></td>
+          <td class="small">{{ r.parsed.get('description', '') }}</td>
+          <td class="text-danger small">{{ r.validation_errors or "" }}</td>
+          <td>
+            {% if r.committed_entity_id %}
+            <a href="{{ url_for('services.view_service', service_id=r.committed_entity_id) }}">View service →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% else %}
+      <thead><tr><th>Status</th><th>full_name</th><th>email</th><th>phone</th><th>Error</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="badge bg-{{ 'success' if r.validation_status == 'Valid' else 'danger' }}-subtle text-dark">{{ r.validation_status }}</span></td>
+          <td>{{ r.parsed.get('full_name', '') }}</td>
+          <td>{{ r.parsed.get('email', '') }}</td>
+          <td>{{ r.parsed.get('phone', '') }}</td>
+          <td class="text-danger small">{{ r.validation_errors or "" }}</td>
+          <td>
+            {% if r.committed_entity_id %}
+            <a href="{{ url_for('contacts.view_contact', contact_id=r.committed_entity_id) }}">View contact →</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}

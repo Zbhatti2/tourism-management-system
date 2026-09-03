@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit Contact" if contact else "Add Contact" }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit Contact" if contact else "Add Contact" }}</h1>
+<p class="text-muted mb-4">{{ supplier.supplier_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Name <span class="text-danger">*</span></label>
+      <input class="form-control" name="name" value="{{ (contact.name | orblank) if contact else '' }}" required autofocus>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Title/Position</label>
+      <input class="form-control" name="title" value="{{ (contact.title | orblank) if contact else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Address</label>
+      <select class="form-select" name="supplier_address_id">
+        <option value="">— None —</option>
+        {% for a in addresses %}
+        <option value="{{ a.supplier_address_id }}" {{ "selected" if contact and contact.supplier_address_id == a.supplier_address_id else "" }}>{{ a.street or "" }}{% if a.unit %} {{ a.unit }}{% endif %}</option>
+        {% endfor %}
+      </select>
+      {% if not addresses %}<div class="form-text">No addresses on file for this supplier yet — add one from the supplier page first.</div>{% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Email</label>
+      <input class="form-control" type="email" name="email" value="{{ (contact.email | orblank) if contact else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="3">{{ (contact.notes | orblank) if contact else '' }}</textarea>
+    </div>
+    {% if not contact %}
+    <p class="small text-muted mb-0">Phone numbers can be added once the contact is saved.</p>
+    {% endif %}
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

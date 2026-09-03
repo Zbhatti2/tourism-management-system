@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if subgroup else "New" }} Sub-Group{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if subgroup else "New" }} Service Sub-Group</h1>
+<p class="text-muted small mb-4">Shared across every tenant — see the note on the Service Code Maintenance page.</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 620px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Group <span class="text-danger">*</span></label>
+      {% if subgroup %}
+      <div>{{ subgroup.category_code }}-{{ subgroup.group_code }} — {{ subgroup.category_name }} / {{ subgroup.group_name }}</div>
+      <div class="form-text">Fixed once created.</div>
+      {% else %}
+      <select class="form-select" name="group_id" required>
+        <option value="">Choose…</option>
+        {% for g in groups %}
+        <option value="{{ g.group_id }}">{{ g.category_code }}-{{ g.group_code }} — {{ g.category_name }} / {{ g.group_name }}</option>
+        {% endfor %}
+      </select>
+      {% if not groups %}<div class="form-text text-danger">No active Groups yet — add one first.</div>{% endif %}
+      {% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Code <span class="text-danger">*</span></label>
+      {% if subgroup %}
+      <div><code class="fs-6">{{ subgroup.subgroup_code }}</code></div>
+      <div class="form-text">Fixed once created — it's already part of every Service Code issued under this Sub-Group.</div>
+      {% else %}
+      <input class="form-control" name="subgroup_code" maxlength="4" style="max-width: 120px; text-transform: uppercase;"
+             value="{{ (form_values.subgroup_code | orblank) if form_values else '' }}" placeholder="e.g. MC" required>
+      <div class="form-text">Two to four letters, unique within the chosen Group.</div>
+      {% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Name <span class="text-danger">*</span></label>
+      <input class="form-control" name="subgroup_name"
+             value="{{ (subgroup.subgroup_name | orblank) if subgroup else ((form_values.subgroup_name | orblank) if form_values else '') }}" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea class="form-control" name="description" rows="3">{{ (subgroup.description | orblank) if subgroup else ((form_values.description | orblank) if form_values else '') }}</textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Validity</label>
+      {% set validity_default = (subgroup.validity_status if subgroup else "active") %}
+      <select class="form-select" name="validity_status" style="max-width: 260px;">
+        <option value="active" {{ "selected" if validity_default == "active" else "" }}>Active</option>
+        <option value="under_review" {{ "selected" if validity_default == "under_review" else "" }}>Under review</option>
+        <option value="deprecated" {{ "selected" if validity_default == "deprecated" else "" }}>Deprecated</option>
+      </select>
+      <div class="form-text">
+        Deprecated or Under review Sub-Groups are hidden from the New Service picker and blocked at the database
+        level from having new Service Codes issued against them.
+        {% if subgroup and service_count %}
+        <br><strong>{{ service_count }} existing service{{ 's' if service_count != 1 else '' }}</strong>
+        already use this Sub-Group — changing Validity never affects them, it only controls whether new ones can be added.
+        {% endif %}
+      </div>
+    </div>
+    <div class="form-check">
+      {% set active_default = (subgroup.is_active if subgroup else True) %}
+      <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {{ "checked" if active_default else "" }}>
+      <label class="form-check-label" for="is_active">Active (visible in this list; unrelated to Validity above)</label>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('service_taxonomy_admin.manage_subgroups') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

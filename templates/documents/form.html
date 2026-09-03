@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit Item" if content_id else "New Item" }}{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">{{ "Edit Item" if content_id else "New Item" }}</h1>
+<form method="post" class="card shadow-sm border-0">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Content name *</label>
+        <input class="form-control" name="content_name" required value="{{ (item.content_name | orblank) if item else '' }}" autofocus>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Content type</label>
+        <select class="form-select" name="content_type_id">
+          <option value="">— None —</option>
+          {% for t in content_types %}
+          <option value="{{ t.content_type_id }}" {{ "selected" if item and (item.content_type_id | string) == (t.content_type_id | string) else "" }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Author(s)</label>
+        <input class="form-control" name="authors" value="{{ (item.authors | orblank) if item else '' }}">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Description <span class="text-muted small">(max 200 characters)</span></label>
+        <textarea class="form-control" name="description" id="description" rows="5" maxlength="200">{{ (item.description | orblank) if item else '' }}</textarea>
+        <div class="form-text"><span id="description-count">0</span>/200 characters</div>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Notes <span class="text-muted small">(brief summary — web URLs are automatically turned into clickable links)</span></label>
+        <textarea class="form-control" name="notes" rows="4">{{ (item.notes | orblank) if item else '' }}</textarea>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Knowledge domain(s)</label>
+        <div class="d-flex flex-wrap gap-3 border rounded p-2">
+          {% for d in knowledge_domains %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="knowledge_domain_ids" value="{{ d.knowledge_domain_id }}" id="kd{{ d.knowledge_domain_id }}" {{ "checked" if d.knowledge_domain_id in selected_domains else "" }}>
+            <label class="form-check-label" for="kd{{ d.knowledge_domain_id }}">{{ d.label }}</label>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Keywords <span class="text-muted small">(comma-separated)</span></label>
+        <input class="form-control" name="keywords" value="{{ keywords }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Hashtags <span class="text-muted small">(comma-separated)</span></label>
+        <input class="form-control" name="hashtags" value="{{ hashtags }}">
+      </div>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('documents.view_content', content_id=content_id) if content_id else url_for('documents.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% if content_id %}<p class="text-muted small mt-2">Content locations are managed from the item's detail page.</p>{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    const ta = document.getElementById('description');
+    const counter = document.getElementById('description-count');
+    if (!ta || !counter) return;
+    const update = () => { counter.textContent = ta.value.length; };
+    ta.addEventListener('input', update);
+    update();
+  })();
+</script>
+{% endblock %}

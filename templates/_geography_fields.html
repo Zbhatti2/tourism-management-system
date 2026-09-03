@@ -1,0 +1,44 @@
+{# Region -> Country -> Province/State -> City cascade, shared by the
+   Contacts and Personal Accounts address forms. Selects are populated
+   client-side from GET /geography/tree (see static/js/geography_picker.js)
+   — call initGeographyPicker() in the including template's scripts block.
+   Expects an `address` variable in context (may be undefined/None for a
+   new address). #}
+<div class="row g-2 mb-3">
+  <div class="col-6">
+    <label class="form-label">Region</label>
+    <select class="form-select" id="region_id" name="region_id">
+      <option value="">— Select region —</option>
+    </select>
+  </div>
+  <div class="col-6">
+    <label class="form-label">Country</label>
+    <select class="form-select" id="country_id" name="country_id">
+      <option value="">— Select country —</option>
+    </select>
+  </div>
+</div>
+<div class="row g-2 mb-3">
+  <div class="col-6">
+    <label class="form-label">Province/State</label>
+    <select class="form-select" id="state_id" name="state_id">
+      <option value="">— Select province/state —</option>
+    </select>
+    <div class="geo-fallback-wrap mt-1" hidden>
+      <input class="form-control form-control-sm" id="state_province_text" name="state_province_text"
+             placeholder="Not on file — type the province/state"
+             value="{{ (address.state_province_text | orblank) if address else '' }}">
+    </div>
+  </div>
+  <div class="col-6">
+    <label class="form-label">City</label>
+    <select class="form-select" id="city_id" name="city_id">
+      <option value="">— Select city —</option>
+    </select>
+    <div class="geo-fallback-wrap mt-1" hidden>
+      <input class="form-control form-control-sm" id="city_text" name="city_text"
+             placeholder="Not on file — type the city"
+             value="{{ (address.city_text | orblank) if address else '' }}">
+    </div>
+  </div>
+</div>

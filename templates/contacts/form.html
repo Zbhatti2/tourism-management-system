@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit Contact" if contact else "New Contact" }}{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">{{ "Edit Contact" if contact else "New Contact" }}</h1>
+{% if not contact and preselect_organization_id %}
+<p class="text-muted mb-4">Adding a contact for this organization — change the Organization field below if that's not right.</p>
+{% else %}
+<div class="mb-4"></div>
+{% endif %}
+<form method="post" class="card shadow-sm border-0" enctype="multipart/form-data">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <div class="row g-3">
+      <div class="col-12 d-flex align-items-center gap-3">
+        <img id="photo-preview"
+             src="{{ url_for('contacts.contact_photo', contact_id=contact.contact_id) if contact and contact.profile_image_path else '' }}"
+             class="rounded-circle border {{ '' if contact and contact.profile_image_path else 'd-none' }}"
+             style="width:64px;height:64px;object-fit:cover;" alt="">
+        <i id="photo-placeholder" class="bi bi-person-circle text-muted {{ 'd-none' if contact and contact.profile_image_path else '' }}" style="font-size:64px;"></i>
+        <div>
+          <label class="form-label mb-1">Profile image</label>
+          <input class="form-control form-control-sm" type="file" name="profile_image" accept=".png,.jpg,.jpeg,.gif,.webp" onchange="previewPhoto(this)">
+          {% if contact and contact.profile_image_path %}
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" id="remove_photo" name="remove_photo">
+            <label class="form-check-label small" for="remove_photo">Remove current photo</label>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label">Title</label>
+        <select class="form-select" name="title_id">
+          <option value="">— None —</option>
+          {% for t in titles %}
+          <option value="{{ t.contact_title_id }}" {{ "selected" if contact and contact.title_id == t.contact_title_id else "" }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Full name *</label>
+        <input class="form-control" name="full_name" required value="{{ (contact.full_name | orblank) if contact else '' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Suffix</label>
+        <select class="form-select" name="suffix_id">
+          <option value="">— None —</option>
+          {% for s in suffixes %}
+          <option value="{{ s.contact_suffix_id }}" {{ "selected" if contact and contact.suffix_id == s.contact_suffix_id else "" }}>{{ s.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">File as</label>
+        <input class="form-control" name="file_as" value="{{ (contact.file_as | orblank) if contact else '' }}" placeholder="LastName, FirstName">
+      </div>
+
+      {% set effective_organization_id = preselect_organization_id or (contact.current_organization_id if contact else none) %}
+      <div class="col-md-6">
+        <label class="form-label">Organization</label>
+        <div class="input-group">
+          <select class="form-select" name="current_organization_id">
+            <option value="">— None —</option>
+            {% for o in organizations %}
+            <option value="{{ o.organization_id }}" {{ "selected" if effective_organization_id and effective_organization_id == o.organization_id else "" }}>{{ o.organization_name }}</option>
+            {% endfor %}
+          </select>
+          <a class="btn btn-outline-secondary" href="{{ url_for('contacts.new_organization', next=request.path) }}" title="Add organization"><i class="bi bi-plus-lg"></i></a>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Job title</label>
+        <input class="form-control" name="current_job_title" value="{{ (contact.current_job_title | orblank) if contact else '' }}">
+      </div>
+
+      {% set effective_assistant_id = preselect_assistant_id or (contact.assistant_contact_id if contact else none) %}
+      <div class="col-md-6">
+        <label class="form-label">Profession</label>
+        <select class="form-select" name="profession_id">
+          <option value="">— None —</option>
+          {% for p in professions %}
+          <option value="{{ p.profession_id }}" {{ "selected" if contact and contact.profession_id == p.profession_id else "" }}>{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Assistant</label>
+        <div class="input-group">
+          <select class="form-select" name="assistant_contact_id">
+            <option value="">— None —</option>
+            {% for a in assistant_candidates %}
+            {% if not contact or a.contact_id != contact.contact_id %}
+            <option value="{{ a.contact_id }}" {{ "selected" if effective_assistant_id and effective_assistant_id == a.contact_id else "" }}>{{ a.file_as or a.full_name }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <a class="btn btn-outline-secondary" href="{{ url_for('contacts.new_assistant_contact', next=request.path) }}" title="Add a new contact as assistant"><i class="bi bi-plus-lg"></i></a>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Contact category</label>
+        <select class="form-select" name="contact_category_id">
+          <option value="">— None —</option>
+          {% for c in categories %}
+          <option value="{{ c.contact_category_id }}" {{ "selected" if contact and contact.contact_category_id == c.contact_category_id else "" }}>{{ c.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Context</label>
+        <select class="form-select" name="context_id">
+          <option value="">— None —</option>
+          {% for x in contexts %}
+          <option value="{{ x.contact_context_id }}" {{ "selected" if contact and contact.context_id == x.contact_context_id else "" }}>{{ x.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Gender</label>
+        <select class="form-select" name="gender">
+          <option value="">— None —</option>
+          {% for g in genders %}
+          <option value="{{ g }}" {{ "selected" if contact and contact.gender == g else "" }}>{{ g }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Web page</label>
+        <input class="form-control" name="web_page" value="{{ (contact.web_page | orblank) if contact else '' }}">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Date of birth</label>
+        <input class="form-control" type="date" name="date_of_birth" value="{{ (contact.date_of_birth | orblank) if contact else '' }}">
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="is_deceased" name="is_deceased" onchange="toggleDateOfDeath()" {{ "checked" if contact and contact.is_deceased else "" }}>
+          <label class="form-check-label" for="is_deceased">Deceased</label>
+        </div>
+      </div>
+      <div class="col-md-3" id="date_of_death_wrap">
+        <label class="form-label">Date of death</label>
+        <input class="form-control" type="date" id="date_of_death" name="date_of_death" value="{{ (contact.date_of_death | orblank) if contact else '' }}">
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="priority_contact" name="priority_contact" {{ "checked" if contact and contact.priority_contact else "" }}>
+          <label class="form-check-label" for="priority_contact">Priority contact</label>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" name="notes" rows="3">{{ (contact.notes | orblank) if contact else '' }}</textarea>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Knowledge graph data <span class="text-muted small">(freeform, ';'-separated — e.g. "Brother of Jahanzeb Ahmed; Son of Rai Bashir Bhatti; CEO of WebVision Inc.")</span></label>
+        <textarea class="form-control" name="knowledge_graph_data" rows="2">{{ (contact.knowledge_graph_data | orblank) if contact else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ next_url if next_url else (url_for('contacts.view_contact', contact_id=contact.contact_id) if contact else url_for('contacts.list_contacts')) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% if contact %}
+<p class="text-muted small mt-2">Emails, phones, addresses, and reference links are managed from the contact's detail page.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  function toggleDateOfDeath() {
+    var checked = document.getElementById('is_deceased').checked;
+    var field = document.getElementById('date_of_death');
+    var wrap = document.getElementById('date_of_death_wrap');
+    field.disabled = !checked;
+    wrap.style.opacity = checked ? '1' : '0.4';
+    if (!checked) field.value = '';
+  }
+  function previewPhoto(input) {
+    var img = document.getElementById('photo-preview');
+    var placeholder = document.getElementById('photo-placeholder');
+    if (input.files && input.files[0]) {
+      img.src = URL.createObjectURL(input.files[0]);
+      img.classList.remove('d-none');
+      placeholder.classList.add('d-none');
+    }
+  }
+  toggleDateOfDeath();
+</script>
+{% endblock %}

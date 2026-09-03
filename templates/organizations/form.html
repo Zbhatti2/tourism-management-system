@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if org else "New" }} Organization{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">{{ "Edit" if org else "New" }} Organization</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Organization name <span class="text-danger">*</span></label>
+      <input class="form-control" name="organization_name" value="{{ (org.organization_name | orblank) if org else '' }}" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Type</label>
+      <select class="form-select" name="organization_type_id">
+        <option value="">— None —</option>
+        {% for t in org_types %}
+        <option value="{{ t.organization_type_id }}" {{ "selected" if org and org.organization_type_id == t.organization_type_id else "" }}>{{ t.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if not org %}
+    <p class="small text-muted">
+      Addresses, emails, phones and documents are added after the organization is created — save this form
+      first, then use the matching cards on the organization's page (there can be more than one of each, e.g.
+      Mailing Address and Physical Address, or a main office line and a fax number).
+    </p>
+    {% endif %}
+    <div class="mb-3">
+      <label class="form-label">Website</label>
+      <input class="form-control" type="url" name="website" placeholder="https://…" value="{{ (org.website or '') if org else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="3">{{ (org.notes | orblank) if org else '' }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('organizations.view_organization', org_id=org.organization_id) if org else url_for('organizations.list_organizations') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

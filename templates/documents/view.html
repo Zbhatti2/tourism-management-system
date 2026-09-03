@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ item.content_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0">{{ item.content_name }}</h1>
+    {% if item.content_type_label %}<span class="badge bg-secondary-subtle text-dark mt-1">{{ item.content_type_label }}</span>{% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('documents.edit_content', content_id=item.content_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    <form method="post" action="{{ url_for('documents.delete_content', content_id=item.content_id) }}" onsubmit="return confirm('Delete this item?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Delete</button>
+    </form>
+    <a href="{{ url_for('documents.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Details</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Author(s)</dt><dd class="col-sm-8">{{ item.authors or "—" }}</dd>
+          <dt class="col-sm-4">Description</dt><dd class="col-sm-8" style="white-space: pre-wrap;">{{ item.description or "—" }}</dd>
+          <dt class="col-sm-4">Notes</dt><dd class="col-sm-8">{{ (item.notes | linkify) if item.notes else "—" }}</dd>
+          <dt class="col-sm-4">Knowledge domains</dt>
+          <dd class="col-sm-8">
+            {% for d in domains %}<span class="badge bg-light text-dark border me-1">{{ d.label }}</span>{% else %}—{% endfor %}
+          </dd>
+          <dt class="col-sm-4">Keywords</dt>
+          <dd class="col-sm-8">{% for k in keywords %}<span class="badge bg-info-subtle text-dark me-1">{{ k.term }}</span>{% else %}—{% endfor %}</dd>
+          <dt class="col-sm-4">Hashtags</dt>
+          <dd class="col-sm-8">{% for h in hashtags %}<span class="badge bg-primary-subtle text-primary me-1">#{{ h.term }}</span>{% else %}—{% endfor %}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Locations</h2>
+          <a href="{{ url_for('documents.new_location', content_id=item.content_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for l in locations %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">
+            <span class="badge bg-light text-dark border">{{ l.location_type }}</span>
+            {% if l.location_type == "Cloud Link" %}
+            <a href="{{ l.path_or_url }}" target="_blank" rel="noopener" class="text-break">{{ l.path_or_url }}</a>
+            {% else %}
+            <a href="#" onclick="openLocation(event, {{ l.location_id }})" title="Open with the default app for this file type">
+              <i class="bi bi-file-earmark-arrow-up"></i> {{ l.path_or_url | basename }}
+            </a>
+            <div class="text-muted text-break" style="font-size:0.78em;">{{ l.path_or_url }}</div>
+            {% endif %}
+          </span>
+          <form method="post" action="{{ url_for('documents.delete_location', content_id=item.content_id, location_id=l.location_id) }}" onsubmit="return confirm('Delete this location?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+          </form>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No locations on file.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mt-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Contacts Link</h2>
+          <a href="{{ url_for('documents.new_contact_link', content_id=item.content_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for l in contact_links %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">
+            {% if l.link_type_label %}<span class="badge bg-light text-dark border me-1">{{ l.link_type_label }}</span>{% endif %}
+            {% if l.contact_id %}<a href="{{ url_for('contacts.view_contact', contact_id=l.contact_id) }}">{{ l.file_as or l.full_name }}</a><br>{% endif %}
+            {% if l.url %}<a href="{{ l.url }}" target="_blank" rel="noopener" class="text-break">{{ l.url }}</a><br>{% endif %}
+            {% if l.description %}{{ l.description }}<br>{% endif %}
+            {% if l.notes %}<span class="text-muted">{{ l.notes | linkify }}</span>{% endif %}
+          </span>
+          <form method="post" action="{{ url_for('documents.delete_contact_link', content_id=item.content_id, link_id=l.content_contact_link_id) }}" onsubmit="return confirm('Remove this contacts link?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+          </form>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No contacts links on file.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const openLocationUrlTemplate = "{{ url_for('documents.open_location', content_id=item.content_id, location_id=0) }}";
+  function openLocation(e, locationId) {
+    e.preventDefault();
+    const url = openLocationUrlTemplate.replace('/0/open', `/${locationId}/open`);
+    fetch(url)
+      .then(r => r.json())
+      .then(data => { if (!data.ok) alert(data.error || 'Could not open the file.'); })
+      .catch(() => alert('Could not reach the server to open the file.'));
+  }
+</script>
+{% endblock %}

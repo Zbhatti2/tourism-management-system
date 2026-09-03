@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}System Management{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">System Management</h1>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5">Account</h2>
+        <dl class="row mb-0">
+          <dt class="col-sm-5">Organization</dt><dd class="col-sm-7">{{ tenant.tenant_name }}</dd>
+          <dt class="col-sm-5">User ID</dt><dd class="col-sm-7">{{ g.username }} <span class="text-muted small">({{ g.role }})</span></dd>
+          <dt class="col-sm-5">Organization since</dt><dd class="col-sm-7">{{ tenant.created_at }}</dd>
+          <dt class="col-sm-5">Last backup</dt><dd class="col-sm-7">{{ last_backup_at or "Never" }}</dd>
+        </dl>
+        <a href="{{ url_for('system_mgmt.change_password') }}" class="btn btn-outline-primary btn-sm mt-2"><i class="bi bi-key"></i> Change Password</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5">Retention &amp; purge</h2>
+        <p class="text-muted small">A deleted contact becomes purge-eligible this many days after its original date of entry, then is permanently erased — archive snapshot and all. Leave blank for indefinite retention (records are kept, and never auto-purged).</p>
+        <form method="post" action="{{ url_for('system_mgmt.update_retention') }}" class="d-flex gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="number" min="1" class="form-control" name="data_retention_days" value="{{ tenant.data_retention_days or '' }}" placeholder="Indefinite" style="max-width: 140px;">
+          <button class="btn btn-outline-primary" type="submit">Save</button>
+        </form>
+        <p class="text-muted small mt-2 mb-1">Currently: {{ (tenant.data_retention_days ~ ' days') if tenant.data_retention_days else 'Indefinite (no auto-purge)' }}</p>
+        <p class="text-muted small mb-2">Checked automatically once a day at login. Last checked: {{ tenant.last_purge_at or "Never" }}.</p>
+        <form method="post" action="{{ url_for('system_mgmt.purge_now') }}" onsubmit="return confirm({{ (purge_eligible_count ~ ' record(s) are currently eligible and will be PERMANENTLY erased — archive snapshot and all. This cannot be undone. Continue?') | tojson }});">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-outline-{{ 'danger' if purge_eligible_count else 'secondary' }} btn-sm" type="submit">
+            Run purge now{% if purge_eligible_count %} ({{ purge_eligible_count }} eligible){% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-building-gear"></i> Host Organization</h2>
+        <p class="text-muted small mb-3">Your own company — {{ host_org.organization_name if host_org else "not yet set up" }}. Its office addresses are where an Employee's Office Work Address is picked from (Human Resources).</p>
+        <a href="{{ url_for('system_mgmt.host_organization') }}" class="btn btn-primary btn-sm">Manage Host Organization</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-heart-pulse"></i> Database health</h2>
+        <p class="text-muted small mb-3">SQLite integrity check, table counts, and file size.</p>
+        <a href="{{ url_for('system_mgmt.health') }}" class="btn btn-primary btn-sm">Run health check</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-journal-text"></i> Audit log</h2>
+        <p class="text-muted small mb-3">Every create/update/delete/login/import/export/purge is recorded here.</p>
+        <a href="{{ url_for('system_mgmt.audit_log') }}" class="btn btn-primary btn-sm">View audit log</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-hdd-stack"></i> Backup &amp; restore</h2>
+        <p class="text-muted small mb-3">Create a backup of the whole database, review the backup log, or restore from an earlier one.</p>
+        <a href="{{ url_for('system_mgmt.backups_index') }}" class="btn btn-primary btn-sm">Backup &amp; restore</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

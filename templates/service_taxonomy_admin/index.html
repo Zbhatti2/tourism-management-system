@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Service Code Maintenance{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('table_maintenance.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Table Maintenance</a>
+</nav>
+<h1 class="h3 mb-2">Service Code Maintenance</h1>
+<p class="text-muted mb-4">
+  Add, edit, deactivate, or delete entries in the Category / Group / Sub-Group taxonomy behind every Service Code
+  (see <a href="{{ url_for('services.list_services') }}">Inventory Management → Services</a>).
+  <strong>These three tables are shared across every tenant</strong> — unlike the tenant-owned lists under Table
+  Maintenance, a change here (a relabel, a deprecation) is visible to, and affects, every tenant, not just yours.
+</p>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <a href="{{ url_for('service_taxonomy_admin.manage_categories') }}" class="text-decoration-none">
+      <div class="card shadow-sm border-0 h-100 table-maint-card">
+        <div class="card-body">
+          <h2 class="h6 mb-1 text-dark"><i class="bi bi-diagram-3 me-2 text-muted"></i>Categories</h2>
+          <p class="text-muted small mb-0">{{ cat_total }} entr{{ 'y' if cat_total == 1 else 'ies' }} &middot; {{ cat_active }} active</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_for('service_taxonomy_admin.manage_groups') }}" class="text-decoration-none">
+      <div class="card shadow-sm border-0 h-100 table-maint-card">
+        <div class="card-body">
+          <h2 class="h6 mb-1 text-dark"><i class="bi bi-diagram-3 me-2 text-muted"></i>Groups</h2>
+          <p class="text-muted small mb-2">Nested under Category</p>
+          <p class="text-muted small mb-0">{{ grp_total }} entr{{ 'y' if grp_total == 1 else 'ies' }} &middot; {{ grp_active }} active</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_for('service_taxonomy_admin.manage_subgroups') }}" class="text-decoration-none">
+      <div class="card shadow-sm border-0 h-100 table-maint-card">
+        <div class="card-body">
+          <h2 class="h6 mb-1 text-dark"><i class="bi bi-diagram-3 me-2 text-muted"></i>Sub-Groups</h2>
+          <p class="text-muted small mb-2">Nested under Group</p>
+          <p class="text-muted small mb-0">{{ sub_total }} entr{{ 'y' if sub_total == 1 else 'ies' }} &middot; {{ sub_active }} active</p>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<style>
+  .table-maint-card { transition: box-shadow .15s ease, transform .15s ease; }
+  .table-maint-card:hover { box-shadow: 0 .5rem 1rem rgba(0,0,0,.1) !important; transform: translateY(-1px); }
+</style>
+{% endblock %}

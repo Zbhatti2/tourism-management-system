@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Geography Maintenance — {{ cfg.label }}{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('geography_admin.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Geography Maintenance</a>
+</nav>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Geography Maintenance — {{ cfg.label }}</h1>
+  <a href="{{ url_for('geography_admin.new_entry', table_key=table_key) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Entry</a>
+</div>
+
+<p class="text-muted small">
+  Shared across every tenant — editing a label here updates it everywhere it's already used, for every tenant, right away.
+  An entry that's still in use can't be deleted outright; deactivate it to hide it from new selections, or use "Merge into..." to move its records to a different entry first.
+</p>
+
+<form method="get" class="row g-2 mb-3 align-items-end">
+  <div class="col-auto">
+    <label class="form-label small mb-0">Search</label>
+    <input class="form-control form-control-sm" type="text" name="q" value="{{ q }}" placeholder="Label or code…" style="min-width: 220px;">
+  </div>
+  {% if cfg.parent %}
+  <div class="col-auto">
+    <label class="form-label small mb-0">{{ cfg.parent.nav_label }}</label>
+    <select class="form-select form-select-sm" name="parent_id" style="min-width: 220px;">
+      <option value="">— All —</option>
+      {% for p in parent_options %}
+      <option value="{{ p[cfg.parent.pk] }}" {{ "selected" if parent_filter == (p[cfg.parent.pk] | string) else "" }}>{{ p[cfg.parent.label_field] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="col-auto">
+    <button class="btn btn-outline-secondary btn-sm" type="submit">Filter</button>
+    {% if q or parent_filter %}<a href="{{ url_for('geography_admin.manage', table_key=table_key) }}" class="btn btn-link btn-sm">Clear</a>{% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          {% if cfg.has_code %}<th>Code</th>{% endif %}
+          <th>Label</th>
+          {% if cfg.parent %}<th>{{ cfg.parent.nav_label }}</th>{% endif %}
+          {% if cfg.has_description %}<th>Description</th>{% endif %}
+          <th>Sort</th>
+          <th>Status</th>
+          <th>Used by</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in entries %}
+        <tr>
+          {% if cfg.has_code %}<td class="text-muted small">{{ item.row.code or "" }}</td>{% endif %}
+          <td><strong>{{ item.row.label }}</strong></td>
+          {% if cfg.parent %}<td class="text-muted small">{{ item.row.parent_label or "" }}</td>{% endif %}
+          {% if cfg.has_description %}<td class="text-muted small">{{ item.row.description or "" }}</td>{% endif %}
+          <td class="text-muted small">{{ item.row.sort_order }}</td>
+          <td>
+            {% if item.row.is_active %}
+            <span class="badge bg-success-subtle text-success">Active</span>
+            {% else %}
+            <span class="badge bg-secondary-subtle text-dark">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if item.usage_count %}
+            <span class="badge bg-primary-subtle text-primary">{{ item.usage_count }} record{{ 's' if item.usage_count != 1 else '' }}</span>
+            {% else %}
+            <span class="text-muted small">Unused</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <a href="{{ url_for('geography_admin.edit_entry', table_key=table_key, entry_id=item.row[cfg.pk]) }}" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+              <a href="{{ url_for('geography_admin.reassign', table_key=table_key, entry_id=item.row[cfg.pk]) }}" class="btn btn-outline-secondary" title="Merge into another entry"><i class="bi bi-signpost-split"></i></a>
+              <form method="post" action="{{ url_for('geography_admin.toggle_active', table_key=table_key, entry_id=item.row[cfg.pk]) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-secondary" type="submit" title="{{ 'Deactivate' if item.row.is_active else 'Activate' }}">
+                  <i class="bi bi-{{ 'eye-slash' if item.row.is_active else 'eye' }}"></i>
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('geography_admin.delete_entry', table_key=table_key, entry_id=item.row[cfg.pk]) }}" class="d-inline" onsubmit="return confirm('Delete &quot;{{ item.row.label }}&quot;? This only works if nothing is using it, in any tenant.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 5 + (1 if cfg.has_code else 0) + (1 if cfg.parent else 0) + (1 if cfg.has_description else 0) }}" class="text-center text-muted py-5">
+          {% if q or parent_filter %}
+          No entries match this filter — <a href="{{ url_for('geography_admin.manage', table_key=table_key) }}">clear it</a>.
+          {% else %}
+          No entries yet — <a href="{{ url_for('geography_admin.new_entry', table_key=table_key) }}">add the first one</a>.
+          {% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Import Contacts{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Import Contacts from CSV</h1>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="small text-muted">
+      Header row required, any case. Recognized columns (a name is the only requirement — either
+      <code>Full Name</code>, or <code>First Name</code>/<code>Last Name</code> separately, e.g. a standard
+      Outlook/Exchange contacts export):
+    </p>
+    <ul class="small text-muted">
+      <li><code>Title</code>, <code>First Name</code>, <code>Last Name</code>, <code>Suffix</code> — a Title/Suffix
+        that doesn't exist yet is created automatically in Table Maintenance when committed.</li>
+      <li><code>Organization</code> — optional; a company name that doesn't already exist in the Organizations
+        table is created there automatically (bare — just a name) and linked to the contact.</li>
+      <li><code>Job Title</code>, <code>Categories</code>, <code>Notes</code> — optional (a Category that
+        doesn't exist yet is also created automatically; only the first of several ";"-separated categories
+        becomes the contact's Category, the full list is kept in Notes).</li>
+      <li><code>Street</code>, <code>City</code>, <code>State</code>, <code>Business Postal Code</code>,
+        <code>Country</code> — optional; become one Business-tagged address, matching City/Province/Country
+        against the geography already on file where possible.</li>
+      <li><code>Business Phone</code>, <code>Home Phone</code>, <code>Home Phone 2</code>,
+        <code>Mobile Phone</code>, <code>Business Fax</code>, <code>E-mail Address</code>,
+        <code>E-mail 3 Address</code> — optional; each becomes its own phone/email entry. Several values
+        crammed into one cell with ";" between them are split into separate entries.</li>
+    </ul>
+    <p class="small text-muted">
+      A row is only treated as a duplicate of an existing contact when the name AND a phone number or email
+      address both match — a shared name alone isn't enough (real files sometimes have two different people
+      with the same name). A contact with no phone or email at all can't be matched this way, so re-running the
+      import for that one row will add it again rather than silently skipping it.
+    </p>
+    <p class="small text-muted">
+      Most common encodings are read automatically — UTF-8, and Windows-1252 (Excel/Outlook's usual "CSV"
+      export) — so there's no need to re-save the file first.
+    </p>
+    <div class="mb-3">
+      <label class="form-label">CSV file *</label>
+      <input class="form-control" type="file" name="file" accept=".csv" required autofocus>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('data_exchange.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Upload & Stage</button>
+  </div>
+</form>
+{% endblock %}

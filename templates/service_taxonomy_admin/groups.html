@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Service Code Maintenance — Groups{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('service_taxonomy_admin.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Service Code Maintenance</a>
+</nav>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Groups</h1>
+  <a href="{{ url_for('service_taxonomy_admin.new_group') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Group</a>
+</div>
+<p class="text-muted small">
+  Shared across every tenant. The Code is fixed once a Group is created — only the Name/Description/Active status
+  can be changed afterward.
+</p>
+
+<form method="get" class="row g-2 mb-3 align-items-end">
+  <div class="col-auto">
+    <label class="form-label small mb-0">Category</label>
+    <select class="form-select form-select-sm" name="category_id" style="min-width: 220px;">
+      <option value="">— All —</option>
+      {% for c in categories %}
+      <option value="{{ c.category_id }}" {{ "selected" if category_id == c.category_id|string else "" }}>{{ c.category_code }} — {{ c.category_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-secondary btn-sm" type="submit">Filter</button>
+    {% if category_id %}<a href="{{ url_for('service_taxonomy_admin.manage_groups') }}" class="btn btn-link btn-sm">Clear</a>{% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr><th>Category</th><th>Code</th><th>Name</th><th>Description</th><th>Status</th><th>Sub-Groups</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for g in groups %}
+        <tr>
+          <td class="text-muted small">{{ g.category_code }} — {{ g.category_name }}</td>
+          <td><code>{{ g.group_code }}</code></td>
+          <td><strong>{{ g.group_name }}</strong></td>
+          <td class="text-muted small">{{ g.description or "" }}</td>
+          <td>
+            {% if g.is_active %}<span class="badge bg-success-subtle text-success">Active</span>
+            {% else %}<span class="badge bg-secondary-subtle text-dark">Inactive</span>{% endif %}
+          </td>
+          <td>
+            {% if g.subgroup_count %}
+            <a href="{{ url_for('service_taxonomy_admin.manage_subgroups', category_id=g.category_id) }}" class="badge bg-primary-subtle text-primary text-decoration-none">{{ g.subgroup_count }} sub-group{{ 's' if g.subgroup_count != 1 else '' }}</a>
+            {% else %}
+            <span class="text-muted small">None yet</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <a href="{{ url_for('service_taxonomy_admin.edit_group', group_id=g.group_id) }}" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+              <form method="post" action="{{ url_for('service_taxonomy_admin.toggle_group_active', group_id=g.group_id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-secondary" type="submit" title="{{ 'Deactivate' if g.is_active else 'Activate' }}">
+                  <i class="bi bi-{{ 'eye-slash' if g.is_active else 'eye' }}"></i>
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('service_taxonomy_admin.delete_group', group_id=g.group_id) }}" class="d-inline" onsubmit="return confirm('Delete &quot;{{ g.group_code }} — {{ g.group_name }}&quot;? Only works if it has no Sub-Groups under it.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No groups match this filter — <a href="{{ url_for('service_taxonomy_admin.new_group') }}">add one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

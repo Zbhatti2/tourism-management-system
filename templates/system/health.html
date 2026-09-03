@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Database Health{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Database Health</h1>
+
+<div class="alert alert-{{ 'success' if integrity_ok else 'danger' }}">
+  <strong>Integrity check:</strong> {{ "OK" if integrity_ok else "Problems found" }}
+  {% if not integrity_ok %}
+    <ul class="mb-0 mt-2">{% for d in integrity_detail %}<li>{{ d }}</li>{% endfor %}</ul>
+  {% endif %}
+</div>
+
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <h2 class="h6">Database file size</h2>
+    <p class="mb-0">{{ "%.2f"|format(db_size_bytes / 1024 / 1024) }} MB</p>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body">
+    <h2 class="h6">Row counts by table</h2>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped">
+        <thead><tr><th>Table</th><th class="text-end">Rows</th></tr></thead>
+        <tbody>
+          {% for t, c in row_counts.items() %}
+          <tr><td><code>{{ t }}</code></td><td class="text-end">{{ c }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

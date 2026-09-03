@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}External Resources{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">External Resources</h1>
+  <a href="{{ url_for('hr.new_resource') }}" class="btn btn-primary"><i class="bi bi-person-add"></i> New Resource</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto flex-grow-1" style="min-width: 220px;">
+    <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search name…">
+  </div>
+  <div class="col-auto">
+    <select class="form-select" name="resource_type_id">
+      <option value="">All types</option>
+      {% for t in resource_types %}
+      <option value="{{ t.resource_type_id }}" {{ "selected" if resource_type_id == t.resource_type_id|string else "" }}>{{ t.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-secondary" type="submit">Search</button>
+  </div>
+  {% if q or resource_type_id %}
+  <div class="col-auto">
+    <a href="{{ url_for('hr.list_resources') }}" class="btn btn-link">Clear</a>
+  </div>
+  {% endif %}
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle" style="min-width: 800px;">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Hourly Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resources %}
+        <tr onclick="window.location='{{ url_for('hr.view_resource', resource_id=r.resource_id) }}'" style="cursor:pointer;">
+          <td><strong>{{ r.full_name }}</strong></td>
+          <td>{% if r.type_label %}<span class="badge bg-secondary-subtle text-dark">{{ r.type_label }}</span>{% endif %}</td>
+          <td class="text-muted small">{{ r.phone or "" }}</td>
+          <td class="text-muted small">{{ r.email or "" }}</td>
+          <td class="text-muted small">{{ r.hourly_rate or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-5">No external resources yet — <a href="{{ url_for('hr.new_resource') }}">add the first one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

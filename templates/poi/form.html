@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if poi else "New" }} Point of Interest{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">{{ "Edit" if poi else "New" }} Point of Interest</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 720px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="row g-2 mb-3">
+      <div class="col-8">
+        <label class="form-label">Name <span class="text-danger">*</span></label>
+        <input class="form-control" name="name" value="{{ (poi.name | orblank) if poi else '' }}" required>
+      </div>
+      <div class="col-4">
+        <label class="form-label">Type</label>
+        <select class="form-select" name="poi_type_id">
+          <option value="">— None —</option>
+          {% for t in poi_types %}
+          <option value="{{ t.poi_type_id }}" {{ "selected" if poi and poi.poi_type_id == t.poi_type_id else "" }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="mb-3" style="max-width: 220px;">
+      <label class="form-label">Year established</label>
+      <input class="form-control" name="year_established" value="{{ (poi.year_established | orblank) if poi else '' }}">
+    </div>
+
+    <h2 class="h6 text-muted mt-4 mb-2">Location</h2>
+    {% with address = poi %}{% include "_geography_fields.html" %}{% endwith %}
+    <div class="mb-3">
+      <label class="form-label">Local location</label>
+      <input class="form-control" name="local_location" value="{{ (poi.local_location | orblank) if poi else '' }}" placeholder="Neighborhood, landmark, village, etc.">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Directions</label>
+      <textarea class="form-control" name="directions" rows="2">{{ (poi.directions | orblank) if poi else '' }}</textarea>
+    </div>
+    <div class="mb-3" style="max-width: 420px;">
+      <label class="form-label">Map coordinates</label>
+      <input class="form-control" name="map_coordinates" value="{{ (poi.map_coordinates | orblank) if poi else '' }}" placeholder="e.g. 31°35′17″N 74°18′34″E">
+      <div class="form-text">Decimal degrees (31.5883, 74.3094) also work — saved and shown as DMS, linked to Google Maps.</div>
+    </div>
+
+    <h2 class="h6 text-muted mt-4 mb-2">Contact</h2>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label">Phone</label>
+        <input class="form-control" name="phone" value="{{ (poi.phone | orblank) if poi else '' }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label">Fax</label>
+        <input class="form-control" name="fax" value="{{ (poi.fax | orblank) if poi else '' }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Website</label>
+      <input class="form-control" type="url" name="website" placeholder="https://…" value="{{ (poi.website | orblank) if poi else '' }}">
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label">Local contact</label>
+        <select class="form-select" name="local_contact_id">
+          <option value="">— None —</option>
+          {% for c in contacts %}
+          <option value="{{ c.contact_id }}" {{ "selected" if poi and poi.local_contact_id == c.contact_id else "" }}>{{ c.file_as or c.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6">
+        <label class="form-label">Governing authority</label>
+        <select class="form-select" name="governing_authority_id">
+          <option value="">— None —</option>
+          {% for o in organizations %}
+          <option value="{{ o.organization_id }}" {{ "selected" if poi and poi.governing_authority_id == o.organization_id else "" }}>{{ o.organization_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <h2 class="h6 text-muted mt-4 mb-2">Background</h2>
+    <div class="mb-3">
+      <label class="form-label">Historical significance</label>
+      <textarea class="form-control" name="historical_significance" rows="3">{{ (poi.historical_significance | orblank) if poi else '' }}</textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="3">{{ (poi.notes | orblank) if poi else '' }}</textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Links</label>
+      <textarea class="form-control" name="links" rows="2" placeholder="One link per line">{{ (poi.links | orblank) if poi else '' }}</textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Knowledge graph data <span class="text-muted small">(freeform, ';'-separated — e.g. "Sister site of Wazir Khan Mosque; Managed by the Auqaf Department; UNESCO tentative list")</span></label>
+      <textarea class="form-control" name="knowledge_graph_data" rows="2">{{ (poi.knowledge_graph_data | orblank) if poi else '' }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('poi.view_poi', poi_id=poi.poi_id) if poi else url_for('poi.list_pois') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/geography_picker.js') }}"></script>
+<script>
+  initGeographyPicker({
+    initial: {
+      region_id: {{ (poi.region_id if poi else '') | tojson }},
+      country_id: {{ (poi.country_id if poi else '') | tojson }},
+      state_id: {{ (poi.state_id if poi else '') | tojson }},
+      city_id: {{ (poi.city_id if poi else '') | tojson }}
+    }
+  });
+</script>
+{% endblock %}

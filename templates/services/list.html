@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Services{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Services</h1>
+  <a href="{{ url_for('services.new_service') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Service</a>
+</div>
+
+<form method="get" class="mb-3">
+  <div class="row g-2">
+    <div class="col-auto flex-grow-1" style="min-width: 220px;">
+      <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search code or description…">
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="category_id">
+        <option value="">All categories</option>
+        {% for c in categories %}
+        <option value="{{ c.category_id }}" {{ "selected" if category_id == c.category_id|string else "" }}>{{ c.category_code }} — {{ c.category_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="status">
+        <option value="">All statuses</option>
+        <option value="draft" {{ "selected" if status == "draft" else "" }}>Draft</option>
+        <option value="active" {{ "selected" if status == "active" else "" }}>Active</option>
+        <option value="archived" {{ "selected" if status == "archived" else "" }}>Archived</option>
+      </select>
+    </div>
+    <div class="col-auto form-check d-flex align-items-center">
+      <input class="form-check-input me-1" type="checkbox" name="show_archived" value="1" id="show_archived" {{ "checked" if show_archived else "" }}>
+      <label class="form-check-label" for="show_archived">Show archived</label>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-outline-secondary" type="submit">Search</button>
+    </div>
+    {% if q or category_id or status or show_archived %}
+    <div class="col-auto">
+      <a href="{{ url_for('services.list_services') }}" class="btn btn-link">Clear</a>
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Service Code</th>
+          <th>Description</th>
+          <th>Category</th>
+          <th>Group / Sub-Group</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in services %}
+        <tr onclick="window.location='{{ url_for('services.view_service', service_id=s.service_id) }}'" style="cursor:pointer;">
+          <td><code>{{ s.service_code }}</code></td>
+          <td>{{ s.description }}</td>
+          <td><span class="badge bg-secondary-subtle text-dark">{{ s.category_code }} — {{ s.category_name }}</span></td>
+          <td class="text-muted small">{{ s.group_name }} / {{ s.subgroup_name }}</td>
+          <td>
+            {% if s.status == "active" %}<span class="badge bg-success-subtle text-success">Active</span>
+            {% elif s.status == "draft" %}<span class="badge bg-warning-subtle text-warning-emphasis">Draft</span>
+            {% else %}<span class="badge bg-secondary-subtle text-muted">Archived</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-5">No services yet — <a href="{{ url_for('services.new_service') }}">add the first one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

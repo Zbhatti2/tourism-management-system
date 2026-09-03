@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Organizations{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Organizations</h1>
+  <a href="{{ url_for('organizations.new_organization') }}" class="btn btn-primary"><i class="bi bi-building-add"></i> New Organization</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto flex-grow-1" style="min-width: 220px;">
+    <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search organization name…">
+  </div>
+  <div class="col-auto">
+    <select class="form-select" name="type_id">
+      <option value="">All types</option>
+      {% for t in org_types %}
+      <option value="{{ t.organization_type_id }}" {{ "selected" if type_id == t.organization_type_id|string else "" }}>{{ t.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <input class="form-control" type="search" name="city" value="{{ city }}" placeholder="City…" style="width: 160px;">
+  </div>
+  <div class="col-auto">
+    <select class="form-select" name="country_id">
+      <option value="">All countries</option>
+      {% for c in country_options %}
+      <option value="{{ c.country_id }}" {{ "selected" if country_id == c.country_id|string else "" }}>{{ c.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-secondary" type="submit">Search</button>
+  </div>
+  {% if q or type_id or city or country_id %}
+  <div class="col-auto">
+    <a href="{{ url_for('organizations.list_organizations') }}" class="btn btn-link">Clear</a>
+  </div>
+  {% endif %}
+</form>
+
+<div class="card shadow-sm border-0">
+  <!-- table-responsive gives this table its own horizontal scrollbar instead of
+       squeezing columns; min-width on the table keeps that scrollbar available
+       so every column (including Country, on the right) stays reachable. -->
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle" style="min-width: 1100px;">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Primary Phone</th>
+          <th>Primary Email</th>
+          <th>City</th>
+          <th>Province/State</th>
+          <th>Country</th>
+          <th>Linked records</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in orgs %}
+        <tr onclick="window.location='{{ url_for('organizations.view_organization', org_id=item.row.organization_id) }}'" style="cursor:pointer;">
+          <td><strong>{{ item.row.organization_name }}</strong></td>
+          <td>{% if item.row.type_label %}<span class="badge bg-secondary-subtle text-dark">{{ item.row.type_label }}</span>{% endif %}</td>
+          <td class="text-nowrap text-muted small">{% if item.row.primary_phone_number %}{{ {"country_code": item.row.primary_phone_country_code, "area_code": item.row.primary_phone_area_code, "number": item.row.primary_phone_number, "extension": item.row.primary_phone_extension} | format_phone }}{% endif %}</td>
+          <td class="text-nowrap text-muted small">{{ item.row.primary_email or "" }}</td>
+          <td class="text-muted small">{{ item.row.city_label or "" }}</td>
+          <td class="text-muted small">{{ item.row.state_label or "" }}</td>
+          <td class="text-muted small">{{ item.row.country_label or "" }}</td>
+          <td>
+            {% if item.usage_count %}
+            <span class="badge bg-primary-subtle text-primary">{{ item.usage_count }} record{{ 's' if item.usage_count != 1 else '' }}</span>
+            {% else %}
+            <span class="text-muted small">Unused</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-5">No organizations yet — <a href="{{ url_for('organizations.new_organization') }}">add the first one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

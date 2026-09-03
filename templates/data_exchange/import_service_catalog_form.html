@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Import Services{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Import Services from CSV</h1>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 620px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="small">
+      <i class="bi bi-info-circle text-primary"></i>
+      This creates real entries on your <a href="{{ url_for('services.list_services') }}">Services list</a>
+      (Inventory Management → Services) — one per Sub-Group in the file, each with its own real, sequential
+      Service Code. That's different from
+      <a href="{{ url_for('data_exchange.import_service_taxonomy') }}">Import Service Codes from CSV</a>, which
+      only defines/updates the Category/Group/Sub-Group vocabulary itself (in
+      <a href="{{ url_for('service_taxonomy_admin.index') }}">Service Code Maintenance</a>) without creating any
+      catalog entries — if you've already run that one on this file, you can run this one on the very same file
+      next to actually populate your Services list from it.
+    </p>
+    <p class="small text-muted">Header row required, any case. Recognized columns (same "Service Codes Bible" shape):</p>
+    <ul class="small text-muted">
+      <li><code>Category Code</code>, <code>Category Name</code></li>
+      <li><code>Service Code</code> — <code>Category-Group-Subgroup-Sequence</code> form, e.g.
+        <code>TP-MN-MC-0001</code>. Its Category/Group/Sub-Group segments must already exist in
+        <a href="{{ url_for('service_taxonomy_admin.index') }}">Service Code Maintenance</a> — a code that
+        isn't there yet is rejected, with a note to import the taxonomy first. The sequence digits themselves
+        are ignored; your own next free sequence number is assigned automatically, same as creating a Service
+        by hand.</li>
+      <li><code>Description of Code</code> — becomes the new Service's Description. Left blank, the
+        Sub-Group's own description (in Service Code Maintenance) is used instead.</li>
+      <li><code>Validity</code> — not used here (only the taxonomy importer syncs it); a row whose Sub-Group is
+        currently <strong>Deprecated</strong> is rejected outright, since a new Service can't be issued against
+        a retired code.</li>
+    </ul>
+    <p class="small text-muted">
+      A Sub-Group that already has a Service in your catalog (any status) is reused, not duplicated — safe to
+      re-run. A brand-new one is created as <strong>Draft</strong> (bulk-generated starting points, not
+      reviewed or priced yet) — open each from the Services list to fill in pricing/notes and flip it Active
+      when it's ready.
+    </p>
+    <div class="mb-3">
+      <label class="form-label">CSV file *</label>
+      <input class="form-control" type="file" name="file" accept=".csv" required autofocus>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('data_exchange.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Upload & Stage</button>
+  </div>
+</form>
+{% endblock %}

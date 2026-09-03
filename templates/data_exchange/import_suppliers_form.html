@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Import Suppliers{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Import Suppliers from CSV</h1>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 620px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="small text-muted">
+      Header row required, any case. Recognized columns (a few common spellings of each work too):
+    </p>
+    <ul class="small text-muted">
+      <li><code>Name of Organization</code> (or <code>Name</code>) — required.</li>
+      <li><code>Type</code> and <code>Sub-Type</code> — a Supplier Type/Sub-Type label (e.g. <code>Transport
+        Provider</code> / <code>Car Rentals</code>), or a Sub-Type's own code (e.g.
+        <code>TRANSPORT_PROVIDER_CAR_RENTALS</code>) — either that doesn't match an existing one is created
+        automatically in Table Maintenance &gt; Supplier Types / Supplier Sub-Types when committed. Rows with no
+        Type/Sub-Type column, or a blank cell, fall back to the Defaults below.</li>
+      <li><code>Address</code> (or <code>Street</code>) together with separate <code>City</code>,
+        <code>Province</code> (or <code>State</code>), and <code>Country</code> columns, when the file has them —
+        matched directly against the geography already on file, with the City's real Province used to correct a
+        row whose stated Province doesn't match its City (real-world directories sometimes get this wrong).
+        Without separate City/Province/Country columns, one combined <code>Address</code> column is instead split
+        automatically into Street / City / Province / Country, including when the Province is left out and/or a
+        postal code runs straight into the city name (e.g. "..., Karachi 75530, Pakistan"), by matching the City
+        directly and filling in its Province from that match. Either way, a blank Country column falls back to
+        the Default Country below.</li>
+      <li><code>Website</code> — goes straight to the supplier's Web page field.</li>
+      <li><code>Primary Phone</code> (or <code>Phone(s)</code>), <code>Fax</code>, and <code>Phone type</code>
+        (e.g. <code>Cell</code>; blank defaults to <code>Office</code>) — a non-blank Fax becomes its own phone
+        entry tagged "Fax", alongside the primary number.</li>
+      <li><code>Email</code> and <code>Primary Contact(s)</code> — go on the supplier's contact record. A Primary
+        Contact written as "Name (Title)" (e.g. "Aziz Boolani (Chief Executive, Serena Hotels)") splits into name
+        and title/position automatically. When no Primary Contact is given but there's still a phone, fax, or
+        email to keep, it's filed under a placeholder "Main Office" contact, which can be renamed to a real
+        person once known.</li>
+      <li><code>License No.</code> and <code>License Valid Until</code> — no dedicated fields on Suppliers, so
+        these are added to the top of Notes as <code>License No:</code> / <code>License Valid Until:</code> lines,
+        followed by the rest of the notes.</li>
+      <li><code>Notes / What the Organization Does</code> (or <code>Notes</code>) — optional.</li>
+    </ul>
+    <p class="small text-muted">
+      A supplier name that already exists is reused, not duplicated (its address/contact/phone are left as-is,
+      not re-added) — so importing several files against the same Suppliers table, or re-running one, appends
+      rather than piles up duplicates. Most common encodings are read automatically — UTF-8, and Windows-1252
+      (Excel's usual "CSV" export) — so there's no need to re-save the file first.
+    </p>
+    <hr>
+    <h2 class="h6">Defaults</h2>
+    <p class="small text-muted">
+      Used only to fill in a row that doesn't give its own value (a missing column, or a blank cell) — a row that
+      does name its own Country/Type/Sub-Type always keeps that value instead.
+    </p>
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Default Country</label>
+        <select class="form-select" name="default_country_id">
+          <option value="">— None —</option>
+          {% for c in countries %}
+          <option value="{{ c.country_id }}">{{ c.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Default Supplier Type</label>
+        <select class="form-select" name="default_supplier_type_id">
+          <option value="">— None —</option>
+          {% for t in supplier_types %}
+          <option value="{{ t.supplier_type_id }}">{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Default Supplier Sub-Type</label>
+        <select class="form-select" name="default_supplier_subtype_id">
+          <option value="">— None —</option>
+          {% for st in supplier_subtypes %}
+          <option value="{{ st.supplier_subtype_id }}">{{ st.type_label }} — {{ st.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">CSV file *</label>
+      <input class="form-control" type="file" name="file" accept=".csv" required autofocus>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('data_exchange.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Upload & Stage</button>
+  </div>
+</form>
+{% endblock %}

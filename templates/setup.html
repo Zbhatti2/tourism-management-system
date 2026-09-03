@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}First-Time Setup{% endblock %}
+{% block auth_content %}
+<div class="pims-auth-wrap">
+  <div class="card pims-auth-card shadow-lg border-0">
+    <div class="card-body p-4 p-md-5">
+      <h1 class="h4 mb-1">Set Up Your Organization</h1>
+      <p class="text-muted mb-4">Create your organization and its first Tenant Admin login. This also generates a recovery seed phrase for resetting a forgotten password.</p>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label" for="tenant_name">Organization name</label>
+          <input class="form-control" id="tenant_name" name="tenant_name" placeholder="e.g. Heritage Tours" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="username">User ID</label>
+          <input class="form-control" id="username" name="username" required>
+          <div class="form-text">This will be your login — it's unique across the whole system, not just your organization.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="display_name">Display name (optional)</label>
+          <input class="form-control" id="display_name" name="display_name" placeholder="Defaults to your User ID">
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="password">Password</label>
+          <input class="form-control" id="password" name="password" type="password" minlength="8" required>
+          <div class="form-text">At least 8 characters.</div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label" for="confirm_password">Confirm password</label>
+          <input class="form-control" id="confirm_password" name="confirm_password" type="password" minlength="8" required>
+        </div>
+        <button class="btn btn-primary w-100" type="submit">Create organization</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

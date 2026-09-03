@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Employees{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Employees</h1>
+  <a href="{{ url_for('hr.new_employee') }}" class="btn btn-primary"><i class="bi bi-person-add"></i> New Employee</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto flex-grow-1" style="min-width: 220px;">
+    <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search name…">
+  </div>
+  <div class="col-auto">
+    <select class="form-select" name="department_id">
+      <option value="">All departments</option>
+      {% for d in departments %}
+      <option value="{{ d.department_id }}" {{ "selected" if department_id == d.department_id|string else "" }}>{{ d.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <select class="form-select" name="employee_type_id">
+      <option value="">All types</option>
+      {% for t in employee_types %}
+      <option value="{{ t.employee_type_id }}" {{ "selected" if employee_type_id == t.employee_type_id|string else "" }}>{{ t.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-secondary" type="submit">Search</button>
+  </div>
+  {% if q or department_id or employee_type_id %}
+  <div class="col-auto">
+    <a href="{{ url_for('hr.list_employees') }}" class="btn btn-link">Clear</a>
+  </div>
+  {% endif %}
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle" style="min-width: 1000px;">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Department</th>
+          <th>Job Title</th>
+          <th>Type</th>
+          <th>Primary Phone</th>
+          <th>Primary Email</th>
+          <th>Date of Hire</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in employees %}
+        <tr onclick="window.location='{{ url_for('hr.view_employee', employee_id=e.employee_id) }}'" style="cursor:pointer;">
+          <td><strong>{{ e.full_name }}</strong></td>
+          <td class="text-muted small">{{ e.department_label or "" }}</td>
+          <td class="text-muted small">{{ e.job_title_label or "" }}</td>
+          <td>{% if e.type_label %}<span class="badge bg-secondary-subtle text-dark">{{ e.type_label }}</span>{% endif %}</td>
+          <td class="text-nowrap text-muted small">{% if e.primary_phone_number %}{{ {"country_code": e.primary_phone_country_code, "area_code": e.primary_phone_area_code, "number": e.primary_phone_number, "extension": e.primary_phone_extension} | format_phone }}{% endif %}</td>
+          <td class="text-nowrap text-muted small">{{ e.primary_email or "" }}</td>
+          <td class="text-muted small">{{ e.date_of_hire | format_date }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No employees yet — <a href="{{ url_for('hr.new_employee') }}">add the first one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

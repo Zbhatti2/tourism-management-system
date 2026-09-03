@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Host Organization{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0">{{ host_org.organization_name }}</h1>
+    <p class="text-muted small mb-0">Your own company — the "Host Organization" — not an outside Organization or Supplier. Its office addresses are where an Employee's Office Work Address is picked from (Human Resources).</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('system_mgmt.edit_host_organization') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    <a href="{{ url_for('system_mgmt.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Details</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Website</dt><dd class="col-sm-8">{% if host_org.website %}<a href="{{ host_org.website }}" target="_blank" rel="noopener">{{ host_org.website }}</a>{% else %}—{% endif %}</dd>
+          <dt class="col-sm-4">Notes</dt><dd class="col-sm-8">{{ host_org.notes or "—" }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Addresses <span class="text-muted small">— exactly one may be flagged Head Office</span></h2>
+          <a href="{{ url_for('system_mgmt.new_host_address') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for a in addresses %}
+        <div class="d-flex justify-content-between align-items-start border-top py-2">
+          <span class="small">
+            <span class="badge {{ 'bg-primary-subtle text-primary' if a.is_head_office else 'bg-light text-dark border' }}">{{ a.address_type_label or "—" }}</span><br>
+            {{ a.street or "" }} {{ a.unit or "" }}<br>
+            {{ a.city_label or "" }}{% if a.state_label %}, {{ a.state_label }}{% endif %} {{ a.postal_code or "" }}<br>
+            {{ a.country_label or "" }}
+          </span>
+          <span>
+            <a href="{{ url_for('system_mgmt.edit_host_address', address_id=a.host_address_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('system_mgmt.delete_host_address', address_id=a.host_address_id) }}" class="d-inline" onsubmit="return confirm('Delete this address?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No addresses on file.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Phones</h2>
+          <a href="{{ url_for('system_mgmt.new_host_phone') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for p in phones %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">
+            {% if p.phone_type_label %}<span class="badge bg-light text-dark border">{{ p.phone_type_label }}</span>{% endif %}
+            {{ p | format_phone }}
+            {% if p.office_street %}<span class="text-muted">— {{ p.office_street }}</span>{% endif %}
+            {% if p.is_primary %}<span class="badge bg-primary-subtle text-primary">primary</span>{% endif %}
+          </span>
+          <span>
+            <a href="{{ url_for('system_mgmt.edit_host_phone', phone_id=p.host_phone_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('system_mgmt.delete_host_phone', phone_id=p.host_phone_id) }}" class="d-inline" onsubmit="return confirm('Delete this phone?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No phones on file.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

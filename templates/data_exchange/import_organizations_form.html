@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Import Organizations{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Import Organizations from CSV</h1>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="small text-muted">
+      Header row required, any case. Recognized columns (a few common spellings of each work too —
+      e.g. <code>Name of Organization</code> for <code>Name</code>, <code>Phone(s)</code> for <code>Phone</code>):
+    </p>
+    <ul class="small text-muted">
+      <li><code>Name</code> — required.</li>
+      <li><code>Type</code> — an organization type code (e.g. <code>BANK</code>, <code>SOCIETY</code>) — one that
+        doesn't exist yet is created automatically in Table Maintenance &gt; Organization Types when committed.</li>
+      <li><code>Address</code> — optional; split automatically into Street / City / Province / Country on the new
+        organization's address (tagged "Mailing Address"), matching City/Province/Country against the geography
+        already on file where possible. Any phone number(s) run into the Address text with no field of their own
+        (e.g. "..., Columbus, Ohio 43210 United States of America,  (419) 535-6794") are pulled out and used to
+        fill in Phone when that column is blank. The Address column's original text is kept as-is on the
+        organization record either way, as a fallback.</li>
+      <li><code>Phone</code>, <code>Email</code>, <code>Website</code>, <code>Notes</code> — optional.</li>
+      <li><code>Primary Contact(s)</code> — optional; folded into Notes, since organizations don't have a
+        separate contact-person field.</li>
+    </ul>
+    <p class="small text-muted">
+      A name that already exists is reused, not duplicated (the rest of that row is not applied on top of it).
+      Most common encodings are read automatically — UTF-8, and Windows-1252 (Excel's usual "CSV" export) — so
+      there's no need to re-save the file first.
+    </p>
+    <div class="mb-3">
+      <label class="form-label">CSV file *</label>
+      <input class="form-control" type="file" name="file" accept=".csv" required autofocus>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('data_exchange.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Upload & Stage</button>
+  </div>
+</form>
+{% endblock %}

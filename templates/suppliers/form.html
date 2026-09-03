@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if supplier else "New" }} Supplier{% endblock %}
+{% block content %}
+<h1 class="h4 mb-2">{{ "Edit" if supplier else "New" }} Supplier</h1>
+{% if not supplier %}
+<p class="text-muted small mb-4">Looking to add a contracted person instead of a vendor company? Use <a href="{{ url_for('suppliers.new_external_resource') }}">New External Resource</a>.</p>
+{% endif %}
+<form method="post" class="card shadow-sm border-0" style="max-width: 640px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Supplier name <span class="text-danger">*</span></label>
+      <input class="form-control" name="supplier_name" value="{{ (supplier.supplier_name | orblank) if supplier else '' }}" required autofocus>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label">Supplier Type</label>
+        <select class="form-select" id="supplier_type_id" name="supplier_type_id">
+          <option value="">— None —</option>
+          {% for t in supplier_types %}
+          <option value="{{ t.supplier_type_id }}" {{ "selected" if supplier and supplier.supplier_type_id == t.supplier_type_id else "" }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6">
+        <label class="form-label">Sub-Type</label>
+        <select class="form-select" id="supplier_subtype_id" name="supplier_subtype_id">
+          <option value="">— None —</option>
+        </select>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Web page</label>
+      <input class="form-control" type="url" name="web_page" placeholder="https://…" value="{{ (supplier.web_page | orblank) if supplier else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="3">{{ (supplier.notes | orblank) if supplier else '' }}</textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Knowledge graph data <span class="badge bg-light text-muted border">freeform — Phase 2</span></label>
+      <textarea class="form-control" name="knowledge_graph_data" rows="2" placeholder="';'-separated entries, e.g. 'Preferred vendor for X; Sister property of Y'">{{ (supplier.knowledge_graph_data | orblank) if supplier else '' }}</textarea>
+    </div>
+    {% if not supplier %}
+    <p class="small text-muted mb-0">Addresses and contacts can be added once the supplier is saved.</p>
+    {% endif %}
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) if supplier else url_for('suppliers.list_suppliers') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Type -> Sub-Type cascade. Small per-tenant dataset shipped whole via
+  // | tojson rather than fetched (unlike the geography cascade, which is
+  // too large for that).
+  const ALL_SUBTYPES = {{ subtypes_json | tojson }};
+  const SELECTED_SUBTYPE_ID = {{ (supplier.supplier_subtype_id if supplier else '') | tojson }};
+
+  function refreshSubtypes(preserveSelection) {
+    const typeSelect = document.getElementById('supplier_type_id');
+    const subtypeSelect = document.getElementById('supplier_subtype_id');
+    const typeId = typeSelect.value ? parseInt(typeSelect.value, 10) : null;
+    const priorValue = preserveSelection ? subtypeSelect.value : '';
+
+    subtypeSelect.innerHTML = '<option value="">— None —</option>';
+    if (!typeId) return;
+    ALL_SUBTYPES
+      .filter(st => st.supplier_type_id === typeId)
+      .forEach(st => {
+        const opt = document.createElement('option');
+        opt.value = st.supplier_subtype_id;
+        opt.textContent = st.label;
+        subtypeSelect.appendChild(opt);
+      });
+    if (priorValue) subtypeSelect.value = priorValue;
+  }
+
+  document.getElementById('supplier_type_id').addEventListener('change', () => refreshSubtypes(false));
+  refreshSubtypes(true);
+  if (SELECTED_SUBTYPE_ID) document.getElementById('supplier_subtype_id').value = SELECTED_SUBTYPE_ID;
+</script>
+{% endblock %}

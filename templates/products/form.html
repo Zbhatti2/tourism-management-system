@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if product else "New" }} Product{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">{{ "Edit" if product else "New" }} Product</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 720px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if product %}
+    <div class="mb-3">
+      <label class="form-label">Product Code</label>
+      <div><code class="fs-5">{{ product.product_code }}</code></div>
+      <div class="form-text">
+        {{ product.category_code }} — {{ product.category_name }} /
+        {{ product.group_code }} — {{ product.group_name }} /
+        {{ product.subgroup_code }} — {{ product.subgroup_name }}
+        <br>Category, Group, and Sub-Group are fixed once a Product Code is issued — this keeps the code a
+        stable identifier. To use a different Sub-Group, discontinue this product and create a new one.
+      </div>
+    </div>
+    {% else %}
+    <h2 class="h6 text-muted mb-2">Product Code</h2>
+    <div class="row g-2 mb-2">
+      <div class="col-4">
+        <label class="form-label">Category <span class="text-danger">*</span></label>
+        <select class="form-select" id="category_id"></select>
+      </div>
+      <div class="col-4">
+        <label class="form-label">Group <span class="text-danger">*</span></label>
+        <select class="form-select" id="group_id" disabled></select>
+      </div>
+      <div class="col-4">
+        <label class="form-label">Sub-Group <span class="text-danger">*</span></label>
+        <select class="form-select" id="subgroup_id" name="subgroup_id" disabled></select>
+      </div>
+    </div>
+    <div class="mb-3">
+      <span class="text-muted small">Code preview:</span>
+      <code id="product_code_preview" class="text-muted">Choose a Category, Group, and Sub-Group to preview the code.</code>
+      <div class="form-text">The sequence number (####) is assigned automatically — the next free number in your own catalog for that Sub-Group.</div>
+    </div>
+    {% endif %}
+
+    <h2 class="h6 text-muted mt-4 mb-2">Details</h2>
+    <fieldset id="details-fieldset" {{ "disabled" if not product else "" }}>
+      {% if not product %}
+      <div id="details-locked-note" class="alert alert-light border small py-2 mb-3">
+        <i class="bi bi-lock-fill me-1 text-muted"></i>Choose a Category, Group, and Sub-Group above before entering product details.
+      </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label">Product Name <span class="text-danger">*</span></label>
+        <input class="form-control" type="text" name="product_name" required
+               value="{{ (product.product_name | orblank) if product else (form_values.product_name if form_values else '') }}">
+        <div class="form-text">e.g. "Foundations", "Travel Backpacks"</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Description</label>
+        <textarea class="form-control" name="description" rows="2">{{ (product.description | orblank) if product else (form_values.description if form_values else "") }}</textarea>
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-3">
+          <label class="form-label">SKU</label>
+          <input class="form-control" type="text" name="sku"
+                 value="{{ (product.sku | orblank) if product else (form_values.sku if form_values else '') }}">
+        </div>
+        <div class="col-3">
+          <label class="form-label">Price</label>
+          <input class="form-control" type="number" step="0.01" name="price"
+                 value="{{ (product.price if product.price is not none else '') if product else (form_values.price if form_values else '') }}">
+        </div>
+        <div class="col-3">
+          <label class="form-label">Cost</label>
+          <input class="form-control" type="number" step="0.01" name="cost"
+                 value="{{ (product.cost if product.cost is not none else '') if product else (form_values.cost if form_values else '') }}">
+        </div>
+        <div class="col-3">
+          <label class="form-label">Currency</label>
+          <input class="form-control" type="text" name="currency" placeholder="USD" maxlength="8"
+                 value="{{ (product.currency | orblank) if product else (form_values.currency if form_values else '') }}">
+        </div>
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-4">
+          <label class="form-label">Stock Quantity</label>
+          <input class="form-control" type="number" step="1" min="0" name="stock_quantity"
+                 value="{{ (product.stock_quantity if product else (form_values.stock_quantity if form_values else 0)) }}">
+        </div>
+        <div class="col-4">
+          <label class="form-label">Status</label>
+          {% set current_status = product.status if product else (form_values.status if form_values else "draft") %}
+          <select class="form-select" name="status">
+            <option value="draft" {{ "selected" if current_status == "draft" else "" }}>Draft</option>
+            <option value="active" {{ "selected" if current_status == "active" else "" }}>Active</option>
+            <option value="discontinued" {{ "selected" if current_status == "discontinued" else "" }}>Discontinued</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('products.view_product', product_id=product.product_id) if product else url_for('products.list_products') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" id="save_product_btn" type="submit" {{ "disabled" if not product else "" }}>Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+{% if taxonomy %}
+<script src="{{ url_for('static', filename='js/product_code_picker.js') }}"></script>
+<script>
+  initProductCodePicker({{ taxonomy | tojson }});
+</script>
+{% endif %}
+{% endblock %}

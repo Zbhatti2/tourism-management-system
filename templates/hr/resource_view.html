@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ resource.full_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0">{{ resource.full_name }}</h1>
+    {% if resource.type_label %}<span class="badge bg-secondary-subtle text-dark mt-1">{{ resource.type_label }}</span>{% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('hr.edit_resource', resource_id=resource.resource_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    <form method="post" action="{{ url_for('hr.delete_resource', resource_id=resource.resource_id) }}" onsubmit="return confirm('Delete this resource? It will move to the archive and be permanently purged after your retention window.');" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Delete</button>
+    </form>
+    <a href="{{ url_for('hr.list_resources') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Details</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Organization</dt><dd class="col-sm-8">{{ resource.organization_name or "—" }}</dd>
+          <dt class="col-sm-4">Phone</dt><dd class="col-sm-8">{{ resource.phone or "—" }}</dd>
+          <dt class="col-sm-4">Email</dt><dd class="col-sm-8">{{ resource.email or "—" }}</dd>
+          <dt class="col-sm-4">Tax ID</dt><dd class="col-sm-8">{{ resource.tax_id or "—" }}</dd>
+          <dt class="col-sm-4">National ID (CNIC)</dt><dd class="col-sm-8">{{ resource.national_id_number or "—" }}</dd>
+          <dt class="col-sm-4">Hourly rate</dt><dd class="col-sm-8">{{ resource.hourly_rate or "—" }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Address</h2>
+          <a href="{{ url_for('hr.edit_resource_address', resource_id=resource.resource_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-{{ 'pencil' if address else 'plus' }}"></i></a>
+        </div>
+        {% if address %}
+        <p class="small mb-0">
+          {{ address.street or "" }} {{ address.unit or "" }}<br>
+          {{ address.city_label or "" }}{% if address.state_label %}, {{ address.state_label }}{% endif %} {{ address.postal_code or "" }}<br>
+          {{ address.country_label or "" }}
+        </p>
+        {% else %}<p class="text-muted small mb-0">No address on file.</p>{% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Notes</h2>
+        <p class="small mb-0">{{ resource.notes or "—" }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6 mb-2">Roles</h2>
+        <form method="post" action="{{ url_for('hr.update_resource_roles', resource_id=resource.resource_id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="row row-cols-2 g-1 mb-2">
+            {% for r in all_roles %}
+            <div class="col">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="role_ids" value="{{ r.role_id }}" id="rrole_{{ r.role_id }}" {{ "checked" if r.role_id in assigned_role_ids else "" }}>
+                <label class="form-check-label small" for="rrole_{{ r.role_id }}">{{ r.label }}</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-sm btn-outline-primary" type="submit">Save roles</button>
+        </form>
+      </div>
+    </div>
+
+    {% if history %}
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Change history</h2>
+        {% for h in history %}
+        <div class="border-top py-2 small text-muted">{{ h.field_name }} was "{{ h.previous_value or '—' }}" until {{ h.superseded_at }}</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

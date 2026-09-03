@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Audit Log{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Audit Log</h1>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <h2 class="h6 mb-1">Archive entries older than 1 year</h2>
+      <p class="text-muted small mb-0">Writes them out to a CSV file under instance/exports/, then removes them from this table — so the audit log stays a manageable size over the years instead of growing forever. That CSV becomes the only remaining copy, so keep it somewhere safe.</p>
+    </div>
+    <form method="post" action="{{ url_for('system_mgmt.archive_audit_log') }}" onsubmit="return confirm({{ (archivable_count ~ ' entries older than 1 year will be exported to a CSV file and then permanently removed from the live audit log. This cannot be undone. Continue?') | tojson }});">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-{{ 'primary' if archivable_count else 'secondary' }}" type="submit">
+        Archive now{% if archivable_count %} ({{ archivable_count }} eligible){% endif %}
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0">
+      <thead><tr><th>Time</th><th>Action</th><th>Entity</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="text-nowrap">{{ r["ts"] }}</td>
+          <td><span class="badge bg-secondary">{{ r["action"] }}</span></td>
+          <td>{{ r["entity_type"] or "" }}{% if r["entity_id"] %} #{{ r["entity_id"] }}{% endif %}</td>
+          <td>{{ r["detail"] or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center text-muted py-4">No activity yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% if total > per_page %}
+<nav class="mt-3">
+  <ul class="pagination pagination-sm">
+    {% for p in range(1, ((total - 1) // per_page) + 2) %}
+    <li class="page-item {{ 'active' if p == page else '' }}">
+      <a class="page-link" href="{{ url_for('system_mgmt.audit_log', page=p) }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}
+
+{% if archives %}
+<h2 class="h5 mt-4">Archive log</h2>
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0 align-middle">
+      <thead>
+        <tr><th>Archived on</th><th>Entries</th><th>Covers</th><th>File</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for a in archives %}
+        <tr>
+          <td class="text-nowrap">{{ a.created_at }}</td>
+          <td>{{ a.row_count }}</td>
+          <td class="small text-muted">{{ a.oldest_ts }} &rarr; {{ a.newest_ts }}</td>
+          <td class="small text-muted">{{ a.file_name }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('system_mgmt.download_audit_archive', archive_id=a.archive_id) }}" class="btn btn-outline-secondary btn-sm" title="Download"><i class="bi bi-download"></i></a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

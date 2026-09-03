@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ service.service_code }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0"><code>{{ service.service_code }}</code></h1>
+    <div class="mt-1">
+      <span class="badge bg-secondary-subtle text-dark">{{ service.category_code }} — {{ service.category_name }}</span>
+      {% if service.status == "active" %}<span class="badge bg-success-subtle text-success">Active</span>
+      {% elif service.status == "draft" %}<span class="badge bg-warning-subtle text-warning-emphasis">Draft</span>
+      {% else %}<span class="badge bg-secondary-subtle text-muted">Archived</span>{% endif %}
+      {% if service.validity_status == "under_review" %}<span class="badge bg-warning-subtle text-warning-emphasis">Sub-Group under review</span>{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('services.edit_service', service_id=service.service_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    {% if service.status == "archived" %}
+    <form method="post" action="{{ url_for('services.restore_service', service_id=service.service_id) }}" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-success btn-sm" type="submit"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ url_for('services.delete_service', service_id=service.service_id) }}" onsubmit="return confirm('Archive this service?');" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-archive"></i> Archive</button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('services.list_services') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Service Code breakdown</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Category</dt><dd class="col-sm-8">{{ service.category_code }} — {{ service.category_name }}</dd>
+          <dt class="col-sm-4">Group</dt><dd class="col-sm-8">{{ service.group_code }} — {{ service.group_name }}</dd>
+          <dt class="col-sm-4">Sub-Group</dt><dd class="col-sm-8">{{ service.subgroup_code }} — {{ service.subgroup_name }}</dd>
+          <dt class="col-sm-4">Sequence</dt><dd class="col-sm-8">{{ "%04d"|format(service.sequence_number) }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Record info</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Created</dt><dd class="col-sm-8">{{ service.created_at | format_date }}</dd>
+          <dt class="col-sm-4">Updated</dt><dd class="col-sm-8">{{ service.updated_at | format_date }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Description</h2>
+        <p class="small mb-0" style="white-space: pre-line;">{{ service.description }}</p>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Notes</h2>
+        <p class="small mb-0" style="white-space: pre-line;">{{ service.notes or "—" }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

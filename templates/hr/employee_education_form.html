@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if item else "Add" }} Education Entry{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if item else "Add" }} Education Entry</h1>
+<p class="text-muted mb-4">{{ employee.full_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Type *</label>
+      <select class="form-select" name="credential_type" required>
+        <option value="Degree" {{ "selected" if item and item.credential_type == "Degree" else "" }}>Degree</option>
+        <option value="Certificate" {{ "selected" if item and item.credential_type == "Certificate" else "" }}>Certificate</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Title *</label>
+      <input class="form-control" name="title" required value="{{ (item.title | orblank) if item else '' }}" placeholder="e.g. BSc Computer Science, PMP Certification">
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-8">
+        <label class="form-label">Institution</label>
+        <input class="form-control" name="institution" value="{{ (item.institution | orblank) if item else '' }}">
+      </div>
+      <div class="col-4">
+        <label class="form-label">Year</label>
+        <input class="form-control" name="year_completed" value="{{ (item.year_completed | orblank) if item else '' }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="3">{{ (item.notes | orblank) if item else '' }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('hr.view_employee', employee_id=employee.employee_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

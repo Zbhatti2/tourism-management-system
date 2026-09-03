@@ -1,0 +1,123 @@
+:root {
+  --pims-navy: #1f3864;
+  --pims-navy-dark: #16294a;
+  --pims-accent: #2e74b5;
+}
+
+body {
+  background-color: #f3f4f6;
+}
+
+#app-shell {
+  min-height: 100vh;
+}
+
+.pims-sidebar {
+  width: 260px;
+  min-width: 260px;
+  background-color: var(--pims-navy);
+}
+
+.pims-sidebar .nav-link {
+  border-radius: .375rem;
+}
+
+.pims-sidebar .nav-link.active {
+  background-color: var(--pims-accent);
+  color: #fff;
+}
+
+.pims-sidebar .nav-link:not(.active):hover {
+  background-color: var(--pims-navy-dark);
+  color: #fff;
+}
+
+.pims-main {
+  background-color: #f3f4f6;
+  min-width: 0;
+}
+
+/* Let long unbroken values (URLs, file paths, IDs) wrap inside the
+   detail list instead of forcing the page wider than the viewport.
+   Scoped to just the value cells so it never affects normal text
+   (table headers, short labels, table row content, etc.). */
+.pims-main dl.row dd {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pims-auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--pims-navy), var(--pims-accent));
+}
+
+.pims-auth-card {
+  max-width: 440px;
+  width: 100%;
+}
+
+.seed-phrase-box {
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 1.1rem;
+  line-height: 2.2rem;
+  letter-spacing: .02em;
+  background: #fff8e6;
+  border: 1px solid #e8d9a8;
+  border-radius: .5rem;
+  padding: 1rem 1.25rem;
+}
+
+.stat-card .stat-number {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--pims-navy);
+}
+
+.module-placeholder {
+  text-align: center;
+  padding: 4rem 1rem;
+  color: #6c757d;
+}
+
+/* Dashboard: the four big "go to module" tiles (Points of Interest,
+   Product Design, Schedules, Custom) and the metrics bar below them --
+   see templates/dashboard.html and the Main Dashboard Design mockup. */
+.dash-tile-link {
+  display: block;
+}
+
+.dash-tile {
+  border-radius: .75rem;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+
+.dash-tile-link:hover .dash-tile {
+  box-shadow: 0 .5rem 1.25rem rgba(0, 0, 0, .12) !important;
+  transform: translateY(-2px);
+}
+
+.dash-tile .card-body {
+  padding: 2.75rem 1rem;
+}
+
+.dash-tile-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--pims-navy);
+  line-height: 1.25;
+}
+
+.dash-tile-subtitle {
+  font-size: 1rem;
+  color: #6c757d;
+  margin-top: .25rem;
+}
+
+.dash-metrics-bar {
+  background-color: #e9ecf1;
+  border-radius: .75rem;
+  padding: 1.25rem;
+}

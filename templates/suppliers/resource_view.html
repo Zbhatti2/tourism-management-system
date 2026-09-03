@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ supplier.supplier_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0">{{ supplier.supplier_name }}</h1>
+    <span class="badge bg-info-subtle text-dark border mt-1">External Resource</span>
+    {% if supplier.type_label %}<span class="badge bg-secondary-subtle text-dark mt-1">{{ supplier.type_label }}</span>{% endif %}
+    {% if supplier.subtype_label %}<span class="badge bg-light text-dark border mt-1">{{ supplier.subtype_label }}</span>{% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('suppliers.edit_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    <form method="post" action="{{ url_for('suppliers.delete_supplier', supplier_id=supplier.supplier_id) }}" onsubmit="return confirm('Delete this external resource?');" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Delete</button>
+    </form>
+    <a href="{{ url_for('suppliers.list_suppliers', is_external_resource='1') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Details</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Company</dt><dd class="col-sm-8">{{ supplier.company_name or "—" }}</dd>
+          <dt class="col-sm-4">Type</dt><dd class="col-sm-8">{{ supplier.type_label or "—" }}</dd>
+          <dt class="col-sm-4">Sub-Type</dt><dd class="col-sm-8">{{ supplier.subtype_label or "—" }}</dd>
+          <dt class="col-sm-4">Tax ID</dt><dd class="col-sm-8">{{ supplier.tax_id or "—" }}</dd>
+          <dt class="col-sm-4">National ID (CNIC)</dt><dd class="col-sm-8">{{ supplier.national_id_number or "—" }}</dd>
+          <dt class="col-sm-4">Hourly rate</dt><dd class="col-sm-8">{{ supplier.hourly_rate or "—" }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Billing Address</h2>
+          <a href="{{ url_for('suppliers.new_supplier_address', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-{{ 'pencil' if address else 'plus' }}"></i></a>
+        </div>
+        {% if address %}
+        <p class="small mb-0">
+          {{ address.street or "" }} {{ address.unit or "" }}<br>
+          {{ address.city_label or "" }}{% if address.state_label %}, {{ address.state_label }}{% endif %} {{ address.postal_code or "" }}<br>
+          {{ address.country_label or "" }}
+        </p>
+        {% else %}<p class="text-muted small mb-0">No billing address on file.</p>{% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Notes</h2>
+        <p class="small mb-0">{{ supplier.notes or "—" }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Emails</h2>
+          <a href="{{ url_for('suppliers.new_supplier_email', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for e in emails %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">{{ e.email_address }} {% if e.is_primary %}<span class="badge bg-primary-subtle text-primary">primary</span>{% endif %}</span>
+          <span>
+            <a href="{{ url_for('suppliers.edit_supplier_email', supplier_id=supplier.supplier_id, email_id=e.supplier_email_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('suppliers.delete_supplier_email', supplier_id=supplier.supplier_id, email_id=e.supplier_email_id) }}" class="d-inline" onsubmit="return confirm('Delete this email?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No emails on file.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Phones</h2>
+          <a href="{{ url_for('suppliers.new_supplier_phone', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for p in phones %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">
+            {% if p.phone_type_label %}<span class="badge bg-light text-dark border">{{ p.phone_type_label }}</span>{% endif %}
+            {{ p | format_phone }}
+            {% if p.is_primary %}<span class="badge bg-primary-subtle text-primary">primary</span>{% endif %}
+          </span>
+          <span>
+            <a href="{{ url_for('suppliers.edit_supplier_phone', supplier_id=supplier.supplier_id, phone_id=p.supplier_phone_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('suppliers.delete_supplier_phone', supplier_id=supplier.supplier_id, phone_id=p.supplier_phone_id) }}" class="d-inline" onsubmit="return confirm('Delete this phone?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No phones on file.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Links</h2>
+          <a href="{{ url_for('suppliers.new_supplier_link', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for l in links %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">
+            {% if l.url %}<a href="{{ l.url }}" target="_blank" rel="noopener">{{ l.url }}</a><br>{% endif %}
+            {% if l.document_path %}
+            <a href="#" onclick="openRefLink(event, {{ l.link_id }})" title="Open with the default app for this file type">
+              <i class="bi bi-file-earmark-arrow-up"></i> {{ l.document_path | basename }}
+            </a>
+            <div class="text-muted" style="font-size:0.78em;">{{ l.document_path }}</div>
+            {% endif %}
+            {% if l.description %}{{ l.description }}<br>{% endif %}
+            {% if l.notes %}<span class="text-muted">{{ l.notes | linkify }}</span>{% endif %}
+          </span>
+          <span class="text-nowrap">
+            <a href="{{ url_for('suppliers.edit_supplier_link', supplier_id=supplier.supplier_id, link_id=l.link_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('suppliers.delete_supplier_link', supplier_id=supplier.supplier_id, link_id=l.link_id) }}" class="d-inline" onsubmit="return confirm('Delete this link?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No links on file.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const openRefLinkUrlTemplate = "{{ url_for('suppliers.open_supplier_link', supplier_id=supplier.supplier_id, link_id=0) }}";
+  function openRefLink(e, linkId) {
+    e.preventDefault();
+    const url = openRefLinkUrlTemplate.replace('/0/open', `/${linkId}/open`);
+    fetch(url)
+      .then(r => r.json())
+      .then(data => { if (!data.ok) alert(data.error || 'Could not open the file.'); })
+      .catch(() => alert('Could not reach the server to open the file.'));
+  }
+</script>
+{% endblock %}

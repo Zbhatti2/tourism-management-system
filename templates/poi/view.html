@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ poi.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0">{{ poi.name }}</h1>
+    {% if poi.type_label %}<span class="badge bg-secondary-subtle text-dark mt-1">{{ poi.type_label }}</span>{% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('poi.edit_poi', poi_id=poi.poi_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    <form method="post" action="{{ url_for('poi.delete_poi', poi_id=poi.poi_id) }}" onsubmit="return confirm('Delete this point of interest?');" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Delete</button>
+    </form>
+    <a href="{{ url_for('poi.list_pois') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Location</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Region</dt><dd class="col-sm-8">{{ poi.region_label or "—" }}</dd>
+          <dt class="col-sm-4">Country</dt><dd class="col-sm-8">{{ poi.country_label or "—" }}</dd>
+          <dt class="col-sm-4">Province/State</dt><dd class="col-sm-8">{{ poi.state_label or "—" }}</dd>
+          <dt class="col-sm-4">City</dt><dd class="col-sm-8">{{ poi.city_label or "—" }}</dd>
+          <dt class="col-sm-4">Local location</dt><dd class="col-sm-8">{{ poi.local_location or "—" }}</dd>
+          <dt class="col-sm-4">Directions</dt><dd class="col-sm-8">{{ poi.directions or "—" }}</dd>
+          <dt class="col-sm-4">Map coordinates</dt>
+          <dd class="col-sm-8">{% if poi.map_coordinates %}{{ poi.map_coordinates | map_coordinates_link }}{% else %}—{% endif %}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Contact</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Phone</dt><dd class="col-sm-8">{{ poi.phone or "—" }}</dd>
+          <dt class="col-sm-4">Fax</dt><dd class="col-sm-8">{{ poi.fax or "—" }}</dd>
+          <dt class="col-sm-4">Website</dt><dd class="col-sm-8">{% if poi.website %}<a href="{{ poi.website }}" target="_blank" rel="noopener">{{ poi.website }}</a>{% else %}—{% endif %}</dd>
+          <dt class="col-sm-4">Local contact</dt>
+          <dd class="col-sm-8">
+            {% if poi.local_contact_id %}<a href="{{ url_for('contacts.view_contact', contact_id=poi.local_contact_id) }}">{{ poi.local_contact_name }}</a>{% else %}—{% endif %}
+          </dd>
+          <dt class="col-sm-4">Governing authority</dt>
+          <dd class="col-sm-8">
+            {% if poi.governing_authority_id %}<a href="{{ url_for('organizations.view_organization', org_id=poi.governing_authority_id) }}">{{ poi.governing_authority_name }}</a>{% else %}—{% endif %}
+          </dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Details</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Year established</dt><dd class="col-sm-8">{{ poi.year_established or "—" }}</dd>
+        </dl>
+        <h3 class="h6 mt-3">Historical significance</h3>
+        <p class="small mb-0">{{ poi.historical_significance or "—" }}</p>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Notes</h2>
+        <p class="small mb-0" style="white-space: pre-line;">{{ poi.notes or "—" }}</p>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Links</h2>
+        <p class="small mb-0" style="white-space: pre-line;">{{ (poi.links | linkify) if poi.links else "—" }}</p>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Knowledge graph data <span class="badge bg-light text-muted border">freeform — Phase 2</span></h2>
+        {% if poi.knowledge_graph_data %}
+        <ul class="small mb-0 ps-3">
+          {% for entry in poi.knowledge_graph_data.split(';') %}
+          {% if entry.strip() %}<li>{{ entry.strip() }}</li>{% endif %}
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="small mb-0">—</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

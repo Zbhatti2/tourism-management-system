@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ code }}{% endblock %}
+{% block content %}
+<div class="module-placeholder">
+  <h1 class="display-4">{{ code }}</h1>
+  <p class="lead">{{ message }}</p>
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">Back to dashboard</a>
+</div>
+{% endblock %}
+{% block auth_content %}
+<div class="pims-auth-wrap">
+  <div class="card pims-auth-card shadow-lg border-0"><div class="card-body p-4 text-center">
+    <h1 class="display-5">{{ code }}</h1>
+    <p class="lead">{{ message }}</p>
+    <a href="{{ url_for('auth_bp.login') }}" class="btn btn-primary">Back to login</a>
+  </div></div>
+</div>
+{% endblock %}

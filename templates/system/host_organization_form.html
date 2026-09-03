@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Edit Host Organization{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">Edit Host Organization</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Organization name <span class="text-danger">*</span></label>
+      <input class="form-control" name="organization_name" value="{{ host_org.organization_name | orblank }}" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Website</label>
+      <input class="form-control" type="url" name="website" placeholder="https://…" value="{{ host_org.website | orblank }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="3">{{ host_org.notes | orblank }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('system_mgmt.host_organization') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

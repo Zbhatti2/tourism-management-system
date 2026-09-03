@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Add Organization{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">Add Organization</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <div class="mb-3">
+      <label class="form-label">Organization name *</label>
+      <input class="form-control" name="organization_name" required autofocus>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Type</label>
+      <select class="form-select" name="organization_type_id">
+        <option value="">— None —</option>
+        {% for t in org_types %}
+        <option value="{{ t.organization_type_id }}">{{ t.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Full address</label>
+      <input class="form-control" name="full_address">
+    </div>
+    <div class="row g-2">
+      <div class="col-6">
+        <label class="form-label">Phone</label>
+        <input class="form-control" name="phone">
+      </div>
+      <div class="col-6">
+        <label class="form-label">Email</label>
+        <input class="form-control" name="email">
+      </div>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ next_url }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

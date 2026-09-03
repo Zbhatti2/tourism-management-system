@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if employee else "New" }} Employee{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">{{ "Edit" if employee else "New" }} Employee</h1>
+<form method="post" class="card shadow-sm border-0" enctype="multipart/form-data" style="max-width: 760px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if employee %}
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <img id="photo-preview"
+           src="{{ url_for('hr.employee_photo', employee_id=employee.employee_id) if employee.profile_image_path else '' }}"
+           class="rounded-circle border {{ '' if employee.profile_image_path else 'd-none' }}"
+           style="width:64px;height:64px;object-fit:cover;" alt="">
+      <i id="photo-placeholder" class="bi bi-person-circle text-muted {{ 'd-none' if employee.profile_image_path else '' }}" style="font-size:64px;"></i>
+      <div>
+        <label class="form-label mb-1">Profile image</label>
+        <input class="form-control form-control-sm" type="file" name="profile_image" accept=".png,.jpg,.jpeg,.gif,.webp" onchange="previewPhoto(this)">
+        {% if employee.profile_image_path %}
+        <div class="form-check mt-1">
+          <input class="form-check-input" type="checkbox" id="remove_photo" name="remove_photo">
+          <label class="form-check-label small" for="remove_photo">Remove current photo</label>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <p class="small text-muted">Address, emails, phones, education, document links, and roles are added after the employee is created — save this form first.</p>
+    {% endif %}
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-8">
+        <label class="form-label">Full name <span class="text-danger">*</span></label>
+        <input class="form-control" name="full_name" value="{{ (employee.full_name | orblank) if employee else '' }}" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Gender</label>
+        <select class="form-select" name="gender_id">
+          <option value="">— None —</option>
+          {% for gd in genders %}
+          <option value="{{ gd.gender_id }}" {{ "selected" if employee and employee.gender_id == gd.gender_id else "" }}>{{ gd.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Employee type</label>
+        <select class="form-select" name="employee_type_id">
+          <option value="">— None —</option>
+          {% for t in employee_types %}
+          <option value="{{ t.employee_type_id }}" {{ "selected" if employee and employee.employee_type_id == t.employee_type_id else "" }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Department</label>
+        <select class="form-select" name="department_id">
+          <option value="">— None —</option>
+          {% for d in departments %}
+          <option value="{{ d.department_id }}" {{ "selected" if employee and employee.department_id == d.department_id else "" }}>{{ d.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Job title</label>
+        <select class="form-select" name="job_title_id">
+          <option value="">— None —</option>
+          {% for t in job_titles %}
+          <option value="{{ t.job_title_id }}" {{ "selected" if employee and employee.job_title_id == t.job_title_id else "" }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Reports to</label>
+      <select class="form-select" name="manager_id">
+        <option value="">— None (top of the org chart) —</option>
+        {% for m in manager_options %}
+        <option value="{{ m.employee_id }}" {{ "selected" if employee and employee.manager_id == m.employee_id else "" }}>{{ m.full_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="row g-2 mb-1">
+      <div class="col-md-6">
+        <label class="form-label">Primary role <span class="text-danger">*</span></label>
+        <select class="form-select" name="primary_role_id" id="primary_role_id" onchange="showRoleDuties('primary_role_id', 'primary_role_duties')" required>
+          <option value="">— Select —</option>
+          {% for r in all_roles %}
+          <option value="{{ r.role_id }}" data-duties="{{ r.description | orblank }}" {{ "selected" if employee and employee.primary_role_id == r.role_id else "" }}>{{ r.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Primary duties <span class="text-muted small">(from the Roles table)</span></label>
+        <textarea class="form-control" id="primary_role_duties" rows="1" readonly tabindex="-1"></textarea>
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Secondary role <span class="text-muted small">(optional)</span></label>
+        <select class="form-select" name="secondary_role_id" id="secondary_role_id" onchange="showRoleDuties('secondary_role_id', 'secondary_role_duties')">
+          <option value="">— None —</option>
+          {% for r in all_roles %}
+          <option value="{{ r.role_id }}" data-duties="{{ r.description | orblank }}" {{ "selected" if employee and employee.secondary_role_id == r.role_id else "" }}>{{ r.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Secondary duties <span class="text-muted small">(from the Roles table)</span></label>
+        <textarea class="form-control" id="secondary_role_duties" rows="1" readonly tabindex="-1"></textarea>
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Date of birth</label>
+        <input class="form-control" type="date" name="date_of_birth" value="{{ (employee.date_of_birth | orblank) if employee else '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Date of hire</label>
+        <input class="form-control" type="date" name="date_of_hire" value="{{ (employee.date_of_hire | orblank) if employee else '' }}">
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Office Work Address</label>
+        <select class="form-select" name="host_address_id">
+          <option value="">— None —</option>
+          {% for a in host_addresses %}
+          <option value="{{ a.host_address_id }}" {{ "selected" if employee and employee.host_address_id == a.host_address_id else "" }}>
+            {{ a.type_label or "Office" }} — {{ a.city_label or "" }}{% if a.country_label %}, {{ a.country_label }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Picked from the Host Organization's own office locations (System Management).</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Monthly salary</label>
+        <input class="form-control" type="number" step="0.01" name="monthly_salary" value="{{ (employee.monthly_salary | orblank) if employee else '' }}">
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Citizenship</label>
+        <select class="form-select" name="citizenship_country_id">
+          <option value="">— None —</option>
+          {% for c in countries %}
+          <option value="{{ c.country_id }}" {{ "selected" if employee and employee.citizenship_country_id == c.country_id else "" }}>{{ c.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Visa status</label>
+        <input class="form-control" name="visa_status" value="{{ (employee.visa_status | orblank) if employee else '' }}">
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Passport number</label>
+        <input class="form-control" name="passport_number" value="{{ (employee.passport_number | orblank) if employee else '' }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Social Security / Tax ID</label>
+        <input class="form-control" name="tax_id" value="{{ (employee.tax_id | orblank) if employee else '' }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">National ID (CNIC)</label>
+        <input class="form-control" name="national_id_number" value="{{ (employee.national_id_number | orblank) if employee else '' }}">
+      </div>
+    </div>
+
+    <hr>
+    <h2 class="h6">Emergency contact</h2>
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Name</label>
+        <input class="form-control" name="emergency_contact_name" value="{{ (employee.emergency_contact_name | orblank) if employee else '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Phone</label>
+        <input class="form-control" name="emergency_contact_phone" value="{{ (employee.emergency_contact_phone | orblank) if employee else '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Address</label>
+        <input class="form-control" name="emergency_contact_address" value="{{ (employee.emergency_contact_address | orblank) if employee else '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Email</label>
+        <input class="form-control" type="email" name="emergency_contact_email" value="{{ (employee.emergency_contact_email | orblank) if employee else '' }}">
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="3">{{ (employee.notes | orblank) if employee else '' }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('hr.view_employee', employee_id=employee.employee_id) if employee else url_for('hr.list_employees') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  function previewPhoto(input) {
+    if (!input.files || !input.files[0]) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = document.getElementById('photo-preview');
+      const placeholder = document.getElementById('photo-placeholder');
+      img.src = e.target.result;
+      img.classList.remove('d-none');
+      if (placeholder) placeholder.classList.add('d-none');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+
+  // Each Role in the Roles table carries its own "description of duties"
+  // (hr_roles.description) — these two read-only boxes just mirror
+  // whichever role is currently selected, so duties always live in one
+  // place (the Roles table, edited from Table Maintenance) rather than
+  // being retyped per employee.
+  function showRoleDuties(selectId, textareaId) {
+    const select = document.getElementById(selectId);
+    const textarea = document.getElementById(textareaId);
+    const opt = select.options[select.selectedIndex];
+    textarea.value = (opt && opt.value) ? (opt.getAttribute('data-duties') || '') : '';
+  }
+  showRoleDuties('primary_role_id', 'primary_role_duties');
+  showRoleDuties('secondary_role_id', 'secondary_role_duties');
+</script>
+{% endblock %}

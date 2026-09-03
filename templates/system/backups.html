@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Backup & Restore{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Backup &amp; Restore</h1>
+  <a href="{{ url_for('system_mgmt.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <h2 class="h6 mb-1">Create a backup</h2>
+      <p class="text-muted small mb-0">Current database file size: {{ "%.2f"|format(db_size_bytes / 1024 / 1024) }} MB. A backup is a full point-in-time copy — nothing else is touched.</p>
+    </div>
+    <form method="post" action="{{ url_for('system_mgmt.create_backup') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary" type="submit"><i class="bi bi-hdd-stack"></i> Create backup now</button>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body">
+    <h2 class="h6">Backup log</h2>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Date</th><th>Time</th><th>Type</th><th class="text-end">Size</th>
+            <th class="text-end">Tables</th><th class="text-end">Rows</th><th>Integrity</th><th>File</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in backups %}
+          <tr>
+            <td class="text-nowrap">{{ b.created_at.split(' ')[0] if b.created_at else '' }}</td>
+            <td class="text-nowrap">{{ b.created_at.split(' ')[1] if b.created_at and ' ' in b.created_at else '' }}</td>
+            <td>
+              <span class="badge bg-{{ {'Manual': 'primary', 'Pre-restore safety': 'warning', 'Restore point': 'info'}[b.backup_type] }}-subtle text-dark">{{ b.backup_type }}</span>
+            </td>
+            <td class="text-end text-nowrap">{{ "%.2f"|format(b.size_bytes / 1024 / 1024) }} MB</td>
+            <td class="text-end">{{ b.table_count if b.table_count is not none else "—" }}</td>
+            <td class="text-end">{{ b.total_rows if b.total_rows is not none else "—" }}</td>
+            <td>
+              {% if b.integrity_ok == 1 %}
+              <span class="badge bg-success-subtle text-success">OK</span>
+              {% elif b.integrity_ok == 0 %}
+              <span class="badge bg-danger-subtle text-danger">Problems found</span>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">
+              {{ b.file_name }}
+              {% if b.notes %}<br><span style="font-size:0.85em;">{{ b.notes }}</span>{% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+              <div class="btn-group btn-group-sm">
+                <a href="{{ url_for('system_mgmt.download_backup', backup_id=b.backup_id) }}" class="btn btn-outline-secondary" title="Download"><i class="bi bi-download"></i></a>
+                {% if b.backup_type != 'Restore point' %}
+                <form method="post" action="{{ url_for('system_mgmt.restore_backup', backup_id=b.backup_id) }}" class="d-inline" onsubmit="return confirm('Restore the database from this backup (taken ' + {{ b.created_at | tojson }} + ')?\n\nThe CURRENT database will first be saved as a safety backup, then replaced with this one. You will be logged out and need to log back in.');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-outline-warning" type="submit" title="Restore"><i class="bi bi-arrow-counterclockwise"></i></button>
+                </form>
+                {% endif %}
+                <form method="post" action="{{ url_for('system_mgmt.delete_backup', backup_id=b.backup_id) }}" class="d-inline" onsubmit="return confirm('Delete this backup file? This cannot be undone.');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="text-center text-muted py-5">No backups yet — click "Create backup now" above.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

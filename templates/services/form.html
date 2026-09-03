@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if service else "New" }} Service{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">{{ "Edit" if service else "New" }} Service</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 720px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if service %}
+    <div class="mb-3">
+      <label class="form-label">Service Code</label>
+      <div><code class="fs-5">{{ service.service_code }}</code></div>
+      <div class="form-text">
+        {{ service.category_code }} — {{ service.category_name }} /
+        {{ service.group_code }} — {{ service.group_name }} /
+        {{ service.subgroup_code }} — {{ service.subgroup_name }}
+        <br>Category, Group, and Sub-Group are fixed once a Service Code is issued — this keeps the code a
+        stable identifier. To use a different Sub-Group, archive this service and create a new one.
+      </div>
+    </div>
+    {% else %}
+    <h2 class="h6 text-muted mb-2">Service Code</h2>
+    <div class="row g-2 mb-2">
+      <div class="col-4">
+        <label class="form-label">Category <span class="text-danger">*</span></label>
+        <select class="form-select" id="category_id"></select>
+      </div>
+      <div class="col-4">
+        <label class="form-label">Group <span class="text-danger">*</span></label>
+        <select class="form-select" id="group_id" disabled></select>
+      </div>
+      <div class="col-4">
+        <label class="form-label">Sub-Group <span class="text-danger">*</span></label>
+        <select class="form-select" id="subgroup_id" name="subgroup_id" disabled></select>
+      </div>
+    </div>
+    <div class="mb-3">
+      <span class="text-muted small">Code preview:</span>
+      <code id="service_code_preview" class="text-muted">Choose a Category, Group, and Sub-Group to preview the code.</code>
+      <div class="form-text">The sequence number (####) is assigned automatically — the next free number in your own catalog for that Sub-Group.</div>
+    </div>
+    {% endif %}
+
+    <h2 class="h6 text-muted mt-4 mb-2">Details</h2>
+    <fieldset id="details-fieldset" {{ "disabled" if not service else "" }}>
+      {% if not service %}
+      <div id="details-locked-note" class="alert alert-light border small py-2 mb-3">
+        <i class="bi bi-lock-fill me-1 text-muted"></i>Choose a Category, Group, and Sub-Group above before entering a Description.
+      </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label">Description <span class="text-danger">*</span></label>
+        <textarea class="form-control" name="description" rows="2" required>{{ (service.description | orblank) if service else (form_values.description if form_values else "") }}</textarea>
+        <div class="form-text">e.g. "Multi-Day Tour Leader/Escort, combined Malaysia-Pakistan tour"</div>
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-4">
+          <label class="form-label">Status</label>
+          {% set current_status = service.status if service else (form_values.status if form_values else "active") %}
+          <select class="form-select" name="status">
+            <option value="draft" {{ "selected" if current_status == "draft" else "" }}>Draft</option>
+            <option value="active" {{ "selected" if current_status == "active" else "" }}>Active</option>
+            <option value="archived" {{ "selected" if current_status == "archived" else "" }}>Archived</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" name="notes" rows="3">{{ (service.notes | orblank) if service else (form_values.notes if form_values else "") }}</textarea>
+      </div>
+    </fieldset>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('services.view_service', service_id=service.service_id) if service else url_for('services.list_services') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" id="save_service_btn" type="submit" {{ "disabled" if not service else "" }}>Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+{% if taxonomy %}
+<script src="{{ url_for('static', filename='js/service_code_picker.js') }}"></script>
+<script>
+  initServiceCodePicker({{ taxonomy | tojson }});
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Dashboard</h1>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('poi.list_pois') }}" class="text-decoration-none dash-tile-link">
+      <div class="card shadow-sm border-0 dash-tile">
+        <div class="card-body text-center">
+          <div class="dash-tile-title">Points of Interest</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('dashboard.coming_soon', slug='product-design') }}" class="text-decoration-none dash-tile-link">
+      <div class="card shadow-sm border-0 dash-tile">
+        <div class="card-body text-center">
+          <div class="dash-tile-title">Product Design</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('dashboard.coming_soon', slug='schedules') }}" class="text-decoration-none dash-tile-link">
+      <div class="card shadow-sm border-0 dash-tile">
+        <div class="card-body text-center">
+          <div class="dash-tile-title">Schedules</div>
+          <div class="dash-tile-subtitle">(Flights, Rail, Ground)</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('dashboard.coming_soon', slug='custom-tours') }}" class="text-decoration-none dash-tile-link">
+      <div class="card shadow-sm border-0 dash-tile">
+        <div class="card-body text-center">
+          <div class="dash-tile-title">Custom</div>
+          <div class="dash-tile-subtitle">Plan Your Tours</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="dash-metrics-bar">
+  <div class="row g-3">
+    <div class="col-6 col-md-3 col-lg">
+      <div class="card shadow-sm border-0"><div class="card-body text-center">
+        <div class="stat-number">{{ counts.contacts }}</div>
+        <div class="text-muted small">Contacts</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3 col-lg">
+      <div class="card shadow-sm border-0"><div class="card-body text-center">
+        <div class="stat-number">{{ counts.organizations }}</div>
+        <div class="text-muted small">Organizations</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3 col-lg">
+      <div class="card shadow-sm border-0"><div class="card-body text-center">
+        <div class="stat-number">{{ counts.points_of_interest }}</div>
+        <div class="text-muted small">Points of Interest</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3 col-lg">
+      <div class="card shadow-sm border-0"><div class="card-body text-center">
+        <div class="stat-number">{{ counts.suppliers }}</div>
+        <div class="text-muted small">Suppliers</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3 col-lg">
+      <div class="card shadow-sm border-0"><div class="card-body text-center">
+        <div class="stat-number">{{ counts.products }}</div>
+        <div class="text-muted small">Products</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3 col-lg">
+      <div class="card shadow-sm border-0"><div class="card-body text-center">
+        <div class="stat-number">{{ counts.tours_in_process }}</div>
+        <div class="text-muted small">Tours in Process</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3 col-lg">
+      <div class="card shadow-sm border-0"><div class="card-body text-center">
+        <div class="stat-number">{{ counts.tours_conducted }}</div>
+        <div class="text-muted small">Tours Conducted</div>
+      </div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

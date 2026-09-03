@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Human Resources{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Human Resources</h1>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-person-badge"></i> Internal — Employees</h2>
+        <p class="text-muted small">Salaried staff: full profile, department, job title, salary, and their own multiple emails/phones (with one marked primary).</p>
+        <p class="mb-3"><span class="badge bg-primary-subtle text-primary">{{ employee_count }} employee{{ 's' if employee_count != 1 else '' }}</span></p>
+        <a href="{{ url_for('hr.list_employees') }}" class="btn btn-primary btn-sm">View Employees</a>
+        <a href="{{ url_for('hr.new_employee') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-person-add"></i> New Employee</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-person-workspace"></i> External — Resources</h2>
+        <p class="text-muted small">Non-salaried/contract people, paid by invoice or the hour — tours, transport, IT, cleaning, security, and more. Managed as Suppliers, flagged "External Resource".</p>
+        <p class="mb-3"><span class="badge bg-primary-subtle text-primary">{{ resource_count }} resource{{ 's' if resource_count != 1 else '' }}</span></p>
+        <a href="{{ url_for('suppliers.list_suppliers', is_external_resource='1') }}" class="btn btn-primary btn-sm">View External Resources</a>
+        <a href="{{ url_for('suppliers.new_external_resource') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-person-add"></i> New Resource</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="text-muted small mt-4">
+  Roles (Tour Guide, Driver, Accounts Payable, etc.) are assigned from an Employee's own page. The Host Organization (your own company — used for
+  an Employee's Office Work Address) is managed under <a href="{{ url_for('system_mgmt.host_organization') }}">System Management</a>.
+  External Resources (contractors) live in <a href="{{ url_for('suppliers.list_suppliers') }}">Suppliers</a> now, flagged "External Resource" —
+  they're invoiced like any other vendor, so they get Suppliers' own address and contact handling instead of a separate HR record.
+</p>
+{% endblock %}

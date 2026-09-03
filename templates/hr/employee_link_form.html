@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if link else "Add" }} Document Link{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if link else "Add" }} Document Link</h1>
+<p class="text-muted mb-4">{{ employee.full_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">URL</label>
+      <input class="form-control" name="url" placeholder="https://…" value="{{ (link.url | orblank) if link else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Document path <span class="text-muted small">(resume, certificate/degree copies, etc.)</span></label>
+      <div class="input-group">
+        <input class="form-control" id="document_path" name="document_path" placeholder="Local drive path/name" value="{{ (link.document_path | orblank) if link else '' }}">
+        <button class="btn btn-outline-secondary" type="button" onclick="browseFile()">Browse…</button>
+      </div>
+      <div id="browse_hint" class="form-text text-danger"></div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea class="form-control" name="description" rows="4">{{ (link.description | orblank) if link else '' }}</textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes <span class="text-muted small">(brief summary — web URLs are automatically turned into clickable links)</span></label>
+      <textarea class="form-control" name="notes" rows="3">{{ (link.notes | orblank) if link else '' }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('hr.view_employee', employee_id=employee.employee_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  function browseFile() {
+    var hint = document.getElementById('browse_hint');
+    hint.textContent = '';
+    fetch("{{ url_for('documents.browse_file') }}")
+      .then(r => r.json())
+      .then(data => {
+        if (data.path) {
+          document.getElementById('document_path').value = data.path;
+        } else if (data.error) {
+          hint.textContent = data.error;
+        }
+      })
+      .catch(() => { hint.textContent = 'Could not reach the file browser — type or paste the path instead.'; });
+  }
+</script>
+{% endblock %}

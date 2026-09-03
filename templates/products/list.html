@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Products{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Products</h1>
+  <a href="{{ url_for('products.new_product') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Product</a>
+</div>
+
+<form method="get" class="mb-3">
+  <div class="row g-2">
+    <div class="col-auto flex-grow-1" style="min-width: 220px;">
+      <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search code, name, or SKU…">
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="category_id">
+        <option value="">All categories</option>
+        {% for c in categories %}
+        <option value="{{ c.category_id }}" {{ "selected" if category_id == c.category_id|string else "" }}>{{ c.category_code }} — {{ c.category_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="status">
+        <option value="">All statuses</option>
+        <option value="draft" {{ "selected" if status == "draft" else "" }}>Draft</option>
+        <option value="active" {{ "selected" if status == "active" else "" }}>Active</option>
+        <option value="discontinued" {{ "selected" if status == "discontinued" else "" }}>Discontinued</option>
+      </select>
+    </div>
+    <div class="col-auto form-check d-flex align-items-center">
+      <input class="form-check-input me-1" type="checkbox" name="show_discontinued" value="1" id="show_discontinued" {{ "checked" if show_discontinued else "" }}>
+      <label class="form-check-label" for="show_discontinued">Show discontinued</label>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-outline-secondary" type="submit">Search</button>
+    </div>
+    {% if q or category_id or status or show_discontinued %}
+    <div class="col-auto">
+      <a href="{{ url_for('products.list_products') }}" class="btn btn-link">Clear</a>
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Product Code</th>
+          <th>Product Name</th>
+          <th>Category</th>
+          <th>Group / Sub-Group</th>
+          <th>SKU</th>
+          <th>Price</th>
+          <th>Stock</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+        <tr onclick="window.location='{{ url_for('products.view_product', product_id=p.product_id) }}'" style="cursor:pointer;">
+          <td><code>{{ p.product_code }}</code></td>
+          <td>{{ p.product_name }}</td>
+          <td><span class="badge bg-secondary-subtle text-dark">{{ p.category_code }} — {{ p.category_name }}</span></td>
+          <td class="text-muted small">{{ p.group_name }} / {{ p.subgroup_name }}</td>
+          <td class="text-muted small">{{ p.sku or "—" }}</td>
+          <td class="text-muted small">{% if p.price is not none %}{{ p.currency or "" }} {{ "%.2f"|format(p.price) }}{% else %}—{% endif %}</td>
+          <td class="text-muted small">{{ p.stock_quantity }}</td>
+          <td>
+            {% if p.status == "active" %}<span class="badge bg-success-subtle text-success">Active</span>
+            {% elif p.status == "draft" %}<span class="badge bg-warning-subtle text-warning-emphasis">Draft</span>
+            {% else %}<span class="badge bg-secondary-subtle text-muted">Discontinued</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-5">No products yet — <a href="{{ url_for('products.new_product') }}">add the first one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

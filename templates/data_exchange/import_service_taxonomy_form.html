@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Import Service Codes{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Import Service Codes (Taxonomy) from CSV</h1>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 620px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="small">
+      <i class="bi bi-info-circle text-primary"></i>
+      For the Category / Group / Sub-Group taxonomy behind every Service Code — updates
+      <a href="{{ url_for('service_taxonomy_admin.index') }}">Service Code Maintenance</a> only.
+      <strong>This does not add anything to your <a href="{{ url_for('services.list_services') }}">Services
+      list</a></strong> (Inventory Management → Services) — for that, use
+      <a href="{{ url_for('data_exchange.import_service_catalog') }}">Import Services from CSV</a> instead
+      (the same file works for both; run this one first if the codes aren't in Service Code Maintenance yet).
+    </p>
+    <p class="small text-muted">
+      Built to read the "Service Codes Bible" export format directly. Header row required, any case.
+      Recognized columns:
+    </p>
+    <ul class="small text-muted">
+      <li><code>Category Code</code> — required, e.g. <code>TP</code>.</li>
+      <li><code>Category Name</code> — used only if that Category Code doesn't exist yet.</li>
+      <li><code>Service Code</code> — required, <code>Category-Group-Subgroup-Sequence</code> form,
+        e.g. <code>TP-MN-MC-0001</code> (the sequence digits are ignored — actual sequence numbers are
+        assigned per-tenant when a Service is created, not by this file).</li>
+      <li><code>Description of Code</code> — required; read as
+        "<em>Category label — Group label, Sub-Group label</em>" to derive the Group/Sub-Group name when
+        creating a brand-new one.</li>
+      <li><code>Validity</code> — required: <code>Active</code>, <code>Under Review</code>, or
+        <code>Deprecated</code>.</li>
+    </ul>
+    <p class="small text-muted">
+      A Category/Group/Sub-Group Code that already exists (matched case-insensitively) is reused, never
+      duplicated — re-uploading the same Bible file after it was already committed is safe. For a Code that
+      already exists, only its Description and Validity are refreshed from the file; its Name is left alone
+      (renames go through Service Code Maintenance's own Edit screen, same "Code is immutable" rule as
+      everywhere else in that module). A brand-new Code is created outright, with Name/Description as
+      derived above. Most common encodings are read automatically — UTF-8, and Windows-1252 (Excel's usual
+      "CSV" export).
+    </p>
+    <div class="mb-3">
+      <label class="form-label">CSV file *</label>
+      <input class="form-control" type="file" name="file" accept=".csv" required autofocus>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('data_exchange.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Upload & Stage</button>
+  </div>
+</form>
+{% endblock %}

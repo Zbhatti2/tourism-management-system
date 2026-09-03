@@ -1,0 +1,10 @@
+# Tourism Management System — Phase 1.1 dependencies.
+#
+# Kept intentionally minimal — sqlite3, hashlib, and secrets (all stdlib)
+# handle most of the database and crypto plumbing that would otherwise need
+# SQLAlchemy / argon2-cffi. Flask's own dependencies (Werkzeug, Jinja2,
+# itsdangerous, click, blinker) come along automatically — Werkzeug in
+# particular supplies the password hashing used in security/passwords.py.
+
+flask>=3.0
+cryptography>=42.0

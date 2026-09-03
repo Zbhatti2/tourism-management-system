@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Service Code Maintenance — Sub-Groups{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('service_taxonomy_admin.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Service Code Maintenance</a>
+</nav>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Sub-Groups</h1>
+  <a href="{{ url_for('service_taxonomy_admin.new_subgroup') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Sub-Group</a>
+</div>
+<p class="text-muted small">
+  Shared across every tenant. The Code is fixed once a Sub-Group is created. <strong>Validity</strong> controls
+  whether new Services can be issued against it — set it to Deprecated to block new services, without touching any
+  that already exist; the database itself enforces this.
+</p>
+
+<form method="get" class="row g-2 mb-3 align-items-end">
+  <div class="col-auto">
+    <label class="form-label small mb-0">Category</label>
+    <select class="form-select form-select-sm" name="category_id" style="min-width: 220px;">
+      <option value="">— All —</option>
+      {% for c in categories %}
+      <option value="{{ c.category_id }}" {{ "selected" if category_id == c.category_id|string else "" }}>{{ c.category_code }} — {{ c.category_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <label class="form-label small mb-0">Validity</label>
+    <select class="form-select form-select-sm" name="validity_status" style="min-width: 160px;">
+      <option value="">— All —</option>
+      <option value="active" {{ "selected" if validity_status == "active" else "" }}>Active</option>
+      <option value="under_review" {{ "selected" if validity_status == "under_review" else "" }}>Under review</option>
+      <option value="deprecated" {{ "selected" if validity_status == "deprecated" else "" }}>Deprecated</option>
+    </select>
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-secondary btn-sm" type="submit">Filter</button>
+    {% if category_id or validity_status %}<a href="{{ url_for('service_taxonomy_admin.manage_subgroups') }}" class="btn btn-link btn-sm">Clear</a>{% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr><th>Category / Group</th><th>Code</th><th>Name</th><th>Validity</th><th>Status</th><th>Services</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for sg in subgroups %}
+        <tr>
+          <td class="text-muted small">{{ sg.category_code }}-{{ sg.group_code }} — {{ sg.group_name }}</td>
+          <td><code>{{ sg.category_code }}-{{ sg.group_code }}-{{ sg.subgroup_code }}</code></td>
+          <td><strong>{{ sg.subgroup_name }}</strong></td>
+          <td>
+            {% if sg.validity_status == "active" %}<span class="badge bg-success-subtle text-success">Active</span>
+            {% elif sg.validity_status == "under_review" %}<span class="badge bg-warning-subtle text-warning-emphasis">Under review</span>
+            {% else %}<span class="badge bg-danger-subtle text-danger">Deprecated</span>{% endif %}
+          </td>
+          <td>
+            {% if sg.is_active %}<span class="badge bg-success-subtle text-success">Active</span>
+            {% else %}<span class="badge bg-secondary-subtle text-dark">Inactive</span>{% endif %}
+          </td>
+          <td>
+            {% if sg.service_count %}
+            <span class="badge bg-primary-subtle text-primary">{{ sg.service_count }} service{{ 's' if sg.service_count != 1 else '' }}</span>
+            {% else %}
+            <span class="text-muted small">Unused</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <a href="{{ url_for('service_taxonomy_admin.edit_subgroup', subgroup_id=sg.subgroup_id) }}" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+              <form method="post" action="{{ url_for('service_taxonomy_admin.toggle_subgroup_active', subgroup_id=sg.subgroup_id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-secondary" type="submit" title="{{ 'Deactivate' if sg.is_active else 'Activate' }}">
+                  <i class="bi bi-{{ 'eye-slash' if sg.is_active else 'eye' }}"></i>
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('service_taxonomy_admin.delete_subgroup', subgroup_id=sg.subgroup_id) }}" class="d-inline" onsubmit="return confirm('Delete &quot;{{ sg.category_code }}-{{ sg.group_code }}-{{ sg.subgroup_code }}&quot;? Only works if no Services have been issued against it.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No sub-groups match this filter — <a href="{{ url_for('service_taxonomy_admin.new_subgroup') }}">add one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if resource else "New" }} External Resource{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">{{ "Edit" if resource else "New" }} External Resource</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Full name <span class="text-danger">*</span></label>
+      <input class="form-control" name="full_name" value="{{ (resource.full_name | orblank) if resource else '' }}" required>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Resource type</label>
+        <select class="form-select" name="resource_type_id">
+          <option value="">— None —</option>
+          {% for t in resource_types %}
+          <option value="{{ t.resource_type_id }}" {{ "selected" if resource and resource.resource_type_id == t.resource_type_id else "" }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Organization</label>
+        <select class="form-select" name="organization_id">
+          <option value="">— None —</option>
+          {% for o in organizations %}
+          <option value="{{ o.organization_id }}" {{ "selected" if resource and resource.organization_id == o.organization_id else "" }}>{{ o.organization_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    {% if not resource %}
+    <p class="small text-muted">Address is added after the resource is created — save this form first.</p>
+    {% endif %}
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Phone</label>
+        <input class="form-control" name="phone" value="{{ (resource.phone | orblank) if resource else '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Email</label>
+        <input class="form-control" type="email" name="email" value="{{ (resource.email | orblank) if resource else '' }}">
+      </div>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Social Security / Tax ID</label>
+        <input class="form-control" name="tax_id" value="{{ (resource.tax_id | orblank) if resource else '' }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">National ID (CNIC)</label>
+        <input class="form-control" name="national_id_number" value="{{ (resource.national_id_number | orblank) if resource else '' }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Hourly rate</label>
+        <input class="form-control" type="number" step="0.01" name="hourly_rate" value="{{ (resource.hourly_rate | orblank) if resource else '' }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="3">{{ (resource.notes | orblank) if resource else '' }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('hr.view_resource', resource_id=resource.resource_id) if resource else url_for('hr.list_resources') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

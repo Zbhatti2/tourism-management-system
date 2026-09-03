@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}{{ contact.full_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div class="d-flex align-items-center gap-3">
+    {% if contact.profile_image_path %}
+    <img src="{{ url_for('contacts.contact_photo', contact_id=contact.contact_id) }}" class="rounded-circle border" style="width:72px;height:72px;object-fit:cover;" alt="{{ contact.full_name }}">
+    {% else %}
+    <i class="bi bi-person-circle text-muted" style="font-size:72px;"></i>
+    {% endif %}
+    <div>
+      <h1 class="h3 mb-0">
+        {% if contact.title_label %}{{ contact.title_label }} {% endif %}{{ contact.full_name }}{% if contact.suffix_label %}, {{ contact.suffix_label }}{% endif %}
+        {% if contact.priority_contact %}<i class="bi bi-star-fill text-warning" title="Priority contact"></i>{% endif %}
+        {% if contact.is_deceased %}<span class="badge bg-secondary-subtle text-dark border" title="Deceased">Deceased</span>{% endif %}
+      </h1>
+      {% if contact.category_label %}<span class="badge bg-secondary-subtle text-dark mt-1">{{ contact.category_label }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('contacts.contact_history', contact_id=contact.contact_id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history"></i> History</a>
+    <a href="{{ url_for('contacts.edit_contact', contact_id=contact.contact_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    <form method="post" action="{{ url_for('contacts.delete_contact', contact_id=contact.contact_id) }}" onsubmit="return confirm('Delete this contact? It will be moved to the archive.');" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Delete</button>
+    </form>
+    <a href="{{ url_for('contacts.list_contacts') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Details</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">File as</dt><dd class="col-sm-8">{{ contact.file_as or "—" }}</dd>
+          <dt class="col-sm-4">Gender</dt><dd class="col-sm-8">{{ contact.gender or "—" }}</dd>
+          <dt class="col-sm-4">Context</dt><dd class="col-sm-8">{{ contact.context_label or "—" }}</dd>
+          <dt class="col-sm-4">Organization</dt><dd class="col-sm-8">{{ contact.organization_name or "—" }}</dd>
+          <dt class="col-sm-4">Job title</dt><dd class="col-sm-8">{{ contact.current_job_title or "—" }}</dd>
+          <dt class="col-sm-4">Profession</dt><dd class="col-sm-8">{{ contact.profession_label or "—" }}</dd>
+          <dt class="col-sm-4">Assistant</dt>
+          <dd class="col-sm-8">
+            {% if contact.assistant_contact_id %}
+            <a href="{{ url_for('contacts.view_contact', contact_id=contact.assistant_contact_id) }}">{{ contact.assistant_name or "—" }}</a>
+            {% else %}—{% endif %}
+          </dd>
+          <dt class="col-sm-4">Web page</dt><dd class="col-sm-8">{% if contact.web_page %}<a href="{{ contact.web_page }}" target="_blank" rel="noopener">{{ contact.web_page }}</a>{% else %}—{% endif %}</dd>
+          <dt class="col-sm-4">Date of birth</dt><dd class="col-sm-8">{{ (contact.date_of_birth | format_date) or "—" }}</dd>
+          {% if contact.is_deceased %}
+          <dt class="col-sm-4">Date of death</dt><dd class="col-sm-8">{{ (contact.date_of_death | format_date) or "—" }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Notes</h2>
+        <p class="small mb-0">{{ contact.notes or "—" }}</p>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Knowledge graph data <span class="badge bg-light text-muted border">freeform — Phase 2</span></h2>
+        {% if contact.knowledge_graph_data %}
+        <ul class="small mb-0 ps-3">
+          {% for entry in contact.knowledge_graph_data.split(';') %}
+          {% if entry.strip() %}<li>{{ entry.strip() }}</li>{% endif %}
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="small mb-0">—</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Emails</h2>
+          <a href="{{ url_for('contacts.new_email', contact_id=contact.contact_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for e in emails %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span>{{ e.email_address }} {% if e.is_primary %}<span class="badge bg-primary-subtle text-primary">primary</span>{% endif %}</span>
+          <span>
+            <a href="{{ url_for('contacts.edit_email', contact_id=contact.contact_id, email_id=e.email_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('contacts.delete_email', contact_id=contact.contact_id, email_id=e.email_id) }}" class="d-inline" onsubmit="return confirm('Delete this email?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No emails on file.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Phones</h2>
+          <a href="{{ url_for('contacts.new_phone', contact_id=contact.contact_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for p in phones %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span>
+            <span class="badge bg-light text-dark border">{{ p.phone_type }}</span>
+            {{ p | format_phone }}
+            {% if p.is_primary %}<span class="badge bg-primary-subtle text-primary">primary</span>{% endif %}
+          </span>
+          <span>
+            <a href="{{ url_for('contacts.edit_phone', contact_id=contact.contact_id, phone_id=p.phone_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('contacts.delete_phone', contact_id=contact.contact_id, phone_id=p.phone_id) }}" class="d-inline" onsubmit="return confirm('Delete this phone?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No phones on file.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Addresses</h2>
+          <a href="{{ url_for('contacts.new_address', contact_id=contact.contact_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for a in addresses %}
+        <div class="d-flex justify-content-between align-items-start border-top py-2">
+          <span class="small">
+            <span class="badge bg-light text-dark border">{{ a.address_type or "—" }}</span><br>
+            {{ a.street or "" }} {{ a.unit or "" }}<br>
+            {{ a.city_label or a.city_text or "" }}{% if a.state_label %}, {{ a.state_label }}{% elif a.state_province_text %}, {{ a.state_province_text }}{% endif %} {{ a.postal_code or "" }}<br>
+            {{ a.country_label or "" }}{% if a.region_label %} ({{ a.region_label }}){% endif %}
+            {% if a.is_primary %}<span class="badge bg-primary-subtle text-primary">primary</span>{% endif %}
+          </span>
+          <span>
+            <a href="{{ url_for('contacts.edit_address', contact_id=contact.contact_id, address_id=a.address_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('contacts.delete_address', contact_id=contact.contact_id, address_id=a.address_id) }}" class="d-inline" onsubmit="return confirm('Delete this address?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No addresses on file.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Reference links</h2>
+          <a href="{{ url_for('contacts.new_link', contact_id=contact.contact_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for l in links %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">
+            {% if l.url %}<a href="{{ l.url }}" target="_blank" rel="noopener">{{ l.url }}</a><br>{% endif %}
+            {% if l.document_path %}
+            <a href="#" onclick="openRefLink(event, {{ l.link_id }})" title="Open with the default app for this file type">
+              <i class="bi bi-file-earmark-arrow-up"></i> {{ l.document_path | basename }}
+            </a>
+            <div class="text-muted" style="font-size:0.78em;">{{ l.document_path }}</div>
+            {% endif %}
+            {% if l.description %}{{ l.description }}<br>{% endif %}
+            {% if l.notes %}<span class="text-muted">{{ l.notes | linkify }}</span>{% endif %}
+          </span>
+          <span class="text-nowrap">
+            <a href="{{ url_for('contacts.edit_link', contact_id=contact.contact_id, link_id=l.link_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('contacts.delete_link', contact_id=contact.contact_id, link_id=l.link_id) }}" class="d-inline" onsubmit="return confirm('Delete this link?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No reference links on file.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const openRefLinkUrlTemplate = "{{ url_for('contacts.open_link', contact_id=contact.contact_id, link_id=0) }}";
+  function openRefLink(e, linkId) {
+    e.preventDefault();
+    const url = openRefLinkUrlTemplate.replace('/0/open', `/${linkId}/open`);
+    fetch(url)
+      .then(r => r.json())
+      .then(data => { if (!data.ok) alert(data.error || 'Could not open the file.'); })
+      .catch(() => alert('Could not reach the server to open the file.'));
+  }
+</script>
+{% endblock %}

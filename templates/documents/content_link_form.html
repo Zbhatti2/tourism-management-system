@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Add Contacts Link{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">Add Contacts Link</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Link type</label>
+      <select class="form-select" name="link_type_id">
+        <option value="">— None —</option>
+        {% for t in link_types %}
+        <option value="{{ t.content_link_type_id }}">{{ t.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Contact</label>
+      <select class="form-select" name="contact_id">
+        <option value="">— None —</option>
+        {% for c in contacts %}
+        <option value="{{ c.contact_id }}">{{ c.file_as or c.full_name }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">Pick an existing contact, enter a URL below, or both.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">URL</label>
+      <input class="form-control" name="url" placeholder="https://…">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea class="form-control" name="description" rows="4"></textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes <span class="text-muted small">(brief summary — web URLs are automatically turned into clickable links)</span></label>
+      <textarea class="form-control" name="notes" rows="3"></textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('documents.view_content', content_id=item.content_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

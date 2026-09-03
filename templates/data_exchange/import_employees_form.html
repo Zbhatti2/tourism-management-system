@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Import Employees{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Import Employees from CSV</h1>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="small text-muted">
+      Header row required, any case. Recognized columns (a name is the only requirement — either
+      <code>Full Name</code>, or <code>First Name</code>/<code>Last Name</code> separately, e.g. a standard
+      Outlook/Exchange contacts export):
+    </p>
+    <ul class="small text-muted">
+      <li><code>Title</code>, <code>First Name</code>, <code>Middle Name</code>, <code>Last Name</code>,
+        <code>Suffix</code> — Middle Name is folded into Full Name; Title/Suffix have no field of their own on
+        Employees, so they're kept as labeled lines in Notes instead.</li>
+      <li><code>Company</code> — optional; kept as a labeled line in Notes (Employees belong to your tenant
+        directly, so there's no separate company link to make).</li>
+      <li><code>Department</code>, <code>Job Title</code> — optional; a value that doesn't exist yet is created
+        automatically in Table Maintenance when committed.</li>
+      <li><code>Gender</code> — optional; kept as a labeled line in Notes (no dedicated field on Employees).</li>
+      <li><code>Address</code>/<code>Street</code>, <code>City</code>, <code>State</code>,
+        <code>Postal Code</code>, <code>Country</code> (or <code>Country/Region</code>) — optional; become the
+        employee's one Address, matching City/Province/Country against the geography already on file where
+        possible.</li>
+      <li><code>Fax</code>, <code>Phonea</code>/<code>Phone1</code> (both recognized as a plain "Phone"/office
+        number), <code>Phone2</code>, <code>Home Phone</code>, <code>Mobile Phone</code> — optional; each becomes
+        its own phone entry (Employees only have Fax/Home/Mobile/Office phone types, so Phonea/Phone1 and Phone2
+        both become "Office" numbers, the same way a second Home Phone column would). Several values crammed into
+        one cell with ";" between them are split into separate entries.</li>
+      <li><code>E-mail Address</code>, <code>E-mail 2</code> — optional; each becomes its own email entry (an
+        "E-mail 2 Display Name" column, by contrast, is recognized as Outlook metadata with no address in it, and
+        is skipped).</li>
+    </ul>
+    <p class="small text-muted">
+      A row is only treated as a duplicate of an existing employee when the name AND a phone number or email
+      address both match — a shared name alone isn't enough (this file, for instance, has three different
+      employees who share the surname Bhatti). An employee with no phone or email at all can't be matched this
+      way, so re-running the import for that one row will add it again rather than silently skipping it.
+    </p>
+    <p class="small text-muted">
+      Most common encodings are read automatically — UTF-8, and Windows-1252 (Excel/Outlook's usual "CSV"
+      export) — so there's no need to re-save the file first.
+    </p>
+    <div class="mb-3">
+      <label class="form-label">CSV file *</label>
+      <input class="form-control" type="file" name="file" accept=".csv" required autofocus>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('data_exchange.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Upload & Stage</button>
+  </div>
+</form>
+{% endblock %}

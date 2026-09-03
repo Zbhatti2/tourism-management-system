@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">{{ title }}</h1>
+<div class="card shadow-sm border-0">
+  <div class="module-placeholder">
+    <i class="bi bi-{{ icon }} display-4 d-block mb-3"></i>
+    <h2 class="h5">Scaffolded, not yet built out</h2>
+    <p class="mb-1">The tables for this module exist in <code>schema.sql</code> ({{ tables|join(', ') }}) and are ready to use.</p>
+    <p class="text-muted">Follow the pattern in <code>blueprints/contacts.py</code> and <code>templates/contacts/</code> to build this module's routes and templates next.</p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if group else "New" }} Group{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if group else "New" }} Service Group</h1>
+<p class="text-muted small mb-4">Shared across every tenant — see the note on the Service Code Maintenance page.</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Category <span class="text-danger">*</span></label>
+      {% if group %}
+      <div>{{ group.category_code }} — {{ group.category_name }}</div>
+      <div class="form-text">Fixed once created.</div>
+      {% else %}
+      <select class="form-select" name="category_id" required>
+        <option value="">Choose…</option>
+        {% for c in categories %}
+        <option value="{{ c.category_id }}">{{ c.category_code }} — {{ c.category_name }}</option>
+        {% endfor %}
+      </select>
+      {% if not categories %}<div class="form-text text-danger">No active Categories yet — add one first.</div>{% endif %}
+      {% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Code <span class="text-danger">*</span></label>
+      {% if group %}
+      <div><code class="fs-6">{{ group.group_code }}</code></div>
+      <div class="form-text">Fixed once created — it's already part of every Service Code issued under this Group.</div>
+      {% else %}
+      <input class="form-control" name="group_code" maxlength="3" style="max-width: 120px; text-transform: uppercase;"
+             value="{{ (form_values.group_code | orblank) if form_values else '' }}" placeholder="e.g. MN" required>
+      <div class="form-text">Two or three letters, unique within the chosen Category.</div>
+      {% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Name <span class="text-danger">*</span></label>
+      <input class="form-control" name="group_name"
+             value="{{ (group.group_name | orblank) if group else ((form_values.group_name | orblank) if form_values else '') }}" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea class="form-control" name="description" rows="3">{{ (group.description | orblank) if group else ((form_values.description | orblank) if form_values else '') }}</textarea>
+    </div>
+    <div class="form-check">
+      {% set active_default = (group.is_active if group else True) %}
+      <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {{ "checked" if active_default else "" }}>
+      <label class="form-check-label" for="is_active">Active (available to pick from when adding a new Sub-Group)</label>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('service_taxonomy_admin.manage_groups') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

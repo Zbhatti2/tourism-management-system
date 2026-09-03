@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Import Points of Interest{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Import Points of Interest from CSV</h1>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="small text-muted">
+      Header row required, any case. Recognized columns (a few common spellings of each work too):
+    </p>
+    <ul class="small text-muted">
+      <li><code>POI Name</code> (or <code>Name</code>) — required.</li>
+      <li><code>Type</code> — a POI Type (e.g. <code>Museum</code>, <code>Historical / Architecture</code>) —
+        one that doesn't exist yet is created automatically in Table Maintenance &gt; POI Types when committed.</li>
+      <li><code>Country</code>, <code>City</code>, <code>Province/State</code> — matched against the geography
+        already on file where possible (linked automatically); a province or city not yet on file is kept as
+        free text instead, same as typing it directly on the POI form.</li>
+      <li><code>Address</code> — optional; goes on the POI's Local Location field.</li>
+      <li><code>Phone</code>, <code>Website</code> — optional.</li>
+      <li><code>Notes</code> — optional; goes on Historical Significance (that's what this column's content
+        usually is — background on the site, not an internal note).</li>
+      <li><code>Email</code> — optional; there's no separate email field on Points of Interest, so this is
+        captured into Notes instead.</li>
+    </ul>
+    <p class="small text-muted">
+      A POI name that already exists is reused, not duplicated (the rest of that row is not applied on top of
+      it). Most common encodings are read automatically — UTF-8, and Windows-1252 (Excel's usual "CSV" export) —
+      so there's no need to re-save the file first.
+    </p>
+    <div class="mb-3">
+      <label class="form-label">CSV file *</label>
+      <input class="form-control" type="file" name="file" accept=".csv" required autofocus>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('data_exchange.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Upload & Stage</button>
+  </div>
+</form>
+{% endblock %}
