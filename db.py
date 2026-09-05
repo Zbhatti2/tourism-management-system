@@ -507,6 +507,20 @@ def init_app(app):
         migrate()
         click.echo("Done.")
 
+    @app.cli.command("migrate-add-component-airline-ticket")
+    def migrate_add_component_airline_ticket_command():
+        """Flask CLI: `flask --app app migrate-add-component-airline-ticket`
+        — adds package_components.is_airline_ticket, so a whole-trip
+        component can be flagged an Airline Ticket and shown in its own
+        section on the package page (between Route and Entire Tour
+        Services) instead of folded into the generic Entire Tour Services
+        list. Safe to re-run; does not touch any existing data. See
+        migrate_add_component_airline_ticket.py for the full story."""
+        from migrate_add_component_airline_ticket import migrate
+
+        migrate()
+        click.echo("Done.")
+
     @app.cli.command("seed-tenant")
     def seed_tenant_command():
         """Flask CLI: `flask --app app seed-tenant` — creates the first

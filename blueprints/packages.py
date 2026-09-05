@@ -102,6 +102,82 @@ def _checkpoints(stops):
     return checkpoints
 
 
+def _checkpoint_days_and_services(days, components, stop_id, day_pois_by_day):
+    """Builds the (services, days_with_pois) pair for one Checkpoint --
+    the Entire Checkpoint Services list and its Day-by-Day Itinerary (each
+    Day's own Accommodation/Other Service tables, including "repeats for
+    Checkpoint" rows inherited from this Checkpoint's other Days). Shared
+    by view_checkpoint() (one Checkpoint's own page, Form #2) and
+    package_summary() (every Checkpoint inlined onto one printable page),
+    so the two always render identically -- this used to be duplicated
+    inline in view_checkpoint() before the Print/Summary feature needed
+    the exact same construction for every Checkpoint in one pass."""
+    days_with_pois = [
+        dict(
+            d,
+            pois=day_pois_by_day.get(d["day_id"], []),
+            hotel_components=[c for c in components if c["day_id"] == d["day_id"] and c["is_accommodation"]],
+            other_components=[c for c in components if c["day_id"] == d["day_id"] and not c["is_accommodation"]],
+        )
+        for d in days
+        if d["route_stop_id"] == stop_id
+    ]
+    services = [c for c in components if c["route_stop_id"] == stop_id and c["day_id"] is None]
+
+    day_ids = {d["day_id"] for d in days_with_pois}
+    repeating = [c for c in components if c["day_id"] in day_ids and c["repeat_for_checkpoint"]]
+    for d in days_with_pois:
+        inherited = [dict(c, is_inherited=True) for c in repeating if c["day_id"] != d["day_id"]]
+        d["hotel_components"] = d["hotel_components"] + [c for c in inherited if c["is_accommodation"]]
+        d["other_components"] = d["other_components"] + [c for c in inherited if not c["is_accommodation"]]
+    return services, days_with_pois
+
+
+def _totals(components):
+    """Rolls a list of package_components rows up into {cost, price,
+    margin} -- Total Cost / Total Price / Profit Margin summed the same
+    way each row's own columns are computed (component_costing_table
+    macro): quantity x unit_cost / unit_price, missing unit_cost or
+    unit_price contributing 0 rather than breaking the sum (same as the
+    macro showing "—" for those). Used for the Cost Summary / Grand Total
+    on package_summary() -- per Zeb's request for a Cost Summary with a
+    Grand Total. Always sums from the real, deduplicated package_components
+    rows (never from a Day's "repeats for Checkpoint"-inflated display
+    list), so an item flagged to repeat across a Checkpoint's Days is
+    still only ever costed once, matching what would actually be billed."""
+    cost = sum((c["quantity"] if c["quantity"] is not None else 1) * c["unit_cost"] for c in components if c["unit_cost"] is not None)
+    price = sum((c["quantity"] if c["quantity"] is not None else 1) * c["unit_price"] for c in components if c["unit_price"] is not None)
+    return {"cost": cost, "price": price, "margin": price - cost}
+
+
+def _back_target(db, package_id, route_stop_id=None, day_id=None):
+    """Where a Day/Component/POI form's Cancel link, or its mutating
+    route's redirect, should land: the owning Checkpoint's own Itinerary
+    page (Form #2, view_checkpoint()) if the row is tied -- directly, or
+    via its Day -- to a Checkpoint-flagged Route Stop, otherwise the
+    package's main page (Form #1, view_package()). Per Zeb's request to
+    split the Package Planner into a package-level page and a
+    per-Checkpoint page, this is inferred from what the row is tied to
+    rather than threading a separate 'next' parameter through every form,
+    so every entry point (a Checkpoint's own "+ Add Day"/"+ Add Service",
+    or a Day's own "+ Add ... to this day") naturally lands back where it
+    came from."""
+    if day_id:
+        row = db.execute(
+            "SELECT route_stop_id FROM package_days WHERE day_id = ? AND package_id = ?",
+            (day_id, package_id),
+        ).fetchone()
+        route_stop_id = row["route_stop_id"] if row else None
+    if route_stop_id:
+        stop = db.execute(
+            "SELECT is_checkpoint FROM package_route_stops WHERE stop_id = ? AND package_id = ?",
+            (route_stop_id, package_id),
+        ).fetchone()
+        if stop and stop["is_checkpoint"]:
+            return url_for("packages.view_checkpoint", package_id=package_id, stop_id=route_stop_id)
+    return url_for("packages.view_package", package_id=package_id)
+
+
 def _day_pois(db, day_id):
     return db.execute(
         """SELECT dp.*, poi.name AS poi_name
@@ -336,6 +412,15 @@ def list_packages():
 @packages_bp.route("/<int:package_id>")
 @login_required
 def view_package(package_id):
+    """Form #1 -- the package-level page, per Zeb's request to split the
+    Package Planner in two: Tour Package Info, Route (each Checkpoint's
+    own Day-by-Day Itinerary now lives on its own page -- see
+    view_checkpoint() -- reached by clicking that stop's "Checkpoint"
+    badge here), and Entire Tour Services. Price Tiers sits right below
+    Description. A Day or component that doesn't belong to any Checkpoint
+    (no stop at all, or a non-Checkpoint stop) has no per-Checkpoint page
+    to live on, so it stays visible here as a fallback -- same "never hide
+    it" precedent this module has followed throughout."""
     db = get_db()
     package = _get_package(db, package_id)
     stops = _route_stops(db, package_id)
@@ -355,52 +440,37 @@ def view_package(package_id):
         for d in days
     ]
 
-    # Group Days under the Checkpoint (route stop) they belong to, per
-    # Zeb's request -- a Day not tied to any stop, or tied to a stop that
-    # isn't flagged is_checkpoint, falls back into "unassigned_days" so it
-    # still shows up on the page instead of silently disappearing.
+    # A Day not tied to any stop, or tied to a stop that isn't flagged
+    # is_checkpoint, has no Checkpoint page to live on -- falls back to
+    # "unassigned_days" here so it still shows up instead of silently
+    # disappearing. (Checkpoint-grouped Days themselves are handled by
+    # view_checkpoint(), not here.)
     checkpoints = _checkpoints(stops)
     checkpoint_stop_ids = {cp["stop_id"] for cp in checkpoints}
-    for cp in checkpoints:
-        cp["days"] = [d for d in days_with_pois if d["route_stop_id"] == cp["stop_id"]]
-        # A service for the WHOLE Checkpoint stay (e.g. a Car Rental or
-        # Guide covering every day at this stop) rather than one specific
-        # Day -- tied to this Checkpoint's route_stop_id with no day_id.
-        # Per Zeb's request, shown once per Checkpoint above its Days
-        # rather than needing "Repeat for Checkpoint" re-entered per Day.
-        cp["services"] = [c for c in components if c["route_stop_id"] == cp["stop_id"] and c["day_id"] is None]
-
-    # "Repeat for Checkpoint": an Accommodation or Other Service line flagged
-    # this way is entered on one Day but shows on every Day within that
-    # same Checkpoint (not just the Day it belongs to) -- per Zeb's
-    # request, so a multi-night item like a hotel room doesn't need to be
-    # re-entered per night. It's the same underlying row everywhere it
-    # appears (same component_id); day_card marks the copies shown on a
-    # Day other than their own with is_inherited so the template can note
-    # where they actually live. Only components tied to a Day that's
-    # itself inside a Checkpoint participate -- an unassigned Day has no
-    # "siblings" to repeat across.
-    for cp in checkpoints:
-        cp_day_ids = {d["day_id"] for d in cp["days"]}
-        repeating = [c for c in components if c["day_id"] in cp_day_ids and c["repeat_for_checkpoint"]]
-        for d in cp["days"]:
-            inherited = [dict(c, is_inherited=True) for c in repeating if c["day_id"] != d["day_id"]]
-            d["hotel_components"] = d["hotel_components"] + [c for c in inherited if c["is_accommodation"]]
-            d["other_components"] = d["other_components"] + [c for c in inherited if not c["is_accommodation"]]
-
     unassigned_days = [d for d in days_with_pois if d["route_stop_id"] not in checkpoint_stop_ids]
 
     # The flat, package-wide Components table is gone -- per Zeb's
     # request, every component now shows up exactly where it applies:
-    # under its Day (above), under its Checkpoint (cp["services"], above),
-    # or here, at the two levels that sit outside any single Checkpoint:
-    #   - entire_tour_components: no Route Stop and no Day at all -- a
-    #     cost for the whole trip (e.g. trip insurance, a tour leader).
+    # under its Day, under its Checkpoint (see view_checkpoint()), or
+    # here, at the levels that sit outside any single Checkpoint:
+    #   - airline_ticket_components: no Route Stop and no Day, flagged
+    #     is_airline_ticket -- its own "Airline Tickets" section, between
+    #     Route and Entire Tour Services, per Zeb's request (a cost item
+    #     he'd overlooked) rather than folded anonymously into Entire Tour
+    #     Services.
+    #   - entire_tour_components: no Route Stop and no Day, NOT an Airline
+    #     Ticket -- a cost for the whole trip (e.g. trip insurance, a tour
+    #     leader, tour gift packages).
     #   - other_route_stop_components: tied to a Route Stop that ISN'T
     #     flagged as a Checkpoint, with no Day -- an edge case (most
     #     costed stops are Checkpoints) kept visible rather than silently
     #     dropped, same "never hide it" precedent as unassigned_days.
-    entire_tour_components = [c for c in components if c["route_stop_id"] is None and c["day_id"] is None]
+    airline_ticket_components = [
+        c for c in components if c["route_stop_id"] is None and c["day_id"] is None and c["is_airline_ticket"]
+    ]
+    entire_tour_components = [
+        c for c in components if c["route_stop_id"] is None and c["day_id"] is None and not c["is_airline_ticket"]
+    ]
     other_route_stop_components = [
         c for c in components
         if c["route_stop_id"] is not None and c["route_stop_id"] not in checkpoint_stop_ids and c["day_id"] is None
@@ -408,10 +478,124 @@ def view_package(package_id):
 
     tiers = _price_tiers(db, package_id)
     return render_template(
-        "packages/view.html", package=package, stops=stops, days=days_with_pois,
+        "packages/view.html", package=package, stops=stops,
         checkpoints=checkpoints, unassigned_days=unassigned_days,
+        airline_ticket_components=airline_ticket_components,
         entire_tour_components=entire_tour_components, other_route_stop_components=other_route_stop_components,
         tiers=tiers,
+    )
+
+
+@packages_bp.route("/<int:package_id>/checkpoints/<int:stop_id>")
+@login_required
+def view_checkpoint(package_id, stop_id):
+    """Form #2 -- one Checkpoint's own Day-by-Day Itinerary page, per
+    Zeb's request to split the Package Planner in two: Checkpoint N
+    Itinerary (heading + nights-planned indicator), Entire Checkpoint
+    Services, then the Day-by-Day Itinerary for just this Checkpoint's
+    own Days (each Day's Accommodation/Other Service/POI's). Reached by
+    clicking the stop's "Checkpoint" badge on the package's main page."""
+    db = get_db()
+    package = _get_package(db, package_id)
+    stops = _route_stops(db, package_id)
+    checkpoints = _checkpoints(stops)
+    checkpoint = next((cp for cp in checkpoints if cp["stop_id"] == stop_id), None)
+    if checkpoint is None:
+        # Either no such stop, or a stop that exists but isn't flagged a
+        # Checkpoint -- there's no Checkpoint page for it.
+        abort(404)
+
+    days = _days(db, package_id)
+    components = _components(db, package_id)
+    day_pois_by_day = {d["day_id"]: _day_pois(db, d["day_id"]) for d in days}
+    # "Repeat for Checkpoint": an Accommodation or Other Service line
+    # flagged this way is entered on one Day but shows on every Day within
+    # this same Checkpoint (not just the Day it belongs to) -- per Zeb's
+    # request, so a multi-night item like a hotel room doesn't need to be
+    # re-entered per night. It's the same underlying row everywhere it
+    # appears (same component_id); day_card marks the copies shown on a
+    # Day other than their own with is_inherited so the template can note
+    # where they actually live. A service for the WHOLE Checkpoint stay
+    # (e.g. a Car Rental or Guide covering every day at this stop) is a
+    # different thing -- tied to this Checkpoint's route_stop_id with no
+    # day_id, shown once per Checkpoint above its Days. Both are built by
+    # _checkpoint_days_and_services(), shared with package_summary() so
+    # the two pages always render this identically.
+    checkpoint["services"], checkpoint["days"] = _checkpoint_days_and_services(
+        days, components, stop_id, day_pois_by_day
+    )
+
+    return render_template("packages/checkpoint.html", package=package, checkpoint=checkpoint)
+
+
+@packages_bp.route("/<int:package_id>/summary")
+@login_required
+def package_summary(package_id):
+    """The 'View Full Tour Package' page -- per Zeb's request, a single
+    printable page that inlines EVERYTHING (Route, Entire Tour Services,
+    and every Checkpoint's own Itinerary/Services/Days, which otherwise
+    live split across Form #1 and one Form #2 per Checkpoint) plus a Cost
+    Summary rolling every section up to a Grand Total. Also the page the
+    Print Itinerary / Print Costing Sheet buttons print from (see
+    summary.html's print-mode CSS)."""
+    db = get_db()
+    package = _get_package(db, package_id)
+    stops = _route_stops(db, package_id)
+    days = _days(db, package_id)
+    components = _components(db, package_id)
+    tiers = _price_tiers(db, package_id)
+    day_pois_by_day = {d["day_id"]: _day_pois(db, d["day_id"]) for d in days}
+
+    checkpoints = _checkpoints(stops)
+    checkpoint_stop_ids = {cp["stop_id"] for cp in checkpoints}
+    for cp in checkpoints:
+        cp["services"], cp["days"] = _checkpoint_days_and_services(
+            days, components, cp["stop_id"], day_pois_by_day
+        )
+
+    # Same bucketing as view_package(): whatever doesn't belong to any one
+    # Checkpoint still needs to show up here too, so the printed page is
+    # complete rather than a partial summary.
+    unassigned_days = [
+        dict(d, pois=day_pois_by_day.get(d["day_id"], []),
+             hotel_components=[c for c in components if c["day_id"] == d["day_id"] and c["is_accommodation"]],
+             other_components=[c for c in components if c["day_id"] == d["day_id"] and not c["is_accommodation"]])
+        for d in days if d["route_stop_id"] not in checkpoint_stop_ids
+    ]
+    airline_ticket_components = [
+        c for c in components if c["route_stop_id"] is None and c["day_id"] is None and c["is_airline_ticket"]
+    ]
+    entire_tour_components = [
+        c for c in components if c["route_stop_id"] is None and c["day_id"] is None and not c["is_airline_ticket"]
+    ]
+    other_route_stop_components = [
+        c for c in components
+        if c["route_stop_id"] is not None and c["route_stop_id"] not in checkpoint_stop_ids and c["day_id"] is None
+    ]
+
+    # Cost Summary: every real package_components row is counted exactly
+    # once (never inflated by a "repeats for Checkpoint" row's extra
+    # on-screen appearances on other Days), bucketed the same way the
+    # page itself is sectioned, rolling up to a Grand Total across the
+    # whole package -- per Zeb's request for a Cost Summary with a Grand
+    # Total.
+    unassigned_day_ids = {d["day_id"] for d in unassigned_days}
+    for cp in checkpoints:
+        cp_day_ids = {d["day_id"] for d in cp["days"]}
+        cp["totals"] = _totals(cp["services"] + [c for c in components if c["day_id"] in cp_day_ids])
+    cost_summary = {
+        "airline_tickets": _totals(airline_ticket_components),
+        "entire_tour": _totals(entire_tour_components),
+        "other_route_stop": _totals(other_route_stop_components),
+        "unassigned_days": _totals([c for c in components if c["day_id"] in unassigned_day_ids]),
+        "grand_total": _totals(components),
+    }
+
+    return render_template(
+        "packages/summary.html", package=package, stops=stops, checkpoints=checkpoints,
+        unassigned_days=unassigned_days, airline_ticket_components=airline_ticket_components,
+        entire_tour_components=entire_tour_components,
+        other_route_stop_components=other_route_stop_components, tiers=tiers, cost_summary=cost_summary,
     )
 
 
@@ -717,6 +901,7 @@ def new_package_day(package_id):
             return render_template(
                 "packages/day_form.html", package=package, day=None, stops=_route_stops(db, package_id),
                 form_values=form, preselected_stop_id=form.get("route_stop_id") or None,
+                cancel_url=_back_target(db, package_id, route_stop_id=form.get("route_stop_id") or None),
             )
         db.execute(
             """INSERT INTO package_days (tenant_id, package_id, route_stop_id, day_number, title, description)
@@ -729,15 +914,17 @@ def new_package_day(package_id):
         db.commit()
         log_action("Create", "package_day", package_id, f"Added Day {day_number} to {package['package_code']}")
         flash(f"Day {day_number} added.", "success")
-        return redirect(url_for("packages.view_package", package_id=package_id))
-    # A "+ Add Day" link inside a Checkpoint's Itinerary section (see
-    # view.html) passes ?route_stop_id=<stop_id> so the new Day starts out
-    # tied to that Checkpoint instead of defaulting to "Not tied to a
-    # stop" -- still just a pre-selected default, freely changeable on the
-    # form itself.
+        return redirect(_back_target(db, package_id, route_stop_id=form.get("route_stop_id") or None))
+    # A "+ Add Day" link on a Checkpoint's own Itinerary page (see
+    # checkpoint.html) passes ?route_stop_id=<stop_id> so the new Day
+    # starts out tied to that Checkpoint instead of defaulting to "Not
+    # tied to a stop" -- still just a pre-selected default, freely
+    # changeable on the form itself.
+    preselected_stop_id = request.args.get("route_stop_id") or None
     return render_template(
         "packages/day_form.html", package=package, day=None, stops=_route_stops(db, package_id), form_values=None,
-        preselected_stop_id=request.args.get("route_stop_id") or None,
+        preselected_stop_id=preselected_stop_id,
+        cancel_url=_back_target(db, package_id, route_stop_id=preselected_stop_id),
     )
 
 
@@ -766,9 +953,10 @@ def edit_package_day(package_id, day_id):
         db.commit()
         log_action("Update", "package_day", package_id, f"Updated Day {day['day_number']}")
         flash("Day updated.", "success")
-        return redirect(url_for("packages.view_package", package_id=package_id))
+        return redirect(_back_target(db, package_id, route_stop_id=form.get("route_stop_id") or None))
     return render_template(
         "packages/day_form.html", package=package, day=day, stops=_route_stops(db, package_id), form_values=None,
+        cancel_url=_back_target(db, package_id, route_stop_id=day["route_stop_id"]),
     )
 
 
@@ -798,13 +986,13 @@ def delete_package_day(package_id, day_id):
             f"Reassign or remove those first.",
             "error",
         )
-        return redirect(url_for("packages.view_package", package_id=package_id))
+        return redirect(_back_target(db, package_id, route_stop_id=day["route_stop_id"]))
     db.execute("DELETE FROM package_day_pois WHERE day_id = ? AND tenant_id = ?", (day_id, g.tenant_id))
     db.execute("DELETE FROM package_days WHERE day_id = ? AND tenant_id = ?", (day_id, g.tenant_id))
     db.commit()
     log_action("Delete", "package_day", package_id, f"Deleted Day {day['day_number']}")
     flash(f"Day {day['day_number']} deleted.", "success")
-    return redirect(url_for("packages.view_package", package_id=package_id))
+    return redirect(_back_target(db, package_id, route_stop_id=day["route_stop_id"]))
 
 
 # -------------------------------------------------------------- day POIs
@@ -828,6 +1016,7 @@ def new_day_poi(package_id, day_id):
             pois = _pois(db)
             return render_template(
                 "packages/day_poi_form.html", package=package, day=day, pois=pois, pois_json=_pois_json(pois),
+                cancel_url=_back_target(db, package_id, route_stop_id=day["route_stop_id"]),
             )
         if db.execute(
             "SELECT 1 FROM package_day_pois WHERE day_id = ? AND poi_id = ?", (day_id, poi_id)
@@ -836,6 +1025,7 @@ def new_day_poi(package_id, day_id):
             pois = _pois(db)
             return render_template(
                 "packages/day_poi_form.html", package=package, day=day, pois=pois, pois_json=_pois_json(pois),
+                cancel_url=_back_target(db, package_id, route_stop_id=day["route_stop_id"]),
             )
         sequence_number = form.get("sequence_number") or None
         if not sequence_number:
@@ -851,10 +1041,11 @@ def new_day_poi(package_id, day_id):
         db.commit()
         log_action("Create", "package_day_poi", package_id, f"Added a POI to Day {day['day_number']}")
         flash("Point of Interest added to the day.", "success")
-        return redirect(url_for("packages.view_package", package_id=package_id))
+        return redirect(_back_target(db, package_id, route_stop_id=day["route_stop_id"]))
     pois = _pois(db)
     return render_template(
         "packages/day_poi_form.html", package=package, day=day, pois=pois, pois_json=_pois_json(pois),
+        cancel_url=_back_target(db, package_id, route_stop_id=day["route_stop_id"]),
     )
 
 
@@ -873,7 +1064,7 @@ def delete_day_poi(package_id, day_id, day_poi_id):
     db.commit()
     log_action("Delete", "package_day_poi", package_id, f"Removed a POI from day #{day_id}")
     flash("Point of Interest removed from the day.", "success")
-    return redirect(url_for("packages.view_package", package_id=package_id))
+    return redirect(_back_target(db, package_id, day_id=day_id))
 
 
 # ------------------------------------------------------------ components
@@ -944,26 +1135,39 @@ def new_component(package_id):
                 services=services, services_json=_services_json(services),
                 products=_active_products(db), suppliers=suppliers, suppliers_json=_suppliers_json(suppliers),
                 form_values=form, preselected_day_id=None, preselected_is_accommodation=False,
+                preselected_is_airline_ticket=False,
                 preselect_category_id=None, preselected_route_stop_id=form.get("route_stop_id") or None,
                 is_accommodation_form=bool(form.get("is_accommodation")),
+                is_airline_ticket_form=bool(form.get("is_airline_ticket")),
+                cancel_url=_back_target(
+                    db, package_id, route_stop_id=form.get("route_stop_id") or None,
+                    day_id=form.get("day_id") or None,
+                ),
             )
 
-        sequence_number = form.get("sequence_number") or None
-        if not sequence_number:
-            sequence_number = db.execute(
-                "SELECT COALESCE(MAX(sequence_number), 0) + 1 AS n FROM package_components WHERE package_id = ?",
-                (package_id,),
-            ).fetchone()["n"]
+        # Display order within whichever sub-section a component lands in
+        # (Entire Tour Services, Checkpoint Services, or a Day's
+        # Accommodation/Other Service table) is always automatic -- a
+        # newly-added item simply goes to the end of its list, same as a
+        # chat thread or an activity log. There's no "Sequence #" field on
+        # the form (per Zeb's request) for the person to set or fight with;
+        # this just keeps incrementing package-wide so insertion order is
+        # preserved within every sub-section that filters this list.
+        sequence_number = db.execute(
+            "SELECT COALESCE(MAX(sequence_number), 0) + 1 AS n FROM package_components WHERE package_id = ?",
+            (package_id,),
+        ).fetchone()["n"]
 
         db.execute(
             """INSERT INTO package_components (tenant_id, package_id, route_stop_id, day_id, is_accommodation,
-                                                 repeat_for_checkpoint, component_type, service_id, product_id,
-                                                 supplier_id, description, quantity, unit, unit_cost, unit_price,
-                                                 currency, notes, sequence_number)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                                 is_airline_ticket, repeat_for_checkpoint, component_type, service_id,
+                                                 product_id, supplier_id, description, quantity, unit, unit_cost,
+                                                 unit_price, currency, notes, sequence_number)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 g.tenant_id, package_id, form.get("route_stop_id") or None, form.get("day_id") or None,
-                1 if form.get("is_accommodation") else 0, 1 if form.get("repeat_for_checkpoint") else 0,
+                1 if form.get("is_accommodation") else 0, 1 if form.get("is_airline_ticket") else 0,
+                1 if form.get("repeat_for_checkpoint") else 0,
                 component_type, service_id, product_id, form.get("supplier_id") or None, description,
                 quantity, form.get("unit", "").strip() or None, unit_cost, unit_price,
                 form.get("currency", "").strip() or None, form.get("notes", "").strip() or None, sequence_number,
@@ -972,29 +1176,37 @@ def new_component(package_id):
         db.commit()
         log_action("Create", "package_component", package_id, f"Added a component to {package['package_code']}")
         flash("Component added.", "success")
-        return redirect(url_for("packages.view_package", package_id=package_id))
+        return redirect(_back_target(
+            db, package_id, route_stop_id=form.get("route_stop_id") or None, day_id=form.get("day_id") or None,
+        ))
 
     services = _active_services(db)
     suppliers = _active_suppliers(db)
     # A Day card's "Add Accommodation to this day" / "Add other Service to
-    # this day" links (see view.html) pass day_id (and, for Accommodation,
-    # is_accommodation=1 plus category=AR) so the form opens pre-tied to
-    # that Day, pre-checked, and pre-filtered to the Accommodation / Rooms
-    # Service Category -- all just pre-selected defaults, freely changeable
-    # on the form itself, same convention as the Route Stop form's
-    # preselected_stop_id (day_form.html). A "+ Add Service for this
-    # Checkpoint" / "+ Add Entire Tour Service" link instead (or also)
-    # passes route_stop_id so a whole-checkpoint or whole-trip service
-    # opens pre-tied to the right scope.
+    # this day" links (see _macros.html's day_card) pass day_id (and, for
+    # Accommodation, is_accommodation=1 plus category=AR) so the form
+    # opens pre-tied to that Day, pre-checked, and pre-filtered to the
+    # Accommodation / Rooms Service Category -- all just pre-selected
+    # defaults, freely changeable on the form itself, same convention as
+    # the Route Stop form's preselected_stop_id (day_form.html). A "+ Add
+    # Service for this Checkpoint" (checkpoint.html) / "+ Add Service"
+    # (Entire Tour Services, view.html) link instead passes route_stop_id
+    # so a whole-checkpoint or whole-trip service opens pre-tied to the
+    # right scope.
+    preselected_day_id = request.args.get("day_id") or None
+    preselected_route_stop_id = request.args.get("route_stop_id") or None
     return render_template(
         "packages/component_form.html", package=package, component=None, stops=_route_stops(db, package_id),
         days=_days(db, package_id), services=services, services_json=_services_json(services),
         products=_active_products(db), suppliers=suppliers, suppliers_json=_suppliers_json(suppliers),
-        form_values=None, preselected_day_id=request.args.get("day_id") or None,
+        form_values=None, preselected_day_id=preselected_day_id,
         preselected_is_accommodation=request.args.get("is_accommodation") == "1",
+        preselected_is_airline_ticket=request.args.get("is_airline_ticket") == "1",
         preselect_category_id=_resolve_category_id(db, request.args.get("category")),
-        preselected_route_stop_id=request.args.get("route_stop_id") or None,
+        preselected_route_stop_id=preselected_route_stop_id,
         is_accommodation_form=(request.args.get("is_accommodation") == "1"),
+        is_airline_ticket_form=(request.args.get("is_airline_ticket") == "1"),
+        cancel_url=_back_target(db, package_id, route_stop_id=preselected_route_stop_id, day_id=preselected_day_id),
     )
 
 
@@ -1057,31 +1269,44 @@ def edit_component(package_id, component_id):
                 services=services, services_json=_services_json(services),
                 products=_active_products(db), suppliers=suppliers, suppliers_json=_suppliers_json(suppliers),
                 form_values=form, preselected_day_id=None, preselected_is_accommodation=False,
+                preselected_is_airline_ticket=False,
                 preselect_category_id=None, preselected_route_stop_id=None,
                 is_accommodation_form=bool(form.get("is_accommodation")),
+                is_airline_ticket_form=bool(form.get("is_airline_ticket")),
+                cancel_url=_back_target(
+                    db, package_id, route_stop_id=form.get("route_stop_id") or None,
+                    day_id=form.get("day_id") or None,
+                ),
             )
 
+        # sequence_number is never touched on edit -- no form field for it
+        # (see new_component()'s comment); a component keeps its original
+        # display-order position for the life of the record.
         db.execute(
             """UPDATE package_components SET route_stop_id=?, day_id=?, is_accommodation=?,
+                                              is_airline_ticket=?,
                                               repeat_for_checkpoint=?, component_type=?, service_id=?, product_id=?,
                                               supplier_id=?, description=?, quantity=?, unit=?, unit_cost=?,
-                                              unit_price=?, currency=?, notes=?, sequence_number=?,
+                                              unit_price=?, currency=?, notes=?,
                                               updated_at=datetime('now')
                WHERE component_id=? AND tenant_id=?""",
             (
                 form.get("route_stop_id") or None, form.get("day_id") or None,
-                1 if form.get("is_accommodation") else 0, 1 if form.get("repeat_for_checkpoint") else 0,
+                1 if form.get("is_accommodation") else 0, 1 if form.get("is_airline_ticket") else 0,
+                1 if form.get("repeat_for_checkpoint") else 0,
                 component_type, service_id, product_id, form.get("supplier_id") or None, description,
                 quantity, form.get("unit", "").strip() or None, unit_cost, unit_price,
                 form.get("currency", "").strip() or None,
-                form.get("notes", "").strip() or None, form.get("sequence_number") or component["sequence_number"],
+                form.get("notes", "").strip() or None,
                 component_id, g.tenant_id,
             ),
         )
         db.commit()
         log_action("Update", "package_component", package_id, f"Updated component #{component_id}")
         flash("Component updated.", "success")
-        return redirect(url_for("packages.view_package", package_id=package_id))
+        return redirect(_back_target(
+            db, package_id, route_stop_id=form.get("route_stop_id") or None, day_id=form.get("day_id") or None,
+        ))
 
     services = _active_services(db)
     suppliers = _active_suppliers(db)
@@ -1089,8 +1314,13 @@ def edit_component(package_id, component_id):
         "packages/component_form.html", package=package, component=component, stops=_route_stops(db, package_id),
         days=_days(db, package_id), services=services, services_json=_services_json(services),
         products=_active_products(db), suppliers=suppliers, suppliers_json=_suppliers_json(suppliers),
-        form_values=None, preselected_day_id=None, preselected_is_accommodation=False, preselect_category_id=None,
+        form_values=None, preselected_day_id=None, preselected_is_accommodation=False,
+        preselected_is_airline_ticket=False, preselect_category_id=None,
         preselected_route_stop_id=None, is_accommodation_form=bool(component["is_accommodation"]),
+        is_airline_ticket_form=bool(component["is_airline_ticket"]),
+        cancel_url=_back_target(
+            db, package_id, route_stop_id=component["route_stop_id"], day_id=component["day_id"],
+        ),
     )
 
 
@@ -1105,11 +1335,12 @@ def delete_component(package_id, component_id):
     ).fetchone()
     if component is None:
         abort(404)
+    back_target = _back_target(db, package_id, route_stop_id=component["route_stop_id"], day_id=component["day_id"])
     db.execute("DELETE FROM package_components WHERE component_id = ? AND tenant_id = ?", (component_id, g.tenant_id))
     db.commit()
     log_action("Delete", "package_component", package_id, f"Deleted component #{component_id}")
     flash("Component deleted.", "success")
-    return redirect(url_for("packages.view_package", package_id=package_id))
+    return redirect(back_target)
 
 
 # ----------------------------------------------------------- price tiers

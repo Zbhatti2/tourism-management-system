@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% import "packages/_macros.html" as macros %}
+{# View Full Tour Package -- a single consolidated, printable page inlining
+   EVERYTHING (Route, Entire Tour Services, and every Checkpoint's own
+   Itinerary/Services/Days, which otherwise live split across Form #1 and
+   one Form #2 per Checkpoint) plus a Cost Summary rolling every section
+   up to a Grand Total -- per Zeb's request. Reached via the "View Full
+   Tour Package" button on the package's main page (Form #1).
+
+   Print Itinerary / Print Costing Sheet (see the scripts block) set a
+   data-print-mode attribute on <body> before calling window.print(); the
+   print stylesheet below hides whichever half doesn't belong on that
+   document: .costing-block (every $ table, the Repeat-for-Checkpoint
+   badge context, and the Cost Summary itself) for a client-ready
+   Itinerary with no pricing on it, or .narrative-block (Day
+   descriptions and Points of Interest) for a lean internal Costing
+   Sheet. .no-print (the sidebar, and every button/Add/Edit/Delete
+   control on this page) is hidden either way -- nothing to click on a
+   printed page. #}
+{% block title %}{{ package.package_code }} — Full Tour Package{% endblock %}
+{% block content %}
+<style>
+  @media print {
+    .no-print, .pims-sidebar { display: none !important; }
+    body[data-print-mode="itinerary"] .costing-block { display: none !important; }
+    body[data-print-mode="costing"] .narrative-block { display: none !important; }
+    .pims-main { margin: 0 !important; }
+    .card { break-inside: avoid; }
+  }
+</style>
+
+<div class="d-flex justify-content-between align-items-start mb-4 no-print">
+  <div>
+    <h1 class="h3 mb-0"><code>{{ package.package_code }}</code> — {{ package.package_name }}</h1>
+    <p class="text-muted small mb-0 mt-1">Full Tour Package — every Checkpoint's Itinerary, Services, and Days in one place, plus a Cost Summary.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printPackage('itinerary')"><i class="bi bi-printer"></i> Print Itinerary</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printPackage('costing')"><i class="bi bi-printer"></i> Print Costing Sheet</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printPackage('all')"><i class="bi bi-printer"></i> Print Full Summary</button>
+    <a href="{{ url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<!-- Print-only heading (hidden on screen, shown on the printed page in place of the button row above) -->
+<div class="d-none d-print-block mb-4">
+  <h1 class="h3 mb-0"><code>{{ package.package_code }}</code> — {{ package.package_name }}</h1>
+</div>
+
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <h2 class="h6">Package Details</h2>
+    <dl class="row mb-0 small">
+      <dt class="col-sm-2">Duration</dt><dd class="col-sm-4">{% if package.duration_days %}{{ package.duration_days }} days / {{ package.duration_nights or 0 }} nights{% else %}—{% endif %}</dd>
+      <dt class="col-sm-2">Pax</dt><dd class="col-sm-4">{% if package.min_pax or package.max_pax %}{{ package.min_pax or "?" }}–{{ package.max_pax or "?" }}{% else %}—{% endif %}</dd>
+      <dt class="col-sm-2">Description</dt><dd class="col-sm-4">{{ package.description or "—" }}</dd>
+      <dt class="col-sm-2">Base Currency</dt><dd class="col-sm-4">{{ package.base_currency or "—" }}</dd>
+    </dl>
+  </div>
+</div>
+
+<!-- ============ ROUTE ============ -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <h2 class="h6 mb-2">Route (Country → City)</h2>
+    {% if stops %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>#</th><th>Country</th><th>City</th><th>Nights / Layover</th><th>Checkpoint</th></tr></thead>
+        <tbody>
+          {% for s in stops %}
+          <tr>
+            <td>{{ s.sequence_number }}</td>
+            <td>{{ s.country_name or "—" }}</td>
+            <td>{{ s.city_label or s.city_text or "—" }}</td>
+            <td>
+              {% if s.is_layover %}<span class="badge bg-warning-subtle text-warning-emphasis">Layover{% if s.layover_hours is not none %}, ~{{ s.layover_hours }} hrs{% endif %}</span>
+              {% else %}{{ s.nights if s.nights is not none else "—" }}{% endif %}
+            </td>
+            <td>{% if s.is_checkpoint %}<span class="badge bg-primary-subtle text-primary-emphasis">Checkpoint</span>{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">No route stops yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ============ AIRLINE TICKETS ============ -->
+<div class="card shadow-sm border-0 mb-3 costing-block">
+  <div class="card-body">
+    <h2 class="h6 mb-2">Airline Tickets</h2>
+    {% if airline_ticket_components %}
+    {{ macros.component_costing_table(airline_ticket_components, package, show_supplier=True, show_type=True, show_repeat=False) }}
+    {% else %}
+    <p class="text-muted small mb-0">No airline tickets added yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ============ ENTIRE TOUR SERVICES ============ -->
+<div class="card shadow-sm border-0 mb-3 costing-block">
+  <div class="card-body">
+    <h2 class="h6 mb-2">Entire Tour Services</h2>
+    {% if entire_tour_components %}
+    {{ macros.component_costing_table(entire_tour_components, package, show_supplier=True, show_type=True, show_repeat=False) }}
+    {% else %}
+    <p class="text-muted small mb-0">No whole-trip services added yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% macro day_block(d) %}
+<div class="border rounded p-3 mb-2">
+  <strong>Day {{ d.day_number }}{% if d.title %} — {{ d.title }}{% endif %}</strong>
+  {% if d.city_label or d.city_text %}<span class="text-muted small ms-2">{{ d.city_label or d.city_text }}</span>{% endif %}
+  {% if d.description %}<p class="small mb-0 mt-1 narrative-block" style="white-space: pre-line;">{{ d.description }}</p>{% endif %}
+
+  <div class="mt-2 costing-block">
+    <div class="small text-uppercase text-muted mb-1">Accommodation</div>
+    {% if d.hotel_components %}
+    {{ macros.component_costing_table(d.hotel_components, package, show_supplier=True) }}
+    {% else %}
+    <p class="text-muted small mb-1">None added.</p>
+    {% endif %}
+  </div>
+
+  <div class="mt-3 costing-block">
+    <div class="small text-uppercase text-muted mb-1">Other Service</div>
+    {% if d.other_components %}
+    {{ macros.component_costing_table(d.other_components, package, show_type=True) }}
+    {% else %}
+    <p class="text-muted small mb-1">None added.</p>
+    {% endif %}
+  </div>
+
+  <div class="mt-3 narrative-block">
+    <div class="small text-uppercase text-muted mb-1">Points of Interest</div>
+    {% if d.pois %}
+    <ul class="small mb-0">
+      {% for poi in d.pois %}<li>{{ poi.poi_name }}{% if poi.visit_notes %} — {{ poi.visit_notes }}{% endif %}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted small mb-0">None added.</p>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+<!-- ============ EVERY CHECKPOINT, INLINED ============ -->
+{% for cp in checkpoints %}
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <div>
+        <h2 class="h6 mb-0">Checkpoint {{ cp.checkpoint_number }} Itinerary <span class="text-muted fw-normal">{{ cp.city_label or cp.city_text or "—" }}, {{ cp.country_name or "—" }}</span></h2>
+        <div class="small mt-1">
+          {% if cp.nights is not none %}
+            {% if cp.days | length == cp.nights %}
+            <span class="text-success"><i class="bi bi-check-circle"></i> {{ cp.days | length }} of {{ cp.nights }} night{{ "s" if cp.nights != 1 else "" }} planned</span>
+            {% else %}
+            <span class="text-warning-emphasis"><i class="bi bi-exclamation-circle"></i> {{ cp.days | length }} of {{ cp.nights }} night{{ "s" if cp.nights != 1 else "" }} planned</span>
+            {% endif %}
+          {% else %}
+          <span class="text-muted">{{ cp.days | length }} day{{ "s" if cp.days | length != 1 else "" }} planned</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="text-end small costing-block">
+        <div class="text-muted">Checkpoint Subtotal</div>
+        <div>Cost {{ "%.2f"|format(cp.totals.cost) }} · Price {{ "%.2f"|format(cp.totals.price) }} · Margin {{ "%.2f"|format(cp.totals.margin) }}</div>
+      </div>
+    </div>
+
+    <div class="mb-3 costing-block">
+      <div class="small text-uppercase text-muted mb-1">Entire Checkpoint Services</div>
+      {% if cp.services %}
+      {{ macros.component_costing_table(cp.services, package, show_supplier=True, show_type=True, show_repeat=False) }}
+      {% else %}
+      <p class="text-muted small mb-0">None added.</p>
+      {% endif %}
+    </div>
+
+    <div class="small text-uppercase text-muted mb-1">Day-by-Day Itinerary</div>
+    {% if cp.days %}
+    {% for d in cp.days %}{{ day_block(d) }}{% endfor %}
+    {% else %}
+    <p class="text-muted small mb-0">No days added to this checkpoint yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% if other_route_stop_components %}
+<!-- ============ OTHER ROUTE STOP SERVICES (fallback) ============ -->
+<div class="card shadow-sm border-0 mb-3 costing-block">
+  <div class="card-body">
+    <h2 class="h6 mb-2">Other Route Stop Services (not tied to a Checkpoint)</h2>
+    {{ macros.component_costing_table(other_route_stop_components, package, show_supplier=True, show_type=True, show_repeat=False) }}
+  </div>
+</div>
+{% endif %}
+
+{% if not checkpoints or unassigned_days %}
+<!-- ============ OTHER DAYS (fallback) ============ -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <h2 class="h6 mb-2">{{ "Itinerary (Day-by-Day)" if not checkpoints else "Other Days (not tied to a Checkpoint)" }}</h2>
+    {% if unassigned_days %}
+    {% for d in unassigned_days %}{{ day_block(d) }}{% endfor %}
+    {% else %}
+    <p class="text-muted small mb-0">No days yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ============ COST SUMMARY (rolls up to a Grand Total row below) ============ -->
+<div class="card shadow-sm border-0 mb-3 costing-block">
+  <div class="card-body">
+    <h2 class="h6 mb-2">Cost Summary</h2>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr class="small text-muted"><th>Section</th><th class="text-end">Total Cost</th><th class="text-end">Total Price</th><th class="text-end">Profit Margin</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Airline Tickets</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.airline_tickets.cost) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.airline_tickets.price) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.airline_tickets.margin) }}</td>
+          </tr>
+          <tr>
+            <td>Entire Tour Services</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.entire_tour.cost) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.entire_tour.price) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.entire_tour.margin) }}</td>
+          </tr>
+          {% for cp in checkpoints %}
+          <tr>
+            <td>Checkpoint {{ cp.checkpoint_number }} ({{ cp.city_label or cp.city_text or "—" }})</td>
+            <td class="text-end">{{ "%.2f"|format(cp.totals.cost) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cp.totals.price) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cp.totals.margin) }}</td>
+          </tr>
+          {% endfor %}
+          {% if other_route_stop_components %}
+          <tr>
+            <td>Other Route Stop Services</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.other_route_stop.cost) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.other_route_stop.price) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.other_route_stop.margin) }}</td>
+          </tr>
+          {% endif %}
+          {% if unassigned_days %}
+          <tr>
+            <td>{{ "Itinerary (Day-by-Day)" if not checkpoints else "Other Days (not tied to a Checkpoint)" }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.unassigned_days.cost) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.unassigned_days.price) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.unassigned_days.margin) }}</td>
+          </tr>
+          {% endif %}
+        </tbody>
+        <tfoot>
+          <tr class="fw-bold border-top border-2">
+            <td>GRAND TOTAL</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.grand_total.cost) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.grand_total.price) }}</td>
+            <td class="text-end">{{ "%.2f"|format(cost_summary.grand_total.margin) }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="text-muted small mb-0 mt-2">Every line item is counted once here, even if it's flagged "Repeat for Checkpoint" and shown on more than one Day.</p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  function printPackage(mode) {
+    document.body.setAttribute("data-print-mode", mode);
+    window.print();
+  }
+</script>
+{% endblock %}

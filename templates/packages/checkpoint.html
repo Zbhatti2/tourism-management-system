@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "packages/_macros.html" as macros %}
+{% block title %}Checkpoint {{ checkpoint.checkpoint_number }} — {{ package.package_code }}{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <a href="{{ url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to <code>{{ package.package_code }}</code></a>
+</div>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h4 mb-0">Checkpoint {{ checkpoint.checkpoint_number }} Itinerary <span class="text-muted fw-normal">{{ checkpoint.city_label or checkpoint.city_text or "—" }}, {{ checkpoint.country_name or "—" }}</span></h1>
+    <div class="small mt-1">
+      {% if checkpoint.nights is not none %}
+        {% if checkpoint.days | length == checkpoint.nights %}
+        <span class="text-success"><i class="bi bi-check-circle"></i> {{ checkpoint.days | length }} of {{ checkpoint.nights }} night{{ "s" if checkpoint.nights != 1 else "" }} planned</span>
+        {% else %}
+        <span class="text-warning-emphasis"><i class="bi bi-exclamation-circle"></i> {{ checkpoint.days | length }} of {{ checkpoint.nights }} night{{ "s" if checkpoint.nights != 1 else "" }} planned</span>
+        {% endif %}
+      {% else %}
+      <span class="text-muted">{{ checkpoint.days | length }} day{{ "s" if checkpoint.days | length != 1 else "" }} planned</span>
+      {% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('packages.new_package_day', package_id=package.package_id, route_stop_id=checkpoint.stop_id) }}" class="btn btn-sm btn-outline-primary text-nowrap"><i class="bi bi-plus-lg"></i> Add Day</a>
+</div>
+
+<!-- ============ 5. ENTIRE CHECKPOINT SERVICES ============ -->
+{# A service for the WHOLE Checkpoint stay (e.g. a Car Rental or Guide
+   covering every day at this stop) rather than one specific Day -- per
+   Zeb's request, shown once per Checkpoint above its Days rather than
+   needing "Repeat for Checkpoint" re-entered per Day. #}
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h2 class="h6 mb-0">Entire Checkpoint Services</h2>
+      <a href="{{ url_for('packages.new_component', package_id=package.package_id, route_stop_id=checkpoint.stop_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Add Service for this Checkpoint</a>
+    </div>
+    {% if checkpoint.services %}
+    {{ macros.component_costing_table(checkpoint.services, package, show_supplier=True, show_type=True, show_repeat=False) }}
+    {% else %}
+    <p class="text-muted small mb-0">None added.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ============ 6. DAY-BY-DAY ITINERARY FOR THIS CHECKPOINT ============ -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <h2 class="h6 mb-2">Day-by-Day Itinerary</h2>
+    {% if checkpoint.days %}
+    {% for d in checkpoint.days %}{{ macros.day_card(d, package) }}{% endfor %}
+    {% else %}
+    <p class="text-muted small mb-0">No days added to this checkpoint yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,19 +1,25 @@
 {% extends "base.html" %}
-{# is_accommodation_form (passed by the route) decides which of the two
-   forms this is -- "Add/Edit Accommodation Component" (Day + Accommodation
-   checkbox + Repeat for Checkpoint all shown, exactly as before) for an
-   item reached via "+ Add Accommodation to this day", or "Add/Edit Other
-   Service Component" (that whole block hidden) for everything else --
-   Checkpoint Services, Entire Tour Services, and a Day's Other Service.
-   Per Zeb's request: Other Service items are always added from a specific
-   context (a Day card, a Checkpoint's own section, Entire Tour Services)
-   so a manually-editable Day picker there is redundant/confusing, and
-   Repeat for Checkpoint is retired for Other Service now that a
-   whole-Checkpoint cost can just be added directly as a Checkpoint
-   Service instead of being flagged to repeat from one Day. #}
-{% block title %}{{ "Edit" if component else "Add" }} {{ "Accommodation" if is_accommodation_form else "Other Service" }} Component{% endblock %}
+{# is_accommodation_form / is_airline_ticket_form (both passed by the
+   route) decide which of the three forms this is -- "Add/Edit
+   Accommodation Component" (Day + Accommodation checkbox + Repeat for
+   Checkpoint all shown, exactly as before) for an item reached via "+ Add
+   Accommodation to this day"; "Add/Edit Airline Ticket Component" (an
+   Airline Ticket checkbox instead, no Day picker) for a whole-trip item
+   reached via "+ Add Airline Ticket" (per Zeb's request for a dedicated
+   Airline Tickets cost section, separate from the generic Entire Tour
+   Services list); or "Add/Edit Other Service Component" (neither block
+   shown) for everything else -- Checkpoint Services, Entire Tour
+   Services, and a Day's Other Service. Per Zeb's request: Other Service
+   items are always added from a specific context (a Day card, a
+   Checkpoint's own section, Entire Tour Services) so a manually-editable
+   Day picker there is redundant/confusing, and Repeat for Checkpoint is
+   retired for Other Service now that a whole-Checkpoint cost can just be
+   added directly as a Checkpoint Service instead of being flagged to
+   repeat from one Day. #}
+{% set form_kind = "Accommodation" if is_accommodation_form else ("Airline Ticket" if is_airline_ticket_form else "Other Service") %}
+{% block title %}{{ "Edit" if component else "Add" }} {{ form_kind }} Component{% endblock %}
 {% block content %}
-<h1 class="h4 mb-1">{{ "Edit" if component else "Add" }} {{ "Accommodation" if is_accommodation_form else "Other Service" }} Component</h1>
+<h1 class="h4 mb-1">{{ "Edit" if component else "Add" }} {{ form_kind }} Component</h1>
 <p class="text-muted small mb-4"><code>{{ package.package_code }}</code> — {{ package.package_name }}</p>
 <form method="post" class="card shadow-sm border-0" style="max-width: 720px;">
   <div class="card-body">
@@ -141,7 +147,39 @@
         </div>
       </div>
     </div>
+    {% else %}
+    {# Other Service: whatever Day this item is already tied to (from the
+       "+ Add other Service to this day" link, or from editing an existing
+       Day-tied item) is preserved as a hidden field rather than a visible,
+       user-editable picker -- see the note at the top of this file. #}
+    {% if effective_day_id %}<input type="hidden" name="day_id" value="{{ effective_day_id }}">{% endif %}
+    {% if not effective_day_id %}
+    {# Airline Ticket only makes sense for a whole-trip item (no Day) --
+       per Zeb's request, a separate cost section between Route and Entire
+       Tour Services, so a component flagged here shows there instead of
+       in the generic Entire Tour Services list. #}
+    <div class="mb-3">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="is_airline_ticket" id="is_airline_ticket_check"
+               {{ "checked" if (component and component.is_airline_ticket) or (not component and preselected_is_airline_ticket) else "" }}>
+        <label class="form-check-label" for="is_airline_ticket_check">
+          Airline Ticket
+        </label>
+        <div class="form-text">Shows this line in its own "Airline Tickets" section on the package page, instead of Entire Tour Services.</div>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
 
+    {% if effective_day_id %}
+    {# Repeat for Checkpoint applies to ANY Day-tied item, Accommodation or
+       Other Service alike -- a Food & Beverage line entered on one Day of
+       a Checkpoint is just as likely to need repeating across that
+       Checkpoint's other Days as a hotel room is (per Zeb's feedback: this
+       was mistakenly Accommodation-only when the Other Service form was
+       split off). Only shown when there's a Day to repeat *from* in the
+       first place -- a Checkpoint- or Entire-Tour-level item (no Day at
+       all) has no "other Days" to repeat across. #}
     <div class="mb-3">
       <div class="form-check">
         <input class="form-check-input" type="checkbox" name="repeat_for_checkpoint" id="repeat_for_checkpoint_check"
@@ -149,16 +187,9 @@
         <label class="form-check-label" for="repeat_for_checkpoint_check">
           Repeat for Checkpoint
         </label>
-        <div class="form-text">Shows this same line on every Day within this Checkpoint, not just the Day it's added to — a multi-night item like a hotel room only needs to be entered once.</div>
+        <div class="form-text">Shows this same line on every Day within this Checkpoint, not just the Day it's added to — a multi-night item like a hotel room (or a recurring meal/service) only needs to be entered once.</div>
       </div>
     </div>
-    {% else %}
-    {# Other Service: whatever Day this item is already tied to (from the
-       "+ Add other Service to this day" link, or from editing an existing
-       Day-tied item) is preserved as a hidden field rather than a visible,
-       user-editable picker -- see the note at the top of this file. #}
-    {% if effective_day_id %}<input type="hidden" name="day_id" value="{{ effective_day_id }}">{% endif %}
-    {% if component and component.repeat_for_checkpoint %}<input type="hidden" name="repeat_for_checkpoint" value="1">{% endif %}
     {% endif %}
 
     <div class="row g-2 mb-3">
@@ -189,20 +220,13 @@
       </div>
     </div>
 
-    <div class="row g-2 mb-3">
-      <div class="col-4">
-        <label class="form-label">Sequence # (display order)</label>
-        <input class="form-control" type="number" step="1" min="1" name="sequence_number"
-               value="{{ component.sequence_number if component else '' }}" placeholder="auto if blank">
-      </div>
-    </div>
     <div class="mb-3">
       <label class="form-label">Notes</label>
       <textarea class="form-control" name="notes" rows="2">{{ (component.notes | orblank) if component else (form_values.notes if form_values else "") }}</textarea>
     </div>
   </div>
   <div class="card-footer bg-white d-flex gap-2 justify-content-end">
-    <a href="{{ url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <a href="{{ cancel_url or url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-outline-secondary">Cancel</a>
     <button class="btn btn-primary" type="submit">Save</button>
   </div>
 </form>

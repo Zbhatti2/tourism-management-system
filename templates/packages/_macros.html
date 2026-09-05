@@ -1,0 +1,161 @@
+{# Shared Costing/Day-card macros for the Package Planner, used by both
+   view.html (Form #1 -- Package Info, Route, Entire Tour Services) and
+   checkpoint.html (Form #2 -- one Checkpoint's own Itinerary page) --
+   split out into their own file per Zeb's request to split the Package
+   Planner into two pages, so both templates can import the same markup
+   instead of duplicating it. csrf_token() and url_for() are Flask/Jinja
+   globals (see security/csrf.py), so a plain {% import %} (no "with
+   context" needed) gives an imported macro access to them. #}
+{% macro component_costing_table(items, package, show_supplier=False, show_type=False, show_repeat=True) %}
+{# Reusable Costing table -- per Zeb's request that the flat, package-wide
+   Components section be retired now that every component shows up exactly
+   where it applies (its Day, its Checkpoint, or the whole Tour). Serves
+   all four contexts with per-context column visibility instead of
+   duplicating table markup: show_supplier is Accommodation-only ("Supplier"
+   is meaningful there but not for a generic Other Service); show_type is
+   Other-Service/Checkpoint/Entire-Tour-only ("Service Type" isn't needed
+   once a row is already known to be Accommodation); show_repeat only makes
+   sense for Day-level rows (Checkpoint- and Entire-Tour-level rows have no
+   "other Days" to repeat across). The Item cell folds the Service/Product
+   code in via <code> for every context -- this is the "Inventory Item#"
+   Zeb asked to add. #}
+<div class="table-responsive">
+  <table class="table table-sm align-middle mb-2">
+    <thead>
+      <tr class="small text-muted">
+        <th>Item</th>
+        {% if show_supplier %}<th>Supplier</th>{% endif %}
+        {% if show_type %}<th>Service Type</th>{% endif %}
+        <th class="text-end">QTY</th>
+        <th class="text-end">Unit Cost</th>
+        <th class="text-end">Unit Price</th>
+        <th class="text-end">Total Cost</th>
+        <th class="text-end">Total Price</th>
+        <th class="text-end">Profit Margin</th>
+        {% if show_repeat %}<th class="text-center">Repeat for Checkpoint</th>{% endif %}
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in items %}
+      {% set qty = c.quantity if c.quantity is not none else 1 %}
+      <tr class="small{% if c.is_inherited %} text-muted{% endif %}">
+        <td>
+          {% if c.component_type == "service" %}<code>{{ c.service_code }}</code> {{ c.service_description or "" }}
+          {% elif c.component_type == "product" %}<code>{{ c.product_code }}</code> {{ c.product_name or "" }}
+          {% else %}{{ c.description }}{% endif %}
+          {% if c.is_inherited %}<span class="ms-1">— repeats from Day {{ c.day_number }}</span>
+          {% elif c.repeat_for_checkpoint %}<span class="badge bg-info-subtle text-info-emphasis ms-1">repeats for Checkpoint</span>{% endif %}
+        </td>
+        {% if show_supplier %}<td class="text-muted small">{{ c.supplier_name or "—" }}</td>{% endif %}
+        {% if show_type %}<td><span class="badge bg-secondary-subtle text-dark">{{ c.component_type|capitalize }}</span></td>{% endif %}
+        <td class="text-end">{{ qty | int if qty == qty | int else qty }}</td>
+        <td class="text-end">{% if c.unit_cost is not none %}{{ "%.2f"|format(c.unit_cost) }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if c.unit_price is not none %}{{ "%.2f"|format(c.unit_price) }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if c.unit_cost is not none %}{{ "%.2f"|format(qty * c.unit_cost) }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if c.unit_price is not none %}{{ "%.2f"|format(qty * c.unit_price) }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if c.unit_cost is not none and c.unit_price is not none %}{{ "%.2f"|format(qty * c.unit_price - qty * c.unit_cost) }}{% else %}—{% endif %}</td>
+        {% if show_repeat %}<td class="text-center"><i class="bi {{ 'bi-check-square' if c.repeat_for_checkpoint else 'bi-square' }} text-muted"></i></td>{% endif %}
+        <td class="text-end text-nowrap">
+          {% if not c.is_inherited %}
+          <a href="{{ url_for('packages.edit_component', package_id=package.package_id, component_id=c.component_id) }}" class="btn btn-sm btn-link p-0 me-1"><i class="bi bi-pencil"></i></a>
+          <form method="post" action="{{ url_for('packages.delete_component', package_id=package.package_id, component_id=c.component_id) }}" class="d-inline" onsubmit="return confirm('Delete this component?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-link text-danger p-0" type="submit"><i class="bi bi-x-lg"></i></button>
+          </form>
+          {% else %}
+          <a href="{{ url_for('packages.edit_component', package_id=package.package_id, component_id=c.component_id) }}" class="btn btn-sm btn-link p-0 text-muted"><i class="bi bi-pencil"></i></a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+{% macro day_card(d, package) %}
+<div class="border rounded p-3 mb-2">
+  <div class="d-flex justify-content-between align-items-start">
+    <div>
+      <strong>Day {{ d.day_number }}{% if d.title %} — {{ d.title }}{% endif %}</strong>
+      {% if d.city_label or d.city_text %}<span class="text-muted small ms-2">{{ d.city_label or d.city_text }}</span>{% endif %}
+      {% if d.description %}<p class="small mb-0 mt-1" style="white-space: pre-line;">{{ d.description }}</p>{% endif %}
+    </div>
+    <div class="text-nowrap">
+      <a href="{{ url_for('packages.edit_package_day', package_id=package.package_id, day_id=d.day_id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+      <form method="post" action="{{ url_for('packages.delete_package_day', package_id=package.package_id, day_id=d.day_id) }}" class="d-inline" onsubmit="return confirm('Delete Day {{ d.day_number }}?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash"></i></button>
+      </form>
+    </div>
+  </div>
+  {# Three Costing/Planning sub-parts for this Day, per Zeb's format
+     request: Accommodation and Other Service are package_components rows
+     tied to this Day (day_id), split by the is_accommodation flag, shown
+     as a QTY / Unit Cost / Unit Price / Total Cost / Total Price / Profit
+     Margin / Repeat for Checkpoint table -- Total/Profit columns are
+     computed here, not stored (see component_costing_table macro).
+     Accommodation additionally shows Supplier; Other Service additionally
+     shows Service Type -- per Zeb's follow-up request, since Supplier
+     matters for a hotel booking but Service Type doesn't (it's always
+     Accommodation), and vice versa for a generic Other Service line. A row
+     marked "Repeat for Checkpoint" also appears (muted, read-only) on
+     every other Day of the same Checkpoint -- see view_checkpoint()'s
+     repeat-inheritance pass. POI's is the pre-existing package_day_pois
+     list, now shown the same table-row way for visual consistency. #}
+  <div class="mt-2">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="small text-uppercase text-muted">Accommodation</div>
+      <a href="{{ url_for('packages.new_component', package_id=package.package_id, day_id=d.day_id, is_accommodation=1, category='AR') }}" class="small"><i class="bi bi-plus-lg"></i> Add Accommodation to this day</a>
+    </div>
+    {% if d.hotel_components %}
+    {{ component_costing_table(d.hotel_components, package, show_supplier=True) }}
+    {% else %}
+    <p class="text-muted small mb-1">None added.</p>
+    {% endif %}
+  </div>
+
+  <div class="mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="small text-uppercase text-muted">Other Service</div>
+      <a href="{{ url_for('packages.new_component', package_id=package.package_id, day_id=d.day_id) }}" class="small"><i class="bi bi-plus-lg"></i> Add other Service to this day</a>
+    </div>
+    {% if d.other_components %}
+    {{ component_costing_table(d.other_components, package, show_type=True) }}
+    {% else %}
+    <p class="text-muted small mb-1">None added.</p>
+    {% endif %}
+  </div>
+
+  <div class="mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="small text-uppercase text-muted">Points of Interest</div>
+      <a href="{{ url_for('packages.new_day_poi', package_id=package.package_id, day_id=d.day_id) }}" class="small"><i class="bi bi-plus-lg"></i> Add POI to this day</a>
+    </div>
+    {% if d.pois %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-1">
+        <thead><tr class="small text-muted"><th>POI</th><th>Sequence</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+          {% for poi in d.pois %}
+          <tr class="small">
+            <td>{{ poi.poi_name }}</td>
+            <td>{{ poi.sequence_number }}</td>
+            <td class="text-muted">{{ poi.visit_notes or "—" }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('packages.delete_day_poi', package_id=package.package_id, day_id=d.day_id, day_poi_id=poi.day_poi_id) }}" onsubmit="return confirm('Remove this POI from the day?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-link text-danger p-0" type="submit"><i class="bi bi-x-lg"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-1">None added.</p>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
