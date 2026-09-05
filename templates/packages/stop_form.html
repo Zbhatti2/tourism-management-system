@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if stop else "Add" }} Route Stop{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if stop else "Add" }} Route Stop</h1>
+<p class="text-muted small mb-4"><code>{{ package.package_code }}</code> — {{ package.package_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 640px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <label class="form-label">Sequence #</label>
+        <input class="form-control" type="number" step="1" min="1" name="sequence_number"
+               value="{{ stop.sequence_number if stop else '' }}" placeholder="auto if blank">
+      </div>
+      <div class="col-4" id="nights_field">
+        <label class="form-label">Nights</label>
+        <input class="form-control" type="number" step="1" min="0" name="nights"
+               value="{{ (stop.nights if stop.nights is not none else '') if stop else '' }}">
+      </div>
+      <div class="col-4 d-none" id="layover_hours_field">
+        <label class="form-label">Approximate Hrs</label>
+        <input class="form-control" type="number" step="0.5" min="0" name="layover_hours"
+               placeholder="e.g. 3.5"
+               value="{{ (stop.layover_hours if stop.layover_hours is not none else '') if stop else '' }}">
+      </div>
+    </div>
+    <div class="form-check mb-2">
+      <input class="form-check-input" type="checkbox" name="is_layover" id="is_layover_check"
+             {{ "checked" if stop and stop.is_layover else "" }}>
+      <label class="form-check-label" for="is_layover_check">
+        Layover — a transit/connection stop, not an overnight stay
+      </label>
+    </div>
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" name="is_checkpoint" id="is_checkpoint_check"
+             {{ "checked" if stop and stop.is_checkpoint else "" }}>
+      <label class="form-check-label" for="is_checkpoint_check">
+        Checkpoint — accommodations need to be arranged for the group here
+      </label>
+    </div>
+    {# Country -> Province/State -> City, same cascading picker as the rest
+       of the app (see static/js/geography_picker.js) but WITHOUT the
+       Region gate _geography_fields.html normally adds -- countries.
+       region_id isn't populated consistently across the 17 regions on
+       file yet (most of the newer, more granular ones have zero
+       countries assigned), so requiring a Region pick first would dead-
+       end this form for most of them. Country lists every country on
+       file directly instead, same as before this form had a Region
+       level at all. #}
+    <div class="mb-3">
+      <label class="form-label">Country</label>
+      <select class="form-select" id="country_id" name="country_id">
+        <option value="">— Select country —</option>
+      </select>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label">Province/State</label>
+        <select class="form-select" id="state_id" name="state_id">
+          <option value="">— Select province/state —</option>
+        </select>
+        <div class="geo-fallback-wrap mt-1" hidden>
+          <input class="form-control form-control-sm" id="state_province_text" name="state_province_text"
+                 placeholder="Not on file — type the province/state"
+                 value="{{ (stop.state_province_text | orblank) if stop else '' }}">
+        </div>
+      </div>
+      <div class="col-6">
+        <label class="form-label">City</label>
+        <select class="form-select" id="city_id" name="city_id">
+          <option value="">— Select city —</option>
+        </select>
+        <div class="geo-fallback-wrap mt-1" hidden>
+          <input class="form-control form-control-sm" id="city_text" name="city_text"
+                 placeholder="Not on file — type the city"
+                 value="{{ (stop.city_text | orblank) if stop else '' }}">
+        </div>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Border Crossing / Handoff Notes</label>
+      <textarea class="form-control" name="border_crossing_notes" rows="2">{{ (stop.border_crossing_notes | orblank) if stop else "" }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/geography_picker.js') }}"></script>
+<script>
+  initGeographyPicker({
+    initial: {
+      country_id: {{ (stop.country_id if stop else '') | tojson }},
+      state_id: {{ (stop.state_id if stop else '') | tojson }},
+      city_id: {{ (stop.city_id if stop else '') | tojson }}
+    }
+  });
+  (function () {
+    var isLayoverCheck = document.getElementById("is_layover_check");
+    var nightsField = document.getElementById("nights_field");
+    var layoverHoursField = document.getElementById("layover_hours_field");
+    function updateLayoverMasking() {
+      var layover = isLayoverCheck.checked;
+      nightsField.classList.toggle("d-none", layover);
+      layoverHoursField.classList.toggle("d-none", !layover);
+    }
+    isLayoverCheck.addEventListener("change", updateLayoverMasking);
+    updateLayoverMasking();
+  })();
+</script>
+{% endblock %}

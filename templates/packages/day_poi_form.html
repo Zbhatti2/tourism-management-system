@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Add POI to Day{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">Add POI to Day {{ day.day_number }}</h1>
+<p class="text-muted small mb-4"><code>{{ package.package_code }}</code> — {{ package.package_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 600px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if pois %}
+    <div class="row g-2 mb-2">
+      <div class="col-12">
+        <label class="form-label mb-1">Filter</label>
+        <input class="form-control form-control-sm" type="text" id="poi_filter_name" placeholder="Name...">
+      </div>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <select class="form-select form-select-sm" id="poi_filter_type">
+          <option value="">— All Types —</option>
+        </select>
+      </div>
+      <div class="col-6">
+        <select class="form-select form-select-sm" id="poi_filter_city">
+          <option value="">— All Cities —</option>
+        </select>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="mb-3">
+      <label class="form-label">Point of Interest <span class="text-danger">*</span></label>
+      <select class="form-select" id="poi_select" name="poi_id" required>
+        <option value="">— Select a Point of Interest —</option>
+      </select>
+      {% if not pois %}
+      <div class="form-text">No Points of Interest on file yet — add some under Points of Interest first.</div>
+      {% else %}
+      <div class="form-text" id="poi_filter_count"></div>
+      {% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Sequence # (within the day)</label>
+      <input class="form-control" type="number" step="1" min="1" name="sequence_number" placeholder="auto if blank">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Visit Notes</label>
+      <textarea class="form-control" name="visit_notes" rows="2" placeholder="opening hours, buffer time, ..."></textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Add</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+{% if pois %}
+<script>
+  (function () {
+    var POIS = {{ pois_json | tojson }};
+
+    var nameFilter = document.getElementById("poi_filter_name");
+    var typeFilter = document.getElementById("poi_filter_type");
+    var cityFilter = document.getElementById("poi_filter_city");
+    var select = document.getElementById("poi_select");
+    var countText = document.getElementById("poi_filter_count");
+
+    function distinctSorted(values) {
+      var seen = {};
+      var out = [];
+      values.forEach(function (v) {
+        if (v && !seen[v]) { seen[v] = true; out.push(v); }
+      });
+      out.sort(function (a, b) { return a.localeCompare(b); });
+      return out;
+    }
+
+    function populateFilterOptions(select, values) {
+      distinctSorted(values).forEach(function (v) {
+        var opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      });
+    }
+    populateFilterOptions(typeFilter, POIS.map(function (p) { return p.type; }));
+    populateFilterOptions(cityFilter, POIS.map(function (p) { return p.city; }));
+
+    function applyFilters() {
+      var nameQuery = nameFilter.value.trim().toLowerCase();
+      var typeQuery = typeFilter.value;
+      var cityQuery = cityFilter.value;
+      var previousValue = select.value;
+      var matches = POIS.filter(function (p) {
+        return (!nameQuery || p.name.toLowerCase().indexOf(nameQuery) !== -1)
+          && (!typeQuery || p.type === typeQuery)
+          && (!cityQuery || p.city === cityQuery);
+      });
+
+      select.innerHTML = "";
+      var placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = matches.length ? "— Select a Point of Interest —" : "— No matches —";
+      select.appendChild(placeholder);
+      matches.forEach(function (p) {
+        var opt = document.createElement("option");
+        opt.value = p.id;
+        var label = p.name;
+        if (p.type || p.city) {
+          label += " (" + [p.type, p.city].filter(Boolean).join(" — ") + ")";
+        }
+        opt.textContent = label;
+        if (String(p.id) === previousValue) { opt.selected = true; }
+        select.appendChild(opt);
+      });
+
+      countText.textContent = matches.length + " of " + POIS.length + " Points of Interest shown";
+    }
+
+    [nameFilter, typeFilter, cityFilter].forEach(function (el) {
+      el.addEventListener("input", applyFilters);
+      el.addEventListener("change", applyFilters);
+    });
+    applyFilters();
+  })();
+</script>
+{% endif %}
+{% endblock %}

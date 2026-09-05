@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if day else "Add" }} Day{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if day else "Add" }} Day</h1>
+<p class="text-muted small mb-4"><code>{{ package.package_code }}</code> — {{ package.package_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 640px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <label class="form-label">Day #</label>
+        <input class="form-control" type="number" step="1" min="1" name="day_number"
+               value="{{ day.day_number if day else (form_values.day_number if form_values else '') }}" placeholder="auto if blank">
+      </div>
+      <div class="col-8">
+        <label class="form-label">Route Stop</label>
+        {% set effective_stop_id = (preselected_stop_id | int) if preselected_stop_id is defined and preselected_stop_id else (day.route_stop_id if day else None) %}
+        <select class="form-select" name="route_stop_id">
+          <option value="">— Not tied to a stop —</option>
+          {% for s in stops %}
+          <option value="{{ s.stop_id }}" {{ "selected" if effective_stop_id == s.stop_id else "" }}>
+            {{ s.sequence_number }}. {{ s.country_name or "—" }} / {{ s.city_label or s.city_text or "—" }}{% if s.is_layover %} (Layover){% endif %}{% if s.is_checkpoint %} (Checkpoint){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Title</label>
+      <input class="form-control" type="text" name="title" value="{{ (day.title | orblank) if day else (form_values.title if form_values else '') }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea class="form-control" name="description" rows="3">{{ (day.description | orblank) if day else (form_values.description if form_values else "") }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

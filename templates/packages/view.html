@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+{% block title %}{{ package.package_code }}{% endblock %}
+{% macro component_costing_table(items, package, show_supplier=False, show_type=False, show_repeat=True) %}
+{# Reusable Costing table -- per Zeb's request that the flat, package-wide
+   Components section be retired now that every component shows up exactly
+   where it applies (its Day, its Checkpoint, or the whole Tour). Serves
+   all four contexts with per-context column visibility instead of
+   duplicating table markup: show_supplier is Accommodation-only ("Supplier"
+   is meaningful there but not for a generic Other Service); show_type is
+   Other-Service/Checkpoint/Entire-Tour-only ("Service Type" isn't needed
+   once a row is already known to be Accommodation); show_repeat only makes
+   sense for Day-level rows (Checkpoint- and Entire-Tour-level rows have no
+   "other Days" to repeat across). The Item cell folds the Service/Product
+   code in via <code> for every context -- this is the "Inventory Item#"
+   Zeb asked to add. #}
+<div class="table-responsive">
+  <table class="table table-sm align-middle mb-2">
+    <thead>
+      <tr class="small text-muted">
+        <th>Item</th>
+        {% if show_supplier %}<th>Supplier</th>{% endif %}
+        {% if show_type %}<th>Service Type</th>{% endif %}
+        <th class="text-end">QTY</th>
+        <th class="text-end">Unit Cost</th>
+        <th class="text-end">Unit Price</th>
+        <th class="text-end">Total Cost</th>
+        <th class="text-end">Total Price</th>
+        <th class="text-end">Profit Margin</th>
+        {% if show_repeat %}<th class="text-center">Repeat for Checkpoint</th>{% endif %}
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in items %}
+      {% set qty = c.quantity if c.quantity is not none else 1 %}
+      <tr class="small{% if c.is_inherited %} text-muted{% endif %}">
+        <td>
+          {% if c.component_type == "service" %}<code>{{ c.service_code }}</code> {{ c.service_description or "" }}
+          {% elif c.component_type == "product" %}<code>{{ c.product_code }}</code> {{ c.product_name or "" }}
+          {% else %}{{ c.description }}{% endif %}
+          {% if c.is_inherited %}<span class="ms-1">— repeats from Day {{ c.day_number }}</span>
+          {% elif c.repeat_for_checkpoint %}<span class="badge bg-info-subtle text-info-emphasis ms-1">repeats for Checkpoint</span>{% endif %}
+        </td>
+        {% if show_supplier %}<td class="text-muted small">{{ c.supplier_name or "—" }}</td>{% endif %}
+        {% if show_type %}<td><span class="badge bg-secondary-subtle text-dark">{{ c.component_type|capitalize }}</span></td>{% endif %}
+        <td class="text-end">{{ qty | int if qty == qty | int else qty }}</td>
+        <td class="text-end">{% if c.unit_cost is not none %}{{ "%.2f"|format(c.unit_cost) }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if c.unit_price is not none %}{{ "%.2f"|format(c.unit_price) }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if c.unit_cost is not none %}{{ "%.2f"|format(qty * c.unit_cost) }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if c.unit_price is not none %}{{ "%.2f"|format(qty * c.unit_price) }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if c.unit_cost is not none and c.unit_price is not none %}{{ "%.2f"|format(qty * c.unit_price - qty * c.unit_cost) }}{% else %}—{% endif %}</td>
+        {% if show_repeat %}<td class="text-center"><i class="bi {{ 'bi-check-square' if c.repeat_for_checkpoint else 'bi-square' }} text-muted"></i></td>{% endif %}
+        <td class="text-end text-nowrap">
+          {% if not c.is_inherited %}
+          <a href="{{ url_for('packages.edit_component', package_id=package.package_id, component_id=c.component_id) }}" class="btn btn-sm btn-link p-0 me-1"><i class="bi bi-pencil"></i></a>
+          <form method="post" action="{{ url_for('packages.delete_component', package_id=package.package_id, component_id=c.component_id) }}" class="d-inline" onsubmit="return confirm('Delete this component?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-link text-danger p-0" type="submit"><i class="bi bi-x-lg"></i></button>
+          </form>
+          {% else %}
+          <a href="{{ url_for('packages.edit_component', package_id=package.package_id, component_id=c.component_id) }}" class="btn btn-sm btn-link p-0 text-muted"><i class="bi bi-pencil"></i></a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+{% macro day_card(d, package) %}
+<div class="border rounded p-3 mb-2">
+  <div class="d-flex justify-content-between align-items-start">
+    <div>
+      <strong>Day {{ d.day_number }}{% if d.title %} — {{ d.title }}{% endif %}</strong>
+      {% if d.city_label or d.city_text %}<span class="text-muted small ms-2">{{ d.city_label or d.city_text }}</span>{% endif %}
+      {% if d.description %}<p class="small mb-0 mt-1" style="white-space: pre-line;">{{ d.description }}</p>{% endif %}
+    </div>
+    <div class="text-nowrap">
+      <a href="{{ url_for('packages.edit_package_day', package_id=package.package_id, day_id=d.day_id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+      <form method="post" action="{{ url_for('packages.delete_package_day', package_id=package.package_id, day_id=d.day_id) }}" class="d-inline" onsubmit="return confirm('Delete Day {{ d.day_number }}?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash"></i></button>
+      </form>
+    </div>
+  </div>
+  {# Three Costing/Planning sub-parts for this Day, per Zeb's format
+     request: Accommodation and Other Service are package_components rows
+     tied to this Day (day_id), split by the is_accommodation flag, shown
+     as a QTY / Unit Cost / Unit Price / Total Cost / Total Price / Profit
+     Margin / Repeat for Checkpoint table -- Total/Profit columns are
+     computed here, not stored (see component_costing_table macro).
+     Accommodation additionally shows Supplier; Other Service additionally
+     shows Service Type -- per Zeb's follow-up request, since Supplier
+     matters for a hotel booking but Service Type doesn't (it's always
+     Accommodation), and vice versa for a generic Other Service line. A row
+     marked "Repeat for Checkpoint" also appears (muted, read-only) on
+     every other Day of the same Checkpoint -- see view_package()'s
+     repeat-inheritance pass. POI's is the pre-existing package_day_pois
+     list, now shown the same table-row way for visual consistency. #}
+  <div class="mt-2">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="small text-uppercase text-muted">Accommodation</div>
+      <a href="{{ url_for('packages.new_component', package_id=package.package_id, day_id=d.day_id, is_accommodation=1, category='AR') }}" class="small"><i class="bi bi-plus-lg"></i> Add Accommodation to this day</a>
+    </div>
+    {% if d.hotel_components %}
+    {{ component_costing_table(d.hotel_components, package, show_supplier=True) }}
+    {% else %}
+    <p class="text-muted small mb-1">None added.</p>
+    {% endif %}
+  </div>
+
+  <div class="mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="small text-uppercase text-muted">Other Service</div>
+      <a href="{{ url_for('packages.new_component', package_id=package.package_id, day_id=d.day_id) }}" class="small"><i class="bi bi-plus-lg"></i> Add other Service to this day</a>
+    </div>
+    {% if d.other_components %}
+    {{ component_costing_table(d.other_components, package, show_type=True) }}
+    {% else %}
+    <p class="text-muted small mb-1">None added.</p>
+    {% endif %}
+  </div>
+
+  <div class="mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="small text-uppercase text-muted">Points of Interest</div>
+      <a href="{{ url_for('packages.new_day_poi', package_id=package.package_id, day_id=d.day_id) }}" class="small"><i class="bi bi-plus-lg"></i> Add POI to this day</a>
+    </div>
+    {% if d.pois %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-1">
+        <thead><tr class="small text-muted"><th>POI</th><th>Sequence</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+          {% for poi in d.pois %}
+          <tr class="small">
+            <td>{{ poi.poi_name }}</td>
+            <td>{{ poi.sequence_number }}</td>
+            <td class="text-muted">{{ poi.visit_notes or "—" }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('packages.delete_day_poi', package_id=package.package_id, day_id=d.day_id, day_poi_id=poi.day_poi_id) }}" onsubmit="return confirm('Remove this POI from the day?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-link text-danger p-0" type="submit"><i class="bi bi-x-lg"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-1">None added.</p>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0"><code>{{ package.package_code }}</code> — {{ package.package_name }}</h1>
+    <div class="mt-1">
+      <span class="badge bg-secondary-subtle text-dark">{{ "Fixed Departure" if package.package_type == "fixed_departure" else "Custom" }}</span>
+      {% if package.status == "active" %}<span class="badge bg-success-subtle text-success">Active</span>
+      {% elif package.status == "draft" %}<span class="badge bg-warning-subtle text-warning-emphasis">Draft</span>
+      {% else %}<span class="badge bg-secondary-subtle text-muted">Archived</span>{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('packages.edit_package', package_id=package.package_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    {% if package.status == "archived" %}
+    <form method="post" action="{{ url_for('packages.restore_package', package_id=package.package_id) }}" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-success btn-sm" type="submit"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ url_for('packages.delete_package', package_id=package.package_id) }}" onsubmit="return confirm('Archive this package?');" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-archive"></i> Archive</button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('packages.list_packages') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Package Details</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Duration</dt><dd class="col-sm-8">{% if package.duration_days %}{{ package.duration_days }} days / {{ package.duration_nights or 0 }} nights{% else %}—{% endif %}</dd>
+          <dt class="col-sm-4">Pax</dt><dd class="col-sm-8">{% if package.min_pax or package.max_pax %}{{ package.min_pax or "?" }}–{{ package.max_pax or "?" }}{% else %}—{% endif %}</dd>
+          <dt class="col-sm-4">Difficulty</dt><dd class="col-sm-8">{{ package.difficulty_rating or "—" }}</dd>
+          <dt class="col-sm-4">Minimum Age</dt><dd class="col-sm-8">{{ package.minimum_age if package.minimum_age is not none else "—" }}</dd>
+          <dt class="col-sm-4">Base Currency</dt><dd class="col-sm-8">{{ package.base_currency or "—" }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Description</h2>
+        <p class="small mb-0" style="white-space: pre-line;">{{ package.description or "—" }}</p>
+      </div>
+    </div>
+  </div>
+  {% if package.inclusions or package.exclusions %}
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Inclusions</h2>
+        <p class="small mb-0" style="white-space: pre-line;">{{ package.inclusions or "—" }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Exclusions</h2>
+        <p class="small mb-0" style="white-space: pre-line;">{{ package.exclusions or "—" }}</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ============ ROUTE ============ -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h2 class="h6 mb-0">Route (Country → City)</h2>
+      <a href="{{ url_for('packages.new_route_stop', package_id=package.package_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Add Stop</a>
+    </div>
+    {% if stops %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>#</th><th>Country</th><th>City</th><th>Nights / Layover</th><th>Checkpoint</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+          {% for s in stops %}
+          <tr>
+            <td>{{ s.sequence_number }}</td>
+            <td>{{ s.country_name or "—" }}</td>
+            <td>{{ s.city_label or s.city_text or "—" }}</td>
+            <td>
+              {% if s.is_layover %}
+              <span class="badge bg-warning-subtle text-warning-emphasis">Layover{% if s.layover_hours is not none %}, ~{{ s.layover_hours }} hrs{% endif %}</span>
+              {% else %}
+              {{ s.nights if s.nights is not none else "—" }}
+              {% endif %}
+            </td>
+            <td>
+              {% if s.is_checkpoint %}
+              <span class="badge bg-primary-subtle text-primary-emphasis">Checkpoint</span>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ s.border_crossing_notes or "—" }}</td>
+            <td class="text-end">
+              <a href="{{ url_for('packages.edit_route_stop', package_id=package.package_id, stop_id=s.stop_id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+              <form method="post" action="{{ url_for('packages.delete_route_stop', package_id=package.package_id, stop_id=s.stop_id) }}" class="d-inline" onsubmit="return confirm('Delete this route stop?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">No route stops yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ============ ENTIRE TOUR SERVICES ============ -->
+{# A cost for the whole trip -- no Route Stop, no Day (e.g. trip insurance,
+   a tour leader) -- per Zeb's request for a level above Checkpoint. #}
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h2 class="h6 mb-0">Entire Tour Services</h2>
+      <a href="{{ url_for('packages.new_component', package_id=package.package_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Add Service</a>
+    </div>
+    {% if entire_tour_components %}
+    {{ component_costing_table(entire_tour_components, package, show_supplier=True, show_type=True, show_repeat=False) }}
+    {% else %}
+    <p class="text-muted small mb-0">No whole-trip services added yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ============ ITINERARY (DAYS + POIS) ============ -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h2 class="h6 mb-0">Itinerary (Day-by-Day)</h2>
+      {% if not checkpoints %}
+      {# Once a package has Checkpoints, each one carries its own "+ Add Day"
+         (pre-tied to that stop) so this header-level button is redundant --
+         per Zeb's feedback. Keep it only for the no-checkpoints fallback,
+         where it's the sole entry point for adding a Day. #}
+      <a href="{{ url_for('packages.new_package_day', package_id=package.package_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Add Day</a>
+      {% endif %}
+    </div>
+
+    {% if checkpoints %}
+    {# Days are grouped under the Checkpoint (Route Stop flagged as one)
+       they belong to, per Zeb's request -- each Checkpoint gets its own
+       section with its own "+ Add Day", pre-tying new Days to that stop.
+       A Day left "Not tied to a stop", or tied to a stop that isn't a
+       Checkpoint, falls into "Other Days" below instead of disappearing. #}
+    {% for cp in checkpoints %}
+    <div class="border rounded p-3 mb-3 bg-light-subtle">
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <strong>Checkpoint {{ cp.checkpoint_number }} Itinerary</strong>
+          <span class="text-muted small ms-2">{{ cp.city_label or cp.city_text or "—" }}, {{ cp.country_name or "—" }}</span>
+          <div class="small mt-1">
+            {% if cp.nights is not none %}
+              {% if cp.days | length == cp.nights %}
+              <span class="text-success"><i class="bi bi-check-circle"></i> {{ cp.days | length }} of {{ cp.nights }} night{{ "s" if cp.nights != 1 else "" }} planned</span>
+              {% else %}
+              <span class="text-warning-emphasis"><i class="bi bi-exclamation-circle"></i> {{ cp.days | length }} of {{ cp.nights }} night{{ "s" if cp.nights != 1 else "" }} planned</span>
+              {% endif %}
+            {% else %}
+            <span class="text-muted">{{ cp.days | length }} day{{ "s" if cp.days | length != 1 else "" }} planned</span>
+            {% endif %}
+          </div>
+        </div>
+        <a href="{{ url_for('packages.new_package_day', package_id=package.package_id, route_stop_id=cp.stop_id) }}" class="btn btn-sm btn-outline-primary text-nowrap"><i class="bi bi-plus-lg"></i> Add Day</a>
+      </div>
+
+      {# A service for the WHOLE Checkpoint stay (e.g. a Car Rental or
+         Guide covering every day at this stop) rather than one specific
+         Day -- per Zeb's request, shown once per Checkpoint above its
+         Days rather than needing "Repeat for Checkpoint" re-entered per
+         Day. #}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="small text-uppercase text-muted">Checkpoint Services</div>
+          <a href="{{ url_for('packages.new_component', package_id=package.package_id, route_stop_id=cp.stop_id) }}" class="small"><i class="bi bi-plus-lg"></i> Add Service for this Checkpoint</a>
+        </div>
+        {% if cp.services %}
+        {{ component_costing_table(cp.services, package, show_supplier=True, show_type=True, show_repeat=False) }}
+        {% else %}
+        <p class="text-muted small mb-1">None added.</p>
+        {% endif %}
+      </div>
+
+      {% if cp.days %}
+      {% for d in cp.days %}{{ day_card(d, package) }}{% endfor %}
+      {% else %}
+      <p class="text-muted small mb-0">No days added to this checkpoint yet.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if other_route_stop_components %}
+    {# Edge case: a component tied to a Route Stop that ISN'T flagged as a
+       Checkpoint, with no Day -- most costed stops are Checkpoints, but
+       this keeps the rare exception visible instead of silently dropping
+       it, same "never hide it" precedent as unassigned_days below. #}
+    <h3 class="h6 text-muted mt-3 mb-2">Other Route Stop Services (not tied to a Checkpoint)</h3>
+    {{ component_costing_table(other_route_stop_components, package, show_supplier=True, show_type=True, show_repeat=False) }}
+    {% endif %}
+
+    {% if unassigned_days %}
+    {% if checkpoints %}<h3 class="h6 text-muted mt-3 mb-2">Other Days (not tied to a Checkpoint)</h3>{% endif %}
+    {% for d in unassigned_days %}{{ day_card(d, package) }}{% endfor %}
+    {% endif %}
+
+    {% if not checkpoints and not unassigned_days %}
+    <p class="text-muted small mb-0">No days yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ============ PRICE TIERS ============ -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h2 class="h6 mb-0">Price Tiers (by Group Size)</h2>
+      <a href="{{ url_for('packages.new_price_tier', package_id=package.package_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Add Tier</a>
+    </div>
+    {% if tiers %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Pax Range</th><th>Price per Pax</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+          {% for t in tiers %}
+          <tr>
+            <td>{{ t.min_pax }}–{{ t.max_pax or "+" }}</td>
+            <td>{{ t.currency or "" }} {{ "%.2f"|format(t.price_per_pax) }}</td>
+            <td class="text-muted small">{{ t.notes or "—" }}</td>
+            <td class="text-end">
+              <a href="{{ url_for('packages.edit_price_tier', package_id=package.package_id, tier_id=t.tier_id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+              <form method="post" action="{{ url_for('packages.delete_price_tier', package_id=package.package_id, tier_id=t.tier_id) }}" class="d-inline" onsubmit="return confirm('Delete this price tier?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">No price tiers yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

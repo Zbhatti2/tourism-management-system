@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if tier else "Add" }} Price Tier{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if tier else "Add" }} Price Tier</h1>
+<p class="text-muted small mb-4"><code>{{ package.package_code }}</code> — {{ package.package_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <label class="form-label">Min Pax <span class="text-danger">*</span></label>
+        <input class="form-control" type="number" step="1" min="1" name="min_pax" required
+               value="{{ tier.min_pax if tier else (form_values.min_pax if form_values else '') }}">
+      </div>
+      <div class="col-4">
+        <label class="form-label">Max Pax</label>
+        <input class="form-control" type="number" step="1" min="1" name="max_pax" placeholder="blank = no upper bound"
+               value="{{ (tier.max_pax if tier.max_pax is not none else '') if tier else (form_values.max_pax if form_values else '') }}">
+      </div>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <label class="form-label">Price per Pax <span class="text-danger">*</span></label>
+        <input class="form-control" type="number" step="0.01" name="price_per_pax" required
+               value="{{ tier.price_per_pax if tier else (form_values.price_per_pax if form_values else '') }}">
+      </div>
+      <div class="col-4">
+        <label class="form-label">Currency</label>
+        <input class="form-control" type="text" name="currency" maxlength="8" placeholder="USD"
+               value="{{ (tier.currency | orblank) if tier else (form_values.currency if form_values else '') }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="2">{{ (tier.notes | orblank) if tier else (form_values.notes if form_values else "") }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}

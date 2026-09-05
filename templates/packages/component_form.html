@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+{# is_accommodation_form (passed by the route) decides which of the two
+   forms this is -- "Add/Edit Accommodation Component" (Day + Accommodation
+   checkbox + Repeat for Checkpoint all shown, exactly as before) for an
+   item reached via "+ Add Accommodation to this day", or "Add/Edit Other
+   Service Component" (that whole block hidden) for everything else --
+   Checkpoint Services, Entire Tour Services, and a Day's Other Service.
+   Per Zeb's request: Other Service items are always added from a specific
+   context (a Day card, a Checkpoint's own section, Entire Tour Services)
+   so a manually-editable Day picker there is redundant/confusing, and
+   Repeat for Checkpoint is retired for Other Service now that a
+   whole-Checkpoint cost can just be added directly as a Checkpoint
+   Service instead of being flagged to repeat from one Day. #}
+{% block title %}{{ "Edit" if component else "Add" }} {{ "Accommodation" if is_accommodation_form else "Other Service" }} Component{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if component else "Add" }} {{ "Accommodation" if is_accommodation_form else "Other Service" }} Component</h1>
+<p class="text-muted small mb-4"><code>{{ package.package_code }}</code> — {{ package.package_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 720px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% set current_type = component.component_type if component else (form_values.component_type if form_values else "service") %}
+    <div class="mb-3">
+      <label class="form-label">Component Type</label>
+      <select class="form-select" id="component_type" name="component_type">
+        <option value="service" {{ "selected" if current_type == "service" else "" }}>Service (from Inventory)</option>
+        <option value="product" {{ "selected" if current_type == "product" else "" }}>Product (from Inventory)</option>
+        <option value="custom" {{ "selected" if current_type == "custom" else "" }}>Custom line item</option>
+      </select>
+    </div>
+
+    <div class="mb-3" id="service_field">
+      <label class="form-label">Service</label>
+      {% if services %}
+      <div class="row g-2 mb-2">
+        <div class="col-4">
+          <select class="form-select form-select-sm" id="svc_filter_category">
+            <option value="">— All Categories —</option>
+          </select>
+        </div>
+        <div class="col-4">
+          <select class="form-select form-select-sm" id="svc_filter_group">
+            <option value="">— All Groups —</option>
+          </select>
+        </div>
+        <div class="col-4">
+          <select class="form-select form-select-sm" id="svc_filter_subgroup">
+            <option value="">— All Sub-Groups —</option>
+          </select>
+        </div>
+      </div>
+      {% endif %}
+      <select class="form-select" id="service_select" name="service_id">
+        <option value="">— Select a Service —</option>
+        {% for s in services %}
+        <option value="{{ s.service_id }}" {{ "selected" if component and component.service_id == s.service_id else "" }}>{{ s.service_code }} — {{ s.description }}</option>
+        {% endfor %}
+      </select>
+      {% if services %}
+      <div class="form-text" id="svc_filter_count"></div>
+      {% endif %}
+    </div>
+    <div class="mb-3" id="product_field">
+      <label class="form-label">Product</label>
+      <select class="form-select" name="product_id">
+        <option value="">— Select a Product —</option>
+        {% for p in products %}
+        <option value="{{ p.product_id }}" {{ "selected" if component and component.product_id == p.product_id else "" }}>{{ p.product_code }} — {{ p.product_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3" id="description_field">
+      <label class="form-label">Description</label>
+      <input class="form-control" type="text" name="description"
+             value="{{ (component.description | orblank) if component else (form_values.description if form_values else '') }}"
+             placeholder="required for a custom line item; optional display override otherwise">
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label">Supplier</label>
+        {% if suppliers %}
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <select class="form-select form-select-sm" id="sup_filter_type">
+              <option value="">— All Types —</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <select class="form-select form-select-sm" id="sup_filter_subtype">
+              <option value="">— All Sub-Types —</option>
+            </select>
+          </div>
+        </div>
+        {% endif %}
+        <select class="form-select" id="supplier_select" name="supplier_id">
+          <option value="">— None —</option>
+          {% for s in suppliers %}
+          <option value="{{ s.supplier_id }}" {{ "selected" if component and component.supplier_id == s.supplier_id else "" }}>{{ s.supplier_name }}</option>
+          {% endfor %}
+        </select>
+        {% if suppliers %}
+        <div class="form-text" id="sup_filter_count"></div>
+        {% endif %}
+      </div>
+      <div class="col-6">
+        <label class="form-label">Route Stop</label>
+        {% set effective_route_stop_id = (preselected_route_stop_id | int) if preselected_route_stop_id else (component.route_stop_id if component else None) %}
+        <select class="form-select" name="route_stop_id">
+          <option value="">— Whole-trip item —</option>
+          {% for s in stops %}
+          <option value="{{ s.stop_id }}" {{ "selected" if effective_route_stop_id == s.stop_id else "" }}>
+            {{ s.sequence_number }}. {{ s.country_name or "—" }} / {{ s.city_label or s.city_text or "—" }}{% if s.is_layover %} (Layover){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    {% set effective_day_id = (preselected_day_id | int) if preselected_day_id else (component.day_id if component else None) %}
+    {% if is_accommodation_form %}
+    <div class="row g-2 mb-3">
+      <div class="col-7">
+        <label class="form-label">Day</label>
+        <select class="form-select" name="day_id">
+          <option value="">— Whole-trip / not tied to a Day —</option>
+          {% for d in days %}
+          <option value="{{ d.day_id }}" {{ "selected" if effective_day_id == d.day_id else "" }}>
+            Day {{ d.day_number }}{% if d.title %} — {{ d.title }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-5 d-flex align-items-end">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="is_accommodation" id="is_accommodation_check"
+                 {{ "checked" if (component and component.is_accommodation) or (not component and preselected_is_accommodation) else "" }}>
+          <label class="form-check-label" for="is_accommodation_check">
+            Accommodation — this Day's lodging
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="repeat_for_checkpoint" id="repeat_for_checkpoint_check"
+               {{ "checked" if component and component.repeat_for_checkpoint else "" }}>
+        <label class="form-check-label" for="repeat_for_checkpoint_check">
+          Repeat for Checkpoint
+        </label>
+        <div class="form-text">Shows this same line on every Day within this Checkpoint, not just the Day it's added to — a multi-night item like a hotel room only needs to be entered once.</div>
+      </div>
+    </div>
+    {% else %}
+    {# Other Service: whatever Day this item is already tied to (from the
+       "+ Add other Service to this day" link, or from editing an existing
+       Day-tied item) is preserved as a hidden field rather than a visible,
+       user-editable picker -- see the note at the top of this file. #}
+    {% if effective_day_id %}<input type="hidden" name="day_id" value="{{ effective_day_id }}">{% endif %}
+    {% if component and component.repeat_for_checkpoint %}<input type="hidden" name="repeat_for_checkpoint" value="1">{% endif %}
+    {% endif %}
+
+    <div class="row g-2 mb-3">
+      <div class="col-2">
+        <label class="form-label">Qty</label>
+        <input class="form-control" type="number" step="1" min="0" name="quantity"
+               value="{{ (component.quantity if component.quantity is not none else 1) if component else (form_values.quantity if form_values else 1) }}">
+      </div>
+      <div class="col-4">
+        <label class="form-label">Unit</label>
+        <input class="form-control" type="text" name="unit" placeholder="per room/night"
+               value="{{ (component.unit | orblank) if component else (form_values.unit if form_values else '') }}">
+      </div>
+      <div class="col-2">
+        <label class="form-label">Unit Cost</label>
+        <input class="form-control" type="number" step="0.01" name="unit_cost"
+               value="{{ (component.unit_cost if component.unit_cost is not none else '') if component else (form_values.unit_cost if form_values else '') }}">
+      </div>
+      <div class="col-2">
+        <label class="form-label">Unit Price</label>
+        <input class="form-control" type="number" step="0.01" name="unit_price"
+               value="{{ (component.unit_price if component.unit_price is not none else '') if component else (form_values.unit_price if form_values else '') }}">
+      </div>
+      <div class="col-2">
+        <label class="form-label">Currency</label>
+        <input class="form-control" type="text" name="currency" maxlength="8" placeholder="USD"
+               value="{{ (component.currency | orblank) if component else (form_values.currency if form_values else '') }}">
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <label class="form-label">Sequence # (display order)</label>
+        <input class="form-control" type="number" step="1" min="1" name="sequence_number"
+               value="{{ component.sequence_number if component else '' }}" placeholder="auto if blank">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="2">{{ (component.notes | orblank) if component else (form_values.notes if form_values else "") }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('packages.view_package', package_id=package.package_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    var typeSelect = document.getElementById("component_type");
+    var serviceField = document.getElementById("service_field");
+    var productField = document.getElementById("product_field");
+    var descriptionField = document.getElementById("description_field");
+    function update() {
+      var t = typeSelect.value;
+      serviceField.classList.toggle("d-none", t !== "service");
+      productField.classList.toggle("d-none", t !== "product");
+      descriptionField.classList.toggle("d-none", false); // description is always shown (required for custom, optional override otherwise)
+    }
+    typeSelect.addEventListener("change", update);
+    update();
+  })();
+</script>
+{% if services %}
+<script>
+  (function () {
+    // Category -> Group -> Sub-Group filter cascade for the Service picker,
+    // same "narrow the dropdown's own options, then filter the underlying
+    // <select>" combination as the Route Stop form's Country->City cascade
+    // (stop_form.html) plus the Add POI to Day form's filter bar
+    // (day_poi_form.html).
+    var SERVICES = {{ services_json | tojson }};
+    var CURRENT_SERVICE_ID = {{ (component.service_id if component and component.service_id is not none else "null") | safe }};
+    // "Add Accommodation to this day" (view.html) links here with
+    // ?category=AR -- new_component() resolves that to a category_id and
+    // passes it as preselect_category_id, so the Category filter opens
+    // already narrowed to Accommodation / Rooms. Only applies to a fresh
+    // Add form with no Service chosen yet -- editing an existing
+    // component always preselects from its own Service instead (below).
+    var PRESELECT_CATEGORY_ID = {{ (preselect_category_id if preselect_category_id is not none else "null") | safe }};
+
+    var catFilter = document.getElementById("svc_filter_category");
+    var groupFilter = document.getElementById("svc_filter_group");
+    var subgroupFilter = document.getElementById("svc_filter_subgroup");
+    var serviceSelect = document.getElementById("service_select");
+    var serviceCount = document.getElementById("svc_filter_count");
+
+    function distinctById(items, idKey, labelKey) {
+      var seen = {};
+      var out = [];
+      items.forEach(function (i) {
+        var id = i[idKey];
+        if (id !== null && id !== undefined && !seen[id]) {
+          seen[id] = true;
+          out.push({ id: id, label: i[labelKey] });
+        }
+      });
+      out.sort(function (a, b) { return String(a.label).localeCompare(String(b.label)); });
+      return out;
+    }
+
+    function populateSelect(select, options, placeholderText, preselectId) {
+      select.innerHTML = "";
+      var placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = placeholderText;
+      select.appendChild(placeholder);
+      options.forEach(function (o) {
+        var opt = document.createElement("option");
+        opt.value = o.id;
+        opt.textContent = o.label;
+        if (preselectId !== undefined && preselectId !== null && String(o.id) === String(preselectId)) {
+          opt.selected = true;
+        }
+        select.appendChild(opt);
+      });
+    }
+
+    function rebuildGroupOptions(preselectId) {
+      var catId = catFilter.value;
+      var scoped = catId ? SERVICES.filter(function (s) { return String(s.category_id) === catId; }) : SERVICES;
+      populateSelect(groupFilter, distinctById(scoped, "group_id", "group"), "— All Groups —", preselectId);
+    }
+    function rebuildSubgroupOptions(preselectId) {
+      var groupId = groupFilter.value;
+      var scoped = groupId ? SERVICES.filter(function (s) { return String(s.group_id) === groupId; }) : SERVICES;
+      populateSelect(subgroupFilter, distinctById(scoped, "subgroup_id", "subgroup"), "— All Sub-Groups —", preselectId);
+    }
+    populateSelect(catFilter, distinctById(SERVICES, "category_id", "category"), "— All Categories —", null);
+
+    function applyServiceFilters() {
+      var catId = catFilter.value, groupId = groupFilter.value, subgroupId = subgroupFilter.value;
+      var previousValue = serviceSelect.value;
+      var matches = SERVICES.filter(function (s) {
+        return (!catId || String(s.category_id) === catId)
+          && (!groupId || String(s.group_id) === groupId)
+          && (!subgroupId || String(s.subgroup_id) === subgroupId);
+      });
+
+      serviceSelect.innerHTML = "";
+      var placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = matches.length ? "— Select a Service —" : "— No matches —";
+      serviceSelect.appendChild(placeholder);
+      matches.forEach(function (s) {
+        var opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = s.code + " — " + s.description;
+        if (String(s.id) === String(previousValue)) { opt.selected = true; }
+        serviceSelect.appendChild(opt);
+      });
+
+      if (serviceCount) {
+        serviceCount.textContent = matches.length + " of " + SERVICES.length + " Services shown";
+      }
+    }
+
+    catFilter.addEventListener("change", function () {
+      rebuildGroupOptions(null);
+      rebuildSubgroupOptions(null);
+      applyServiceFilters();
+    });
+    groupFilter.addEventListener("change", function () {
+      rebuildSubgroupOptions(null);
+      applyServiceFilters();
+    });
+    subgroupFilter.addEventListener("change", applyServiceFilters);
+
+    // Initial load: if editing a component that already has a Service,
+    // pre-select its Category/Group/Sub-Group so the narrowed dropdowns
+    // still show it -- same "preselect from the existing record" approach
+    // stop_form.html uses for the saved City.
+    var currentService = null;
+    if (CURRENT_SERVICE_ID !== null) {
+      SERVICES.some(function (s) {
+        if (String(s.id) === String(CURRENT_SERVICE_ID)) { currentService = s; return true; }
+        return false;
+      });
+    }
+    if (currentService) {
+      catFilter.value = String(currentService.category_id);
+    } else if (PRESELECT_CATEGORY_ID !== null) {
+      catFilter.value = String(PRESELECT_CATEGORY_ID);
+    }
+    rebuildGroupOptions(currentService ? currentService.group_id : null);
+    if (currentService) { groupFilter.value = String(currentService.group_id); }
+    rebuildSubgroupOptions(currentService ? currentService.subgroup_id : null);
+    if (currentService) { subgroupFilter.value = String(currentService.subgroup_id); }
+    applyServiceFilters();
+    if (currentService) { serviceSelect.value = String(CURRENT_SERVICE_ID); }
+  })();
+</script>
+{% endif %}
+{% if suppliers %}
+<script>
+  (function () {
+    // Type -> Sub-Type filter cascade for the Supplier picker, same
+    // pattern as the Service Category->Group->Sub-Group cascade above.
+    var SUPPLIERS = {{ suppliers_json | tojson }};
+    var CURRENT_SUPPLIER_ID = {{ (component.supplier_id if component and component.supplier_id is not none else "null") | safe }};
+
+    var typeFilter = document.getElementById("sup_filter_type");
+    var subtypeFilter = document.getElementById("sup_filter_subtype");
+    var supplierSelect = document.getElementById("supplier_select");
+    var supplierCount = document.getElementById("sup_filter_count");
+
+    function distinctById(items, idKey, labelKey) {
+      var seen = {};
+      var out = [];
+      items.forEach(function (i) {
+        var id = i[idKey];
+        if (id !== null && id !== undefined && !seen[id]) {
+          seen[id] = true;
+          out.push({ id: id, label: i[labelKey] });
+        }
+      });
+      out.sort(function (a, b) { return String(a.label).localeCompare(String(b.label)); });
+      return out;
+    }
+
+    function populateSelect(select, options, placeholderText, preselectId) {
+      select.innerHTML = "";
+      var placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = placeholderText;
+      select.appendChild(placeholder);
+      options.forEach(function (o) {
+        var opt = document.createElement("option");
+        opt.value = o.id;
+        opt.textContent = o.label;
+        if (preselectId !== undefined && preselectId !== null && String(o.id) === String(preselectId)) {
+          opt.selected = true;
+        }
+        select.appendChild(opt);
+      });
+    }
+
+    function rebuildSubtypeOptions(preselectId) {
+      var typeId = typeFilter.value;
+      var scoped = typeId ? SUPPLIERS.filter(function (s) { return String(s.type_id) === typeId; }) : SUPPLIERS;
+      populateSelect(subtypeFilter, distinctById(scoped, "subtype_id", "subtype"), "— All Sub-Types —", preselectId);
+    }
+    populateSelect(typeFilter, distinctById(SUPPLIERS, "type_id", "type"), "— All Types —", null);
+
+    function applySupplierFilters() {
+      var typeId = typeFilter.value, subtypeId = subtypeFilter.value;
+      var previousValue = supplierSelect.value;
+      var matches = SUPPLIERS.filter(function (s) {
+        return (!typeId || String(s.type_id) === typeId) && (!subtypeId || String(s.subtype_id) === subtypeId);
+      });
+
+      supplierSelect.innerHTML = "";
+      var placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = matches.length ? "— None —" : "— No matches —";
+      supplierSelect.appendChild(placeholder);
+      matches.forEach(function (s) {
+        var opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = s.name;
+        if (String(s.id) === String(previousValue)) { opt.selected = true; }
+        supplierSelect.appendChild(opt);
+      });
+
+      if (supplierCount) {
+        supplierCount.textContent = matches.length + " of " + SUPPLIERS.length + " Suppliers shown";
+      }
+    }
+
+    typeFilter.addEventListener("change", function () {
+      rebuildSubtypeOptions(null);
+      applySupplierFilters();
+    });
+    subtypeFilter.addEventListener("change", applySupplierFilters);
+
+    var currentSupplier = null;
+    if (CURRENT_SUPPLIER_ID !== null) {
+      SUPPLIERS.some(function (s) {
+        if (String(s.id) === String(CURRENT_SUPPLIER_ID)) { currentSupplier = s; return true; }
+        return false;
+      });
+    }
+    if (currentSupplier && currentSupplier.type_id !== null) { typeFilter.value = String(currentSupplier.type_id); }
+    rebuildSubtypeOptions(currentSupplier ? currentSupplier.subtype_id : null);
+    if (currentSupplier && currentSupplier.subtype_id !== null) { subtypeFilter.value = String(currentSupplier.subtype_id); }
+    applySupplierFilters();
+    if (currentSupplier) { supplierSelect.value = String(CURRENT_SUPPLIER_ID); }
+  })();
+</script>
+{% endif %}
+{% endblock %}

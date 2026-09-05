@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Packages{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Package Management</h1>
+  <a href="{{ url_for('packages.new_package') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Package</a>
+</div>
+
+<form method="get" class="mb-3">
+  <div class="row g-2">
+    <div class="col-auto flex-grow-1" style="min-width: 220px;">
+      <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="status">
+        <option value="">All statuses</option>
+        <option value="draft" {{ "selected" if status == "draft" else "" }}>Draft</option>
+        <option value="active" {{ "selected" if status == "active" else "" }}>Active</option>
+        <option value="archived" {{ "selected" if status == "archived" else "" }}>Archived</option>
+      </select>
+    </div>
+    <div class="col-auto form-check d-flex align-items-center">
+      <input class="form-check-input me-1" type="checkbox" name="show_archived" value="1" id="show_archived" {{ "checked" if show_archived else "" }}>
+      <label class="form-check-label" for="show_archived">Show archived</label>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-outline-secondary" type="submit">Search</button>
+    </div>
+    {% if q or status or show_archived %}
+    <div class="col-auto">
+      <a href="{{ url_for('packages.list_packages') }}" class="btn btn-link">Clear</a>
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Package Code</th>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Duration</th>
+          <th>Pax</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in packages %}
+        <tr onclick="window.location='{{ url_for('packages.view_package', package_id=p.package_id) }}'" style="cursor:pointer;">
+          <td><code>{{ p.package_code }}</code></td>
+          <td>{{ p.package_name }}</td>
+          <td class="text-muted small">{{ "Fixed Departure" if p.package_type == "fixed_departure" else "Custom" }}</td>
+          <td class="text-muted small">{% if p.duration_days %}{{ p.duration_days }}d / {{ p.duration_nights or 0 }}n{% else %}—{% endif %}</td>
+          <td class="text-muted small">{% if p.min_pax or p.max_pax %}{{ p.min_pax or "?" }}–{{ p.max_pax or "?" }}{% else %}—{% endif %}</td>
+          <td>
+            {% if p.status == "active" %}<span class="badge bg-success-subtle text-success">Active</span>
+            {% elif p.status == "draft" %}<span class="badge bg-warning-subtle text-warning-emphasis">Draft</span>
+            {% else %}<span class="badge bg-secondary-subtle text-muted">Archived</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-5">No packages yet — <a href="{{ url_for('packages.new_package') }}">add the first one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

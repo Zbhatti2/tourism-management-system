@@ -6,11 +6,22 @@
  * same for every tenant) and does all cascade filtering client-side, so
  * picking a level never needs another round trip.
  *
- * Usage: give the four <select> elements ids `<prefix>region_id`,
- * `<prefix>country_id`, `<prefix>state_id`, `<prefix>city_id` (prefix may
- * be ''), plus two free-text fallback inputs `<prefix>state_province_text`
- * and `<prefix>city_text` for provinces/cities that aren't seeded in the
- * lookup tables yet. Then call:
+ * Usage: give the <select> elements ids `<prefix>country_id`,
+ * `<prefix>state_id`, `<prefix>city_id` (prefix may be ''), plus two
+ * free-text fallback inputs `<prefix>state_province_text` and
+ * `<prefix>city_text` for provinces/cities that aren't seeded in the
+ * lookup tables yet. A `<prefix>region_id` <select> is OPTIONAL: include
+ * it to gate Country behind Region (the Contacts/Organizations/Suppliers/
+ * HR/POI address forms all do); omit it and Country lists every country
+ * on file, ungated. Route Stop (packages/stop_form.html) omits it
+ * deliberately -- countries.region_id is only populated for a handful of
+ * the 17 regions on file today (most of the newer, more granular regions
+ * like "Middle-East" have zero countries assigned), so gating Country
+ * selection behind Region there would dead-end for most regions,
+ * including ones the seeded data actually needs (Pakistan currently
+ * carries region_id for "South Asia", not the broader "Asia"). Forms that
+ * do include Region aren't touched by this -- same behavior as before.
+ * Then call:
  *
  *   initGeographyPicker({
  *     prefix: '',
@@ -18,7 +29,7 @@
  *                state_province_text, city_text }
  *   });
  *
- * `initial` (optional) pre-selects a saved address's values on the edit
+ * `initial` (optional) pre-selects a saved record's values on the edit
  * form — the cascade is walked bottom-up from country_id/state_id/city_id
  * so the right region/country/province are already selected and their
  * children already populated before the page is interactive.
@@ -45,14 +56,14 @@
     var prefix = opts.prefix || "";
     var initial = opts.initial || {};
 
-    var regionSelect = el(prefix + "region_id");
+    var regionSelect = el(prefix + "region_id"); // optional -- see file header
     var countrySelect = el(prefix + "country_id");
     var stateSelect = el(prefix + "state_id");
     var cityId = el(prefix + "city_id");
     var stateText = el(prefix + "state_province_text");
     var cityText = el(prefix + "city_text");
 
-    if (!regionSelect || !countrySelect || !stateSelect || !cityId) {
+    if (!countrySelect || !stateSelect || !cityId) {
       return; // form doesn't use the picker
     }
 
@@ -110,7 +121,9 @@
       refreshCityUI(stateSelect.value, selectedCityId);
     }
 
-    regionSelect.addEventListener("change", function () { onRegionChange(); });
+    if (regionSelect) {
+      regionSelect.addEventListener("change", function () { onRegionChange(); });
+    }
     countrySelect.addEventListener("change", function () { onCountryChange(); });
     stateSelect.addEventListener("change", function () { onStateChange(); });
 
@@ -118,18 +131,29 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         tree = data;
-        fillSelect(regionSelect, tree.regions, "region_id", "label", "— Select region —");
 
-        // Walk the cascade bottom-up from whatever the edit form already
-        // knows, so every level is correctly pre-populated and enabled.
         var initCountryId = initial.country_id || "";
-        var initRegionId = initial.region_id || "";
-        if (!initRegionId && initCountryId) {
-          var c = tree.countries.find(function (c) { return String(c.country_id) === String(initCountryId); });
-          if (c) initRegionId = c.region_id;
+
+        if (regionSelect) {
+          fillSelect(regionSelect, tree.regions, "region_id", "label", "— Select region —");
+
+          // Walk the cascade bottom-up from whatever the edit form already
+          // knows, so every level is correctly pre-populated and enabled.
+          var initRegionId = initial.region_id || "";
+          if (!initRegionId && initCountryId) {
+            var c = tree.countries.find(function (c) { return String(c.country_id) === String(initCountryId); });
+            if (c) initRegionId = c.region_id;
+          }
+          if (initRegionId) regionSelect.value = initRegionId;
+          onRegionChange(initCountryId);
+        } else {
+          // No Region gate on this form -- Country lists every country on
+          // file directly (see file header for why).
+          fillSelect(countrySelect, tree.countries, "country_id", "label", "— Select country —");
+          if (initCountryId) countrySelect.value = initCountryId;
+          onCountryChange();
         }
-        if (initRegionId) regionSelect.value = initRegionId;
-        onRegionChange(initCountryId);
+
         if (initial.state_id) {
           stateSelect.value = initial.state_id;
           onStateChange(initial.city_id || "");
@@ -138,7 +162,11 @@
       .catch(function () {
         // Network hiccup: leave the selects showing just a placeholder
         // rather than throwing — free-text fallback fields still work.
-        fillSelect(regionSelect, [], null, null, "— Unable to load —");
+        if (regionSelect) {
+          fillSelect(regionSelect, [], null, null, "— Unable to load —");
+        } else {
+          fillSelect(countrySelect, [], null, null, "— Unable to load —");
+        }
       });
   };
 })();

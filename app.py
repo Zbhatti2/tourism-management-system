@@ -36,6 +36,13 @@ MODULES = [
         {"key": "services", "label": "Services", "icon": "list-check", "endpoint": "services.list_services"},
         {"key": "products", "label": "Products", "icon": "box-seam", "endpoint": "products.list_products"},
     ]},
+    # First module off the "Next-Phase Blueprint" roadmap -- see
+    # blueprints/packages.py's docstring. Tenant-scoped tour package
+    # templates assembled from Services/Products/Suppliers/POI; no child
+    # sub-modules yet (Departures/Bookings are later roadmap phases), so
+    # this is a single top-level entry rather than a parent-with-children
+    # group like Inventory Management above.
+    {"key": "packages", "label": "Package Management", "icon": "map", "endpoint": "packages.list_packages"},
     # "Accounting / Finance" and "Tables & Utilities" below are parent nav
     # items with no page of their own, same pattern as "Organization
     # Intelligence" -- each just groups its sub-modules' blueprint keys in
@@ -84,6 +91,7 @@ def create_app():
     from blueprints.poi import poi_bp
     from blueprints.services import services_bp
     from blueprints.products import products_bp
+    from blueprints.packages import packages_bp
     from blueprints.billing_ar import billing_ar_bp
     from blueprints.purchasing_ap import purchasing_ap_bp
     from blueprints.accounts_gl import accounts_gl_bp
@@ -107,6 +115,7 @@ def create_app():
     app.register_blueprint(poi_bp, url_prefix="/points-of-interest")
     app.register_blueprint(services_bp, url_prefix="/inventory/services")
     app.register_blueprint(products_bp, url_prefix="/inventory/products")
+    app.register_blueprint(packages_bp, url_prefix="/packages")
     app.register_blueprint(billing_ar_bp, url_prefix="/accounting/billing-ar")
     app.register_blueprint(purchasing_ap_bp, url_prefix="/accounting/purchasing-ap")
     app.register_blueprint(accounts_gl_bp, url_prefix="/accounting/accounts-gl")

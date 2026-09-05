@@ -403,6 +403,110 @@ def init_app(app):
         migrate()
         click.echo("Done.")
 
+    @app.cli.command("migrate-add-packages")
+    def migrate_add_packages_command():
+        """Flask CLI: `flask --app app migrate-add-packages` — adds the new
+        "Package Management" module (Package Management & Itinerary
+        Builder): packages, package_route_stops, package_days,
+        package_day_pois, package_components, and package_price_tiers.
+        Unlike Services/Products, all six tables are tenant-scoped — no
+        GLOBAL taxonomy to seed, since a package is one operator's own
+        product, not shared coding vocabulary. package_components
+        references services/products/suppliers by FK but writes no rows
+        to those tables. Safe to re-run; does not touch any existing data.
+        See migrate_add_packages.py for the full story."""
+        from migrate_add_packages import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-package-service-link")
+    def migrate_add_package_service_link_command():
+        """Flask CLI: `flask --app app migrate-add-package-service-link` —
+        adds packages.service_id, linking every Package back to the 'TP'
+        (Tour Package) Category Services Inventory row it was created
+        from, so the New Package form can auto-fill Package Number,
+        Package Description, and Package Name from an existing Service
+        instead of free-typing them. Safe to re-run; does not touch any
+        existing data. See migrate_add_package_service_link.py for the
+        full story."""
+        from migrate_add_package_service_link import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-route-stop-layover")
+    def migrate_add_route_stop_layover_command():
+        """Flask CLI: `flask --app app migrate-add-route-stop-layover` —
+        adds package_route_stops.is_layover and .layover_hours, so a
+        transit/connection stop on the Route Planning form can be flagged
+        and its irrelevant "Nights" field masked in favor of an
+        "Approximate Hrs" field. Safe to re-run; does not touch any
+        existing data. See migrate_add_route_stop_layover.py for the
+        full story."""
+        from migrate_add_route_stop_layover import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-route-stop-geography")
+    def migrate_add_route_stop_geography_command():
+        """Flask CLI: `flask --app app migrate-add-route-stop-geography` —
+        adds package_route_stops.region_id, .state_id, and
+        .state_province_text, so the Route Stop form's Country/City picker
+        becomes the same Region -> Country -> Province/State -> City
+        cascade used everywhere else in the app (see
+        templates/_geography_fields.html), instead of skipping the
+        Province/State level entirely. Safe to re-run; does not touch any
+        existing data. See migrate_add_route_stop_geography.py for the
+        full story."""
+        from migrate_add_route_stop_geography import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-route-stop-checkpoint")
+    def migrate_add_route_stop_checkpoint_command():
+        """Flask CLI: `flask --app app migrate-add-route-stop-checkpoint` —
+        adds package_route_stops.is_checkpoint, flagging a Route Stop as a
+        place the group needs accommodations arranged for -- a planning
+        datapoint independent of is_layover -- shown as its own Checkpoint
+        column/badge on the Route table. Safe to re-run; does not touch
+        any existing data. See migrate_add_route_stop_checkpoint.py for
+        the full story."""
+        from migrate_add_route_stop_checkpoint import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-component-day-costing")
+    def migrate_add_component_day_costing_command():
+        """Flask CLI: `flask --app app migrate-add-component-day-costing` —
+        adds package_components.day_id and .is_accommodation, so a Costing
+        line can be itemized against one specific Day (Hotel/Room vs Other
+        Service, the two Costing sub-parts shown on each Day's card
+        alongside its POI's). Safe to re-run; does not touch any existing
+        data. See migrate_add_component_day_costing.py for the full
+        story."""
+        from migrate_add_component_day_costing import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-component-quantity-repeat")
+    def migrate_add_component_quantity_repeat_command():
+        """Flask CLI: `flask --app app migrate-add-component-quantity-repeat`
+        — adds package_components.quantity and .repeat_for_checkpoint, for
+        the Day card's Hotel/Room and Other Service Costing tables (QTY x
+        Unit Cost/Unit Price -> Total Cost/Total Price/Profit Margin, plus
+        a flag that repeats a line across every Day in its Checkpoint).
+        Safe to re-run; does not touch any existing data. See
+        migrate_add_component_quantity_repeat.py for the full story."""
+        from migrate_add_component_quantity_repeat import migrate
+
+        migrate()
+        click.echo("Done.")
+
     @app.cli.command("seed-tenant")
     def seed_tenant_command():
         """Flask CLI: `flask --app app seed-tenant` — creates the first

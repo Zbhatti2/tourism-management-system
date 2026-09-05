@@ -1863,3 +1863,184 @@ WHEN (SELECT validity_status FROM product_subgroups WHERE subgroup_id = NEW.subg
 BEGIN
     SELECT RAISE(ABORT, 'Cannot move a Product Code onto a deprecated Sub-Group: this combination has been identified as invalid and is blocked.');
 END;
+
+-- ============================================================================
+-- MODULE K — PACKAGE MANAGEMENT & ITINERARY BUILDER
+--
+-- The first build-out of the "Next-Phase Blueprint" roadmap (published as
+-- an Artifact alongside this session) -- the load-bearing gap identified
+-- there: nothing downstream (Departures, Bookings, Invoicing) has anything
+-- to attach to until a sellable Package template exists. Absorbs what the
+-- source planning docs called "Phase 1: Product Design" AND "Phase 2:
+-- Costing & Pricing" into one module, because in this schema costing is a
+-- property of each package_components row, not a separate phase --
+-- products already carry price/cost (MODULE J), so there is no separate
+-- costing stage to build.
+--
+-- Unlike Services/Products (MODULE I/J), Package Management has NO global
+-- taxonomy layer -- every table here is tenant-scoped. A package is one
+-- operator's own product, assembled from things that ARE shared/coded
+-- (Services, Products, Suppliers, Points of Interest, Geography) but the
+-- assembly itself is not a coding vocabulary to share across tenants.
+--
+-- packages.service_id (added after this module's initial build, per Zeb's
+-- request) is the one exception: every package is required to originate
+-- from an existing Services Inventory row in the 'TP' (Tour Package)
+-- Category -- the tenant defines the tour concept there first (e.g.
+-- service_code 'TP-SN-MC-0001', description "Boston (USA) to Pakistan
+-- (Lahore, Nankana Sahib, Islamabad, HasanAbdal) Gurdwaras Tours"), then
+-- turns it into a real, itinerary-bearing Package here. package_code is
+-- therefore NOT free-text -- it's copied verbatim from the linked
+-- service's service_code at creation time, and package_name is copied
+-- from that service's own description. This gives Package Numbers the
+-- same Category-Group-Subgroup-Sequence traceability Services already
+-- has (a new city's tour becomes the next sequence, e.g. ...-0002),
+-- without duplicating the Service Coding System's tables here.
+--
+-- The six tables here map directly onto the Blueprint's schema sketch:
+--   packages              -- the template itself (Phase 1's "day-by-day
+--                            skeleton" before it's dated)
+--   package_route_stops   -- the Master Route: Country -> City sequence
+--   package_days          -- day-by-day skeleton, anchored to a route stop
+--   package_day_pois      -- POIs scheduled per day (links straight into
+--                            the existing points_of_interest table)
+--   package_components    -- the priceable building blocks: wraps an
+--                            existing Service or Product (or a one-off
+--                            'custom' line) plus which Supplier fulfills
+--                            it -- this is where Costing actually lives
+--   package_price_tiers   -- per-person price by group-size band
+--
+-- Departures (dated instances) and Bookings (the sales transaction) are
+-- explicitly OUT of scope here -- next phases on the roadmap, once this
+-- module exists for them to build on.
+-- ============================================================================
+
+CREATE TABLE packages (
+    package_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    service_id      INTEGER REFERENCES services(service_id),  -- the 'TP' (Tour Package) category service this package instantiates; package_code/package_name are copied from it at creation
+    package_code    TEXT NOT NULL,          -- copied from the linked service's service_code, e.g. 'TP-SN-MC-0001'
+    package_name    TEXT NOT NULL,
+    package_type    TEXT NOT NULL DEFAULT 'fixed_departure' CHECK (package_type IN ('fixed_departure','custom')),
+    duration_days   INTEGER,
+    duration_nights INTEGER,
+    min_pax         INTEGER,
+    max_pax         INTEGER,
+    difficulty_rating TEXT,
+    minimum_age     INTEGER,
+    status          TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','archived')),
+    description     TEXT,
+    inclusions      TEXT,
+    exclusions      TEXT,
+    base_currency   TEXT,
+    notes           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (tenant_id, package_code)
+);
+CREATE INDEX idx_packages_tenant ON packages(tenant_id);
+CREATE INDEX idx_packages_status ON packages(status);
+CREATE INDEX idx_packages_service ON packages(service_id);
+
+-- The Master Route -- Country -> City sequence a package travels.
+CREATE TABLE package_route_stops (
+    stop_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    package_id      INTEGER NOT NULL REFERENCES packages(package_id),
+    sequence_number INTEGER NOT NULL,
+    region_id       INTEGER REFERENCES regions(region_id),
+    country_id      INTEGER REFERENCES countries(country_id),
+    state_id        INTEGER REFERENCES states(state_id),
+    state_province_text TEXT,               -- free-text fallback, same convention as addresses/POI
+    city_id         INTEGER REFERENCES cities(city_id),
+    city_text       TEXT,                   -- free-text fallback, same convention as addresses/POI
+    nights          INTEGER,
+    is_layover      INTEGER NOT NULL DEFAULT 0,  -- a transit/connection stop, not an overnight stay -- masks Nights in favor of layover_hours (see stop_form.html)
+    layover_hours   NUMERIC,                -- approximate connection time; only meaningful when is_layover = 1
+    is_checkpoint   INTEGER NOT NULL DEFAULT 0,  -- a stop where accommodations need to be arranged for the group -- a planning flag, independent of is_layover (see stop_form.html)
+    border_crossing_notes TEXT,             -- handoff point from one country's DMC to the next
+    UNIQUE (package_id, sequence_number)
+);
+CREATE INDEX idx_package_stops_package ON package_route_stops(package_id);
+CREATE INDEX idx_package_stops_tenant ON package_route_stops(tenant_id);
+
+-- Day-by-day skeleton, anchored to a route stop.
+CREATE TABLE package_days (
+    day_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    package_id      INTEGER NOT NULL REFERENCES packages(package_id),
+    route_stop_id   INTEGER REFERENCES package_route_stops(stop_id),
+    day_number      INTEGER NOT NULL,
+    title           TEXT,
+    description     TEXT,
+    UNIQUE (package_id, day_number)
+);
+CREATE INDEX idx_package_days_package ON package_days(package_id);
+CREATE INDEX idx_package_days_stop ON package_days(route_stop_id);
+CREATE INDEX idx_package_days_tenant ON package_days(tenant_id);
+
+-- POIs scheduled per day -- links straight into the existing MODULE B
+-- points_of_interest table rather than duplicating attraction data here.
+CREATE TABLE package_day_pois (
+    day_poi_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    day_id          INTEGER NOT NULL REFERENCES package_days(day_id),
+    poi_id          INTEGER NOT NULL REFERENCES points_of_interest(poi_id),
+    sequence_number INTEGER NOT NULL,
+    visit_notes     TEXT,
+    UNIQUE (day_id, poi_id)
+);
+CREATE INDEX idx_package_day_pois_day ON package_day_pois(day_id);
+CREATE INDEX idx_package_day_pois_poi ON package_day_pois(poi_id);
+CREATE INDEX idx_package_day_pois_tenant ON package_day_pois(tenant_id);
+
+-- The priceable building blocks -- accommodation, transport, guide, entry
+-- fees, meals. Wraps an existing Service or Product row (component_type
+-- pins which FK applies), or stands alone as a one-off 'custom' line, plus
+-- which Supplier fulfills it. This is where Costing lives -- a property of
+-- the component, not a separate phase (see module note above).
+CREATE TABLE package_components (
+    component_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    package_id      INTEGER NOT NULL REFERENCES packages(package_id),
+    route_stop_id   INTEGER REFERENCES package_route_stops(stop_id),  -- nullable: whole-trip items (e.g. tour leader) aren't tied to one stop
+    day_id          INTEGER REFERENCES package_days(day_id),  -- nullable: ties a component to one specific Day rather than (or on top of) a whole Route Stop -- lets Costing be itemized per Day (e.g. one night's hotel room), per Zeb's Day-by-Day "Hotel/Room" and "Other Service" sub-parts request. Independent of route_stop_id -- a component can carry either, both, or neither.
+    is_accommodation INTEGER NOT NULL DEFAULT 0,  -- Hotel/Room vs Other Service -- the two Costing sub-parts a Day's card shows separately (see view.html's day_card macro); same independent-flag pattern as is_layover/is_checkpoint on package_route_stops
+    repeat_for_checkpoint INTEGER NOT NULL DEFAULT 0,  -- per Zeb's request: checked once on the Day this line is added to, it then also shows (same row, same component_id -- edit/delete from either place affects it everywhere) on every OTHER Day within that Checkpoint, so a multi-night item like a hotel room only has to be entered once. Only meaningful for a component whose day_id belongs to a Checkpoint-flagged stop; harmless no-op otherwise. See view_package()'s repeat-inheritance pass and day_card's "is_inherited" rendering.
+    component_type  TEXT NOT NULL CHECK (component_type IN ('service','product','custom')),
+    service_id      INTEGER REFERENCES services(service_id),
+    product_id      INTEGER REFERENCES products(product_id),
+    supplier_id     INTEGER REFERENCES suppliers(supplier_id),
+    description     TEXT,                   -- required for 'custom'; optional display override otherwise
+    quantity        NUMERIC NOT NULL DEFAULT 1,  -- multiplies against unit_cost/unit_price for the Total Cost/Total Price/Profit Margin columns shown on the Day card's Hotel/Room and Other Service tables (see view.html) -- e.g. 3 rooms x $150/night
+    unit            TEXT,                   -- e.g. 'per room/night', 'per leg', 'per day', 'per pax'
+    unit_cost       NUMERIC,
+    unit_price      NUMERIC,
+    currency        TEXT,
+    notes           TEXT,
+    sequence_number INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_package_components_package ON package_components(package_id);
+CREATE INDEX idx_package_components_stop ON package_components(route_stop_id);
+CREATE INDEX idx_package_components_day ON package_components(day_id);
+CREATE INDEX idx_package_components_service ON package_components(service_id);
+CREATE INDEX idx_package_components_product ON package_components(product_id);
+CREATE INDEX idx_package_components_supplier ON package_components(supplier_id);
+CREATE INDEX idx_package_components_tenant ON package_components(tenant_id);
+
+-- Per-person price by group-size band -- coaches/guides are often
+-- fixed-cost per group, so price-per-pax drops as the group grows.
+CREATE TABLE package_price_tiers (
+    tier_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    package_id      INTEGER NOT NULL REFERENCES packages(package_id),
+    min_pax         INTEGER NOT NULL,
+    max_pax         INTEGER,
+    price_per_pax   NUMERIC NOT NULL,
+    currency        TEXT,
+    notes           TEXT
+);
+CREATE INDEX idx_package_price_tiers_package ON package_price_tiers(package_id);
+CREATE INDEX idx_package_price_tiers_tenant ON package_price_tiers(tenant_id);

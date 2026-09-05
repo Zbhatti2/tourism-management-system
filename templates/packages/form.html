@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if package else "New" }} Package{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">{{ "Edit" if package else "New" }} Package</h1>
+<form method="post" class="card shadow-sm border-0" style="max-width: 760px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if package %}
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <label class="form-label">Package Number</label>
+        <div><code class="fs-6">{{ package.package_code }}</code></div>
+        <div class="form-text">Fixed once created.</div>
+      </div>
+      <div class="col-8">
+        <label class="form-label">Package Name <span class="text-danger">*</span></label>
+        <input class="form-control" type="text" name="package_name" required
+               value="{{ package.package_name | orblank }}">
+      </div>
+    </div>
+    {% else %}
+    <div class="row g-2 mb-3">
+      <div class="col-5">
+        <label class="form-label">Package Number <span class="text-danger">*</span></label>
+        <select class="form-select" id="tour_service_select" name="service_id" required {{ "disabled" if not tour_services }}>
+          <option value="">e.g. TP-SN-MC-xxxx</option>
+          {% for s in tour_services %}
+          <option value="{{ s.service_id }}" {{ "selected" if form_values and form_values.service_id == s.service_id|string else "" }}>{{ s.service_code }}</option>
+          {% endfor %}
+        </select>
+        {% if not tour_services %}
+        <div class="form-text text-danger">
+          No available Tour Package services on file. Add one under Inventory Management &rarr; Services
+          (Category "Tour Package") first — Package Number, Description, and Name are all drawn from it.
+        </div>
+        {% else %}
+        <div class="form-text">From Services Inventory, Category "Tour Package".</div>
+        {% endif %}
+      </div>
+      <div class="col-7">
+        <label class="form-label">Package Description</label>
+        <input class="form-control" type="text" id="tour_service_description" readonly placeholder="Auto filled">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Package Name</label>
+      <input class="form-control" type="text" id="tour_service_name" readonly placeholder="Auto filled">
+    </div>
+    {% endif %}
+
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <label class="form-label">Package Type</label>
+        {% set current_type = package.package_type if package else (form_values.package_type if form_values else "fixed_departure") %}
+        <select class="form-select" name="package_type">
+          <option value="fixed_departure" {{ "selected" if current_type == "fixed_departure" else "" }}>Fixed Departure</option>
+          <option value="custom" {{ "selected" if current_type == "custom" else "" }}>Custom</option>
+        </select>
+        <div class="form-text">Fixed Departure invoices show one all-inclusive price; Custom invoices itemize by component.</div>
+      </div>
+      <div class="col-4">
+        <label class="form-label">Status</label>
+        {% set current_status = package.status if package else (form_values.status if form_values else "draft") %}
+        <select class="form-select" name="status">
+          <option value="draft" {{ "selected" if current_status == "draft" else "" }}>Draft</option>
+          <option value="active" {{ "selected" if current_status == "active" else "" }}>Active</option>
+          <option value="archived" {{ "selected" if current_status == "archived" else "" }}>Archived</option>
+        </select>
+      </div>
+      <div class="col-4">
+        <label class="form-label">Base Currency</label>
+        <input class="form-control" type="text" name="base_currency" maxlength="8" placeholder="USD"
+               value="{{ (package.base_currency | orblank) if package else (form_values.base_currency if form_values else '') }}">
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-3">
+        <label class="form-label">Duration (Days)</label>
+        <input class="form-control" type="number" step="1" min="0" name="duration_days"
+               value="{{ (package.duration_days if package.duration_days is not none else '') if package else (form_values.duration_days if form_values else '') }}">
+      </div>
+      <div class="col-3">
+        <label class="form-label">Duration (Nights)</label>
+        <input class="form-control" type="number" step="1" min="0" name="duration_nights"
+               value="{{ (package.duration_nights if package.duration_nights is not none else '') if package else (form_values.duration_nights if form_values else '') }}">
+      </div>
+      <div class="col-3">
+        <label class="form-label">Min Pax</label>
+        <input class="form-control" type="number" step="1" min="0" name="min_pax"
+               value="{{ (package.min_pax if package.min_pax is not none else '') if package else (form_values.min_pax if form_values else '') }}">
+      </div>
+      <div class="col-3">
+        <label class="form-label">Max Pax</label>
+        <input class="form-control" type="number" step="1" min="0" name="max_pax"
+               value="{{ (package.max_pax if package.max_pax is not none else '') if package else (form_values.max_pax if form_values else '') }}">
+      </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label">Difficulty Rating</label>
+        <input class="form-control" type="text" name="difficulty_rating" placeholder="e.g. Easy, Moderate, Strenuous"
+               value="{{ (package.difficulty_rating | orblank) if package else (form_values.difficulty_rating if form_values else '') }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label">Minimum Age</label>
+        <input class="form-control" type="number" step="1" min="0" name="minimum_age"
+               value="{{ (package.minimum_age if package.minimum_age is not none else '') if package else (form_values.minimum_age if form_values else '') }}">
+      </div>
+    </div>
+
+    {% if package %}
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea class="form-control" name="description" rows="2">{{ package.description | orblank }}</textarea>
+      <div class="form-text">Auto-filled from the linked Service when the package was created — free to refine here.</div>
+    </div>
+    {% endif %}
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label">Inclusions</label>
+        <textarea class="form-control" name="inclusions" rows="3">{{ (package.inclusions | orblank) if package else (form_values.inclusions if form_values else "") }}</textarea>
+      </div>
+      <div class="col-6">
+        <label class="form-label">Exclusions</label>
+        <textarea class="form-control" name="exclusions" rows="3">{{ (package.exclusions | orblank) if package else (form_values.exclusions if form_values else "") }}</textarea>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" name="notes" rows="2">{{ (package.notes | orblank) if package else (form_values.notes if form_values else "") }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('packages.view_package', package_id=package.package_id) if package else url_for('packages.list_packages') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+{% if not package %}
+<script>
+  (function () {
+    // Live preview only -- Package Description/Name are re-derived
+    // server-side from the chosen service_id on submit (see
+    // blueprints/packages.py's new_package()), so this JSON and the two
+    // readonly fields it fills are never themselves posted to the server.
+    var TOUR_SERVICES = {{ tour_services_map | tojson }};
+    var select = document.getElementById("tour_service_select");
+    var descField = document.getElementById("tour_service_description");
+    var nameField = document.getElementById("tour_service_name");
+    function update() {
+      var s = TOUR_SERVICES[select.value];
+      descField.value = s ? s.description : "";
+      nameField.value = s ? s.name : "";
+    }
+    if (select) {
+      select.addEventListener("change", update);
+      update();
+    }
+  })();
+</script>
+{% endif %}
+{% endblock %}
