@@ -83,6 +83,12 @@ SUPPLIER_TYPES = [
     "Hotel", "Resort", "Transport Provider", "Catering Service", "Restaurant",
     "Security Services", "Travel Agent", "Tour Operator", "Marketing Service",
     "Printing Service", "Airlines",
+    # Added for the "Sikh Pilgrimage Sector" AI Agent / Data Enrichment
+    # pilot (Sept 2026): request item #6, "Local Tour Guides" -- a person/
+    # small operation offering guided walking tours at a site, distinct
+    # from "Travel Agent" (books/sells trips) and "Tour Operator" (designs/
+    # runs the trip end-to-end).
+    "Tour Guide",
 ]
 
 # One level of nesting under SUPPLIER_TYPES (supplier_subtypes.supplier_type_id).
@@ -111,6 +117,10 @@ SUPPLIER_SUBTYPES = {
         "Educational Tour Operators", "Sports Tour Operators", "Specialized Tour Operators",
     ],
     "Airlines": ["Commercial", "Charter", "Other"],
+    # Added alongside the "Tour Guide" Supplier Type above.
+    "Tour Guide": [
+        "Government-Licensed Guide", "Freelance Guide", "Multilingual Guide", "Other",
+    ],
 }
 
 # A supplier's several address locations (Main Office, Billing, ...) —
@@ -206,6 +216,13 @@ POI_TYPES = [
     "Historic Castle", "Historical Architecture", "Historical Fort",
     "Fish Farm", "Agri-Farm", "Amusement Park", "Ski Site", "Historic Library",
     "Other",
+    # Added for the "Sikh Pilgrimage Sector" AI Agent / Data Enrichment pilot
+    # (Sept 2026): request items #4/#5/#9/#10 -- Hospitals, Police Stations,
+    # Airports and Rail Systems are themselves POIs a Tour Planner needs on
+    # the map (nearest hospital/police station for a Day's stop; nearest
+    # airport/rail link for routing) alongside the sightseeing attractions
+    # already in this list.
+    "Airport", "Railway Station", "Hospital", "Police Station",
 ]
 # "Botonical Garden" is kept exactly as given in the request — not "Botanical".
 
@@ -870,6 +887,302 @@ def seed_gurdwara_pois(db, tenant_id: int):
             (tenant_id, name, poi_type["poi_type_id"], region["region_id"],
              country["country_id"], state_id, city_id, notes),
         )
+
+
+# ---------------------------------------------------------------------------
+# "Sikh Pilgrimage Sector" AI Agent / Data Enrichment -- Phase 1 pilot city
+# (Nankana Sahib, Punjab), Sept 2026. Per Zeb's request, before scaling
+# across all 55 named cities + international hub cities, the pipeline
+# (schema -> real data gathering -> DB population -> Knowledge Graph
+# linking) is proven on one pilot city. Nankana Sahib was chosen: it is
+# the birthplace of Guru Nanak Dev Ji and home to Gurdwara Janam Asthan,
+# arguably Pakistan's most important Sikh Gurdwara; and it already has 9
+# Gurdwara POI records seeded (GURDWARA_POIS above) with no coordinates,
+# making it a genuine "enrich existing + add missing categories" exercise.
+#
+# All facts below were gathered via live web research (WebSearch/WebFetch),
+# never fabricated from memory, per the standing anti-hallucination rule --
+# each entry's notes field names its source and date. Where a precise,
+# independently-published coordinate for one specific site could not be
+# found, the town-center coordinate for Nankana Sahib itself is used as an
+# honest approximation and flagged "approximate" in the notes -- rather
+# than inventing false precision. This is exactly the kind of gap the
+# eventual AI Agent is meant to keep closing as it gathers deeper data.
+#
+# Coordinates are stored as "lat, lon" decimal degrees (parsed by
+# utils.parse_coordinates()/rendered by the map_coordinates_link filter --
+# no schema change needed; see utils.py).
+NANKANA_SAHIB_TOWN_COORDS = "31.450000, 73.706670"  # Source: Wikipedia "Nankana Sahib", Sept 2026
+
+# (name, poi_type_label, city_label, province_label, map_coordinates, notes)
+NANKANA_SAHIB_PILOT_POIS = [
+    (
+        "Quba Masjid, Nankana Sahib", "Mosque", "Nankana Sahib", "Punjab",
+        NANKANA_SAHIB_TOWN_COORDS,
+        "A replica of the Quba Masjid of Madina. Source: PC Hospitality "
+        "blog, Sept 2026. Coordinates are the Nankana Sahib town-center "
+        "reference point (Wikipedia) -- not an independently verified "
+        "site-level coordinate.",
+    ),
+    (
+        "Nankana Lake Resort", "Other", "Nankana Sahib", "Punjab",
+        NANKANA_SAHIB_TOWN_COORDS,
+        "Leisure destination (boating, gardens) near Nankana Sahib; ~90 km "
+        "from Lahore per the existing Organization Intelligence entry on "
+        "this same resort. Source: PC Hospitality blog, Sept 2026. "
+        "Coordinates approximate (town-center reference).",
+    ),
+    (
+        "Nankana Sahib Railway Station", "Railway Station", "Nankana Sahib", "Punjab",
+        "31.455400, 73.709000",
+        "On the Shorkot-Sheikhupura Branch Line, between Buchiana and "
+        "Warburton stations. Source: Wikipedia \"Nankana Sahib railway "
+        "station\", Sept 2026.",
+    ),
+    (
+        "District Head Quarter (DHQ) Hospital, Nankana Sahib", "Hospital", "Nankana Sahib", "Punjab",
+        NANKANA_SAHIB_TOWN_COORDS,
+        "Hospital Rd, Nankana Sahib. Source: marham.pk hospital directory, "
+        "Sept 2026. Coordinates approximate (town-center reference) -- "
+        "exact site coordinates were not published on the source page.",
+    ),
+    (
+        "Nankana Sahib City Police Station", "Police Station", "Nankana Sahib", "Punjab",
+        NANKANA_SAHIB_TOWN_COORDS,
+        "Listed in the Punjab Police Nankana Sahib district directory "
+        "(punjabpolice.gov.pk/nankana_directory -- page blocked automated "
+        "fetch at research time; confirm exact address before operational "
+        "use). Coordinates approximate (town-center reference).",
+    ),
+    (
+        "Allama Iqbal International Airport", "Airport", "Lahore", "Punjab",
+        "31.519346, 74.409302",
+        "Nearest major international airport to Nankana Sahib -- "
+        "approx. 91 km / 57 mi east of the town (Wikipedia). Primary air "
+        "gateway for this pilot; also the reference airport for the "
+        "Kuala Lumpur/Singapore/Dubai/Abu Dhabi/Doha/Istanbul hub-city "
+        "routing Zeb described. Source: Wikipedia \"Nankana Sahib\" + "
+        "latlong.net, Sept 2026.",
+    ),
+]
+
+# (supplier_name, supplier_type_label, supplier_subtype_label_or_None,
+#  preference_or_None, city_label, province_label, web_page_or_None, notes)
+NANKANA_SAHIB_PILOT_SUPPLIERS = [
+    (
+        "Hotel One Nankana Sahib", "Hotel", "Motel", "Primary",
+        "Nankana Sahib", "Punjab", "https://www.pchotels.com",
+        "TDCP-operated motel/resort close to Gurdwara Janam Asthan -- "
+        "short local transport needed, per source. Purpose-positioned for "
+        "pilgrim stays; marked Primary as the most established option "
+        "found. Source: PC Hospitality blog, Sept 2026.",
+    ),
+    (
+        "Rana Resort, Nankana Sahib", "Resort", None, "Secondary",
+        "Nankana Sahib", "Punjab", None,
+        "Family-friendly resort accommodation. Source: PC Hospitality "
+        "blog, Sept 2026 -- star-tier not independently confirmed, left "
+        "blank rather than guessed.",
+    ),
+    (
+        "City Family Restaurant, Nankana Sahib", "Restaurant", "Punjabi", "Primary",
+        "Nankana Sahib", "Punjab", None,
+        "Local restaurant serving Punjabi fare, per its public business "
+        "listing (Facebook), Sept 2026 -- address/menu not independently "
+        "verified; confirm before operational use.",
+    ),
+    (
+        "Sikh Tourism Pakistan", "Tour Operator", "Inbound", "Primary",
+        "Lahore", "Punjab", "https://sikhtourism.com.pk/",
+        "Operates Gurdwara Yatra / Sikh pilgrimage tour packages across "
+        "Pakistan including Nankana Sahib (6 curated packages, "
+        "$240-$485/pax, groups of 10, per source). Source: company "
+        "website, Sept 2026. City set to Lahore as Pakistan's principal "
+        "inbound-tourism hub -- the site does not publish an office "
+        "address, so this is the operator's likely base, not a confirmed "
+        "location; verify before contacting.",
+    ),
+    (
+        "Trango Adventure", "Tour Operator", "Inbound", "Secondary",
+        "Lahore", "Punjab", "https://trangoadventure.com/",
+        "Also runs a Sikh Pilgrimage Tour Pakistan package (Kartarpur, "
+        "Nankana Sahib, Panja Sahib). Source: company website (tour "
+        "listing page), Sept 2026 -- office address blocked automated "
+        "fetch; city is an assumption pending verification.",
+    ),
+]
+
+# Knowledge Graph edges to draw once the POIs/Suppliers above exist --
+# (subject_name, subject_type, relationship, object_name, object_type,
+#  notes_or_None). Names are resolved against already-seeded rows (both
+# the 9 GURDWARA_POIS and the two lists above); a lookup that finds
+# nothing is skipped rather than raising, so this stays safe to extend.
+NANKANA_SAHIB_KG_EDGES = [
+    ("Gurdwara Janam Asthan, Nankana Sahib", "PointOfInterest", "near", "Hotel One Nankana Sahib", "Supplier",
+     "Short local transport needed between the two, per source."),
+    ("Gurdwara Bal Lila, Nankana Sahib", "PointOfInterest", "located_in", "Nankana Sahib", "City", None),
+    ("Nankana Sahib Railway Station", "PointOfInterest", "serves", "Gurdwara Janam Asthan, Nankana Sahib", "PointOfInterest",
+     "Nankana Sahib town's own rail link, on the Shorkot-Sheikhupura Branch Line."),
+    ("Allama Iqbal International Airport", "PointOfInterest", "nearest_airport_to", "Gurdwara Janam Asthan, Nankana Sahib", "PointOfInterest",
+     "~91 km / 57 mi from Nankana Sahib -- the practical air gateway for this pilot."),
+    ("Sikh Tourism Pakistan", "Supplier", "operates_tours_to", "Gurdwara Janam Asthan, Nankana Sahib", "PointOfInterest", None),
+    ("Trango Adventure", "Supplier", "operates_tours_to", "Gurdwara Janam Asthan, Nankana Sahib", "PointOfInterest", None),
+    ("Hotel One Nankana Sahib", "Supplier", "located_in", "Nankana Sahib", "City", None),
+    ("City Family Restaurant, Nankana Sahib", "Supplier", "located_in", "Nankana Sahib", "City", None),
+]
+
+
+def seed_nankana_sahib_pilot(db, tenant_id: int):
+    """Populates the Nankana Sahib pilot-city enrichment: real coordinates
+    on the 9 already-seeded Gurdwara POIs, the new non-Gurdwara POIs
+    (NANKANA_SAHIB_PILOT_POIS), the new Suppliers
+    (NANKANA_SAHIB_PILOT_SUPPLIERS) with a Main Office address each, and
+    the Knowledge Graph edges linking them (NANKANA_SAHIB_KG_EDGES).
+    Heritage-Tours-specific pilot data, same reasoning as
+    seed_gurdwara_pois() -- called from seed_first_tenant() rather than
+    seed_lookup_tables(). Requires seed_gurdwara_pois() and
+    seed_supplier_lookups()/_seed_simple(poi_types) to already have run.
+    Idempotent throughout."""
+    from knowledge_graph import add_edge
+
+    country = db.execute("SELECT country_id FROM countries WHERE code = ?", ("PK",)).fetchone()
+    if not country:
+        return
+    nankana_state = db.execute(
+        "SELECT state_id FROM states WHERE country_id = ? AND label = ?",
+        (country["country_id"], "Punjab"),
+    ).fetchone()
+    if not nankana_state:
+        return
+    nankana_city = db.execute(
+        "SELECT city_id FROM cities WHERE state_id = ? AND label = ?",
+        (nankana_state["state_id"], "Nankana Sahib"),
+    ).fetchone()
+    if not nankana_city:
+        return
+
+    # 1) Backfill map_coordinates on the 9 existing Nankana-Sahib-tied
+    # Gurdwara POI rows, only where still blank (never overwrite a value
+    # someone has since edited by hand).
+    db.execute(
+        "UPDATE points_of_interest SET map_coordinates = ? "
+        "WHERE tenant_id = ? AND city_id = ? AND (map_coordinates IS NULL OR map_coordinates = '')",
+        (NANKANA_SAHIB_TOWN_COORDS, tenant_id, nankana_city["city_id"]),
+    )
+
+    # 2) New non-Gurdwara POIs.
+    for name, poi_type_label, city_label, province_label, coords, notes in NANKANA_SAHIB_PILOT_POIS:
+        poi_type = db.execute(
+            "SELECT poi_type_id FROM poi_types WHERE tenant_id = ? AND label = ?",
+            (tenant_id, poi_type_label),
+        ).fetchone()
+        state = db.execute(
+            "SELECT state_id FROM states WHERE country_id = ? AND label = ?",
+            (country["country_id"], province_label),
+        ).fetchone()
+        city = None
+        if state:
+            city = db.execute(
+                "SELECT city_id FROM cities WHERE state_id = ? AND label = ?",
+                (state["state_id"], city_label),
+            ).fetchone()
+        if not poi_type or not state or not city:
+            continue
+        exists = db.execute(
+            "SELECT 1 FROM points_of_interest WHERE tenant_id = ? AND name = ? AND city_id = ?",
+            (tenant_id, name, city["city_id"]),
+        ).fetchone()
+        if exists:
+            continue
+        db.execute(
+            "INSERT INTO points_of_interest "
+            "(tenant_id, name, poi_type_id, state_id, city_id, map_coordinates, notes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (tenant_id, name, poi_type["poi_type_id"], state["state_id"], city["city_id"], coords, notes),
+        )
+
+    # 3) New Suppliers (+ one Main Office address each).
+    main_office = db.execute(
+        "SELECT address_type_id FROM supplier_address_types WHERE tenant_id = ? AND label = ?",
+        (tenant_id, "Main Office"),
+    ).fetchone()
+    for name, type_label, subtype_label, preference, city_label, province_label, web_page, notes in NANKANA_SAHIB_PILOT_SUPPLIERS:
+        exists = db.execute(
+            "SELECT supplier_id FROM suppliers WHERE tenant_id = ? AND supplier_name = ?",
+            (tenant_id, name),
+        ).fetchone()
+        if exists:
+            continue
+        supplier_type = db.execute(
+            "SELECT supplier_type_id FROM supplier_types WHERE tenant_id = ? AND label = ?",
+            (tenant_id, type_label),
+        ).fetchone()
+        supplier_subtype = None
+        if subtype_label and supplier_type:
+            supplier_subtype = db.execute(
+                "SELECT supplier_subtype_id FROM supplier_subtypes WHERE tenant_id = ? AND supplier_type_id = ? AND label = ?",
+                (tenant_id, supplier_type["supplier_type_id"], subtype_label),
+            ).fetchone()
+        cur = db.execute(
+            "INSERT INTO suppliers (tenant_id, supplier_name, supplier_type_id, supplier_subtype_id, "
+            "web_page, notes, preference) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                tenant_id, name,
+                supplier_type["supplier_type_id"] if supplier_type else None,
+                supplier_subtype["supplier_subtype_id"] if supplier_subtype else None,
+                web_page, notes, preference,
+            ),
+        )
+        supplier_id = cur.lastrowid
+
+        state = db.execute(
+            "SELECT state_id FROM states WHERE country_id = ? AND label = ?",
+            (country["country_id"], province_label),
+        ).fetchone()
+        city = None
+        if state:
+            city = db.execute(
+                "SELECT city_id FROM cities WHERE state_id = ? AND label = ?",
+                (state["state_id"], city_label),
+            ).fetchone()
+        if state and city:
+            db.execute(
+                "INSERT INTO supplier_addresses "
+                "(tenant_id, supplier_id, address_type_id, country_id, state_id, city_id, is_primary) "
+                "VALUES (?, ?, ?, ?, ?, ?, 1)",
+                (tenant_id, supplier_id,
+                 main_office["address_type_id"] if main_office else None,
+                 country["country_id"], state["state_id"], city["city_id"]),
+            )
+
+    db.commit()
+
+    # 4) Knowledge Graph edges linking the above together.
+    def _resolve(entity_type, name):
+        if entity_type == "PointOfInterest":
+            row = db.execute(
+                "SELECT poi_id FROM points_of_interest WHERE tenant_id = ? AND name = ?",
+                (tenant_id, name),
+            ).fetchone()
+            return row["poi_id"] if row else None
+        if entity_type == "Supplier":
+            row = db.execute(
+                "SELECT supplier_id FROM suppliers WHERE tenant_id = ? AND supplier_name = ?",
+                (tenant_id, name),
+            ).fetchone()
+            return row["supplier_id"] if row else None
+        if entity_type == "City":
+            row = db.execute("SELECT city_id FROM cities WHERE label = ?", (name,)).fetchone()
+            return row["city_id"] if row else None
+        return None
+
+    for subj_name, subj_type, relationship, obj_name, obj_type, notes in NANKANA_SAHIB_KG_EDGES:
+        subj_id = _resolve(subj_type, subj_name)
+        obj_id = _resolve(obj_type, obj_name)
+        if not subj_id or not obj_id:
+            continue
+        add_edge(db, tenant_id, subj_type, subj_id, relationship, obj_type, obj_id, notes)
+    db.commit()
 
 
 # Sample "Organization Intelligence" journal entries for Heritage Tours --
@@ -1755,6 +2068,14 @@ def seed_first_tenant(db):
     # PAKISTAN1a.docx. Requires seed_lookup_tables() above to have already
     # created 'Sikh Gurdwara' in poi_types and the Pakistan geography rows.
     seed_gurdwara_pois(db, tenant_id)
+
+    # "Sikh Pilgrimage Sector" AI Agent / Data Enrichment pilot (Nankana
+    # Sahib) -- also Heritage-Tours-specific pilot data, same reasoning as
+    # seed_gurdwara_pois() above. Must run after it (backfills coordinates
+    # onto the Gurdwara rows it just created) and after seed_lookup_tables()
+    # above (needs the new Airport/Railway Station/Hospital/Police Station
+    # poi_types and Tour Guide supplier_type it seeded).
+    seed_nankana_sahib_pilot(db, tenant_id)
 
     # Sample Organization Intelligence entries -- also Heritage-Tours-
     # specific demo data, same reasoning as seed_gurdwara_pois() above.

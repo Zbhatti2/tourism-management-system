@@ -186,7 +186,9 @@ def view_poi(poi_id):
     ).fetchone()
     if poi is None:
         abort(404)
-    return render_template("poi/view.html", poi=poi)
+    from knowledge_graph import get_edges_for
+    kg_edges = get_edges_for(db, g.tenant_id, "PointOfInterest", poi_id)
+    return render_template("poi/view.html", poi=poi, kg_edges=kg_edges)
 
 
 @poi_bp.route("/new", methods=["GET", "POST"])

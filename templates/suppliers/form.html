@@ -30,6 +30,16 @@
       </div>
     </div>
     <div class="mb-3">
+      <label class="form-label">Preference</label>
+      {% set current_preference = supplier.preference if supplier else '' %}
+      <select class="form-select" name="preference">
+        <option value="" {{ "selected" if not current_preference else "" }}>— None —</option>
+        <option value="Primary" {{ "selected" if current_preference == "Primary" else "" }}>Primary — Top choice</option>
+        <option value="Secondary" {{ "selected" if current_preference == "Secondary" else "" }}>Secondary choice</option>
+      </select>
+      <div class="form-text">For picking a Top and a Secondary choice among several suppliers of the same Type in the same City — e.g. 100+ Hotels in Lahore.</div>
+    </div>
+    <div class="mb-3">
       <label class="form-label">Web page</label>
       <input class="form-control" type="url" name="web_page" placeholder="https://…" value="{{ (supplier.web_page | orblank) if supplier else '' }}">
     </div>

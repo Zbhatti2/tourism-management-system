@@ -799,6 +799,7 @@ CREATE TABLE suppliers (
     web_page        TEXT,
     notes           TEXT,
     knowledge_graph_data TEXT,              -- freeform, ';'-delimited entries; Phase 2: structured triples (same convention as contacts.knowledge_graph_data)
+    preference      TEXT CHECK (preference IN ('Primary','Secondary')),  -- per Zeb's request: lets a Top choice and a Secondary choice be marked among many suppliers of the same Type in the same City (e.g. 100+ Hotels in Lahore) -- NULL for every supplier with no preference set, which is the normal/default case
     is_deleted      INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
@@ -2045,3 +2046,33 @@ CREATE TABLE package_price_tiers (
 );
 CREATE INDEX idx_package_price_tiers_package ON package_price_tiers(package_id);
 CREATE INDEX idx_package_price_tiers_tenant ON package_price_tiers(tenant_id);
+
+-- ============================================================================
+-- MODULE U -- Knowledge Graph (AI Agent / Data Enrichment, Phase 1 pilot)
+-- ============================================================================
+-- Structured replacement for the freeform ';'-delimited knowledge_graph_data
+-- text column already sitting on contacts/points_of_interest/suppliers/
+-- organizations (each explicitly commented "Phase 2: structured triples").
+-- One row = one directed edge between two entities, e.g.
+--   (PointOfInterest, <Gurdwara Janam Asthan>) --[near]--> (Supplier, <Hotel One Nankana Sahib>)
+-- Entity type list is intentionally the small set of tables this pilot
+-- actually links; extend the CHECK constraint (both columns) when a new
+-- entity type needs to participate. The existing freeform text fields are
+-- left in place (still shown in the UI) rather than removed -- this table
+-- is additive, not a replacement migration.
+CREATE TABLE knowledge_graph_edges (
+    edge_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    subject_type    TEXT NOT NULL CHECK (subject_type IN ('Supplier','PointOfInterest','City','Organization','Contact')),
+    subject_id      INTEGER NOT NULL,
+    relationship    TEXT NOT NULL,           -- freeform label, e.g. 'located_in', 'near', 'served_by', 'operates_tours_to', 'nearest_airport'
+    object_type     TEXT NOT NULL CHECK (object_type IN ('Supplier','PointOfInterest','City','Organization','Contact')),
+    object_id       INTEGER NOT NULL,
+    notes           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (tenant_id, subject_type, subject_id, relationship, object_type, object_id)
+);
+CREATE INDEX idx_kg_edges_tenant ON knowledge_graph_edges(tenant_id);
+CREATE INDEX idx_kg_edges_subject ON knowledge_graph_edges(tenant_id, subject_type, subject_id);
+CREATE INDEX idx_kg_edges_object ON knowledge_graph_edges(tenant_id, object_type, object_id);

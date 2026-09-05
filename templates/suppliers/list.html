@@ -23,7 +23,7 @@
     <div class="col-auto">
       <button class="btn btn-outline-secondary" type="submit">Search</button>
     </div>
-    {% if q or is_external_resource or type_id or subtype_id or city %}
+    {% if q or is_external_resource or type_id or subtype_id or city or preference %}
     <div class="col-auto">
       <a href="{{ url_for('suppliers.list_suppliers') }}" class="btn btn-link">Clear</a>
     </div>
@@ -51,6 +51,16 @@
         {% endfor %}
       </select>
     </div>
+    <div class="col-auto">
+      {# Per Zeb's request: pick a City + Type, then narrow straight down
+         to just the Top or Secondary choice among however many suppliers
+         (e.g. 100+ Hotels in Lahore) match. #}
+      <select class="form-select" name="preference">
+        <option value="">Any preference</option>
+        <option value="Primary" {{ "selected" if preference == "Primary" else "" }}>Primary only</option>
+        <option value="Secondary" {{ "selected" if preference == "Secondary" else "" }}>Secondary only</option>
+      </select>
+    </div>
   </div>
 </form>
 
@@ -62,6 +72,7 @@
           <th>Name</th>
           <th>Type</th>
           <th>Sub-Type</th>
+          <th>Preference</th>
           <th>{{ "Company" if is_external_resource else "Web page" }}</th>
           <th>City</th>
           <th>Province/State</th>
@@ -77,13 +88,20 @@
           </td>
           <td>{% if s.type_label %}<span class="badge bg-secondary-subtle text-dark">{{ s.type_label }}</span>{% endif %}</td>
           <td>{% if s.subtype_label %}<span class="badge bg-light text-dark border">{{ s.subtype_label }}</span>{% endif %}</td>
+          <td>
+            {% if s.preference == "Primary" %}
+            <span class="badge bg-success-subtle text-success-emphasis border"><i class="bi bi-star-fill"></i> Primary</span>
+            {% elif s.preference == "Secondary" %}
+            <span class="badge bg-info-subtle text-info-emphasis border"><i class="bi bi-star-half"></i> Secondary</span>
+            {% endif %}
+          </td>
           <td class="text-muted small">{{ (s.company_name if is_external_resource else s.web_page) or "" }}</td>
           <td class="text-muted small">{{ s.city_label or "" }}</td>
           <td class="text-muted small">{{ s.state_label or "" }}</td>
           <td class="text-muted small">{{ s.country_label or "" }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="text-center text-muted py-5">No suppliers yet — <a href="{{ url_for('suppliers.new_external_resource') if is_external_resource else url_for('suppliers.new_supplier') }}">add the first one</a>.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-5">No suppliers yet — <a href="{{ url_for('suppliers.new_external_resource') if is_external_resource else url_for('suppliers.new_supplier') }}">add the first one</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

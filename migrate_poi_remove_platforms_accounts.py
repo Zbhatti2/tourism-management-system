@@ -3,6 +3,13 @@ Migration: removes the "Platforms & Subscriptions" and "Accounts" modules
 and adds the new "Points of Interest" module, on an existing database —
 safe to re-run, and does NOT drop or lose any existing data.
 
+UPDATE: the "Platforms & Subscriptions" half of this archive was later
+permanently dropped (every one of those tables was confirmed empty or
+holding only unused lookup seed values, per Zeb's request to remove all
+traces of a module that isn't needed for a Tourism/Travel Management
+System) — see migrate_drop_platforms_subscriptions_module.py. The
+Accounts module's archived tables were left as-is below, untouched.
+
 What this does, in order:
 
   1. Archive-renames (never DROPs) every table that belonged to the two

@@ -94,6 +94,30 @@
         {% endif %}
       </div>
     </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <h2 class="h6">Knowledge graph <span class="badge bg-light text-muted border">structured</span></h2>
+        {% if kg_edges %}
+        <ul class="small mb-0 ps-3">
+          {% for e in kg_edges %}
+          <li>
+            {% if e.direction == 'out' %}
+            {{ e.relationship }} &rarr;
+            {% if e.other_endpoint %}<a href="{{ url_for(e.other_endpoint, **{e.other_url_kwarg: e.other_id}) }}">{{ e.other_label }}</a>{% else %}{{ e.other_label }}{% endif %}
+            {% else %}
+            {% if e.other_endpoint %}<a href="{{ url_for(e.other_endpoint, **{e.other_url_kwarg: e.other_id}) }}">{{ e.other_label }}</a>{% else %}{{ e.other_label }}{% endif %}
+            &rarr; {{ e.relationship }} (this)
+            {% endif %}
+            {% if e.notes %}<br><span class="text-muted">{{ e.notes }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="small mb-0">—</p>
+        {% endif %}
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

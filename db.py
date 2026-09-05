@@ -131,6 +131,22 @@ def init_app(app):
         migrate()
         click.echo("Done.")
 
+    @app.cli.command("migrate-drop-platforms-subscriptions")
+    def migrate_drop_platforms_subscriptions_command():
+        """Flask CLI: `flask --app app migrate-drop-platforms-subscriptions`
+        — per Zeb's request to remove all traces of the "Platforms &
+        Subscriptions" module (confirmed not needed for a Tourism/Travel
+        Management System), permanently DROPs the 16 _archived_* tables
+        that migrate-poi-remove-platforms-accounts left behind for that
+        module specifically (every one confirmed empty or holding only
+        unused lookup seed values -- no real data lost). Does NOT touch
+        the separate Accounts module's archived tables. Safe to re-run.
+        See migrate_drop_platforms_subscriptions_module.py for details."""
+        from migrate_drop_platforms_subscriptions_module import migrate
+
+        migrate()
+        click.echo("Done.")
+
     @app.cli.command("migrate-add-suppliers")
     def migrate_add_suppliers_command():
         """Flask CLI: `flask --app app migrate-add-suppliers` — adds the new
@@ -144,6 +160,19 @@ def init_app(app):
         Safe to re-run; does not touch existing tenant data. See
         migrate_add_suppliers.py for details."""
         from migrate_add_suppliers import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-supplier-preference")
+    def migrate_add_supplier_preference_command():
+        """Flask CLI: `flask --app app migrate-add-supplier-preference` —
+        adds suppliers.preference ('Primary'/'Secondary', NULL by default)
+        so a Top and a Secondary choice can be marked among many suppliers
+        of the same Type in the same City (e.g. 100+ Hotels in Lahore).
+        Safe to re-run; does not touch existing tenant data. See
+        migrate_add_supplier_preference.py for details."""
+        from migrate_add_supplier_preference import migrate
 
         migrate()
         click.echo("Done.")
@@ -517,6 +546,47 @@ def init_app(app):
         list. Safe to re-run; does not touch any existing data. See
         migrate_add_component_airline_ticket.py for the full story."""
         from migrate_add_component_airline_ticket import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-ai-agent-lookups")
+    def migrate_add_ai_agent_lookups_command():
+        """Flask CLI: `flask --app app migrate-add-ai-agent-lookups` — adds
+        the new lookup values for the "Sikh Pilgrimage Sector" AI Agent /
+        Data Enrichment pilot: 4 new POI Types (Airport, Railway Station,
+        Hospital, Police Station) and 1 new Supplier Type (Tour Guide,
+        with sub-types), for every existing tenant. Safe to re-run; does
+        not touch any existing data. See migrate_add_ai_agent_lookups.py
+        for the full story."""
+        from migrate_add_ai_agent_lookups import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-knowledge-graph-edges")
+    def migrate_add_knowledge_graph_edges_command():
+        """Flask CLI: `flask --app app migrate-add-knowledge-graph-edges` —
+        creates the new knowledge_graph_edges table, the structured
+        replacement for the freeform knowledge_graph_data text field (see
+        knowledge_graph.py). Safe to re-run — CREATE TABLE IF NOT EXISTS.
+        See migrate_add_knowledge_graph_edges.py for the full story."""
+        from migrate_add_knowledge_graph_edges import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-seed-nankana-sahib-pilot")
+    def migrate_seed_nankana_sahib_pilot_command():
+        """Flask CLI: `flask --app app migrate-seed-nankana-sahib-pilot` —
+        populates the Nankana Sahib pilot-city data (real map coordinates
+        on the 9 existing Gurdwara POIs, new non-Gurdwara POIs, new
+        Suppliers, and Knowledge Graph edges linking them) for every
+        existing tenant. Requires migrate-add-ai-agent-lookups and
+        migrate-add-knowledge-graph-edges to have already run. Safe to
+        re-run — idempotent. See migrate_seed_nankana_sahib_pilot.py for
+        the full story."""
+        from migrate_seed_nankana_sahib_pilot import migrate
 
         migrate()
         click.echo("Done.")

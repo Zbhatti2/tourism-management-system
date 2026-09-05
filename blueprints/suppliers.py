@@ -141,6 +141,7 @@ def list_suppliers():
     type_id = request.args.get("type_id", "").strip()
     subtype_id = request.args.get("subtype_id", "").strip()
     city = request.args.get("city", "").strip()
+    preference = request.args.get("preference", "").strip()
     sql = """
         SELECT s.*, t.label AS type_label, st.label AS subtype_label,
                COALESCE(pc.label, pa.city_text) AS city_label,
@@ -177,11 +178,17 @@ def list_suppliers():
         # city, or the free-text fallback) — see _city_options above.
         sql += " AND COALESCE(pc.label, pa.city_text) = ?"
         params.append(city)
+    if preference in ("Primary", "Secondary"):
+        # Per Zeb's request: with a City and a Type both picked, this is
+        # exactly "show me the Top / Secondary choice among the 100+
+        # Hotels in Lahore" — the filter combination this field exists for.
+        sql += " AND s.preference = ?"
+        params.append(preference)
     sql += " ORDER BY s.supplier_name"
     rows = db.execute(sql, params).fetchall()
     return render_template(
         "suppliers/list.html", suppliers=rows, q=q, is_external_resource=is_external_resource,
-        type_id=type_id, subtype_id=subtype_id, city=city,
+        type_id=type_id, subtype_id=subtype_id, city=city, preference=preference,
         supplier_types=_supplier_types(db), subtypes_json=_subtypes_for_type_json(db),
         city_options=_city_options(db),
     )
@@ -248,7 +255,9 @@ def view_supplier(supplier_id):
             (c["supplier_contact_id"], g.tenant_id),
         ).fetchall()
         contacts.append({"row": c, "phones": phones})
-    return render_template("suppliers/view.html", supplier=supplier, addresses=addresses, contacts=contacts)
+    from knowledge_graph import get_edges_for
+    kg_edges = get_edges_for(db, g.tenant_id, "Supplier", supplier_id)
+    return render_template("suppliers/view.html", supplier=supplier, addresses=addresses, contacts=contacts, kg_edges=kg_edges)
 
 
 # ------------------------------------------------------------------- form
@@ -265,6 +274,7 @@ def _subtypes_for_type_json(db):
 
 
 def _form_fields(form):
+    preference = form.get("preference") or None
     return {
         "supplier_name": form.get("supplier_name", "").strip(),
         "supplier_type_id": form.get("supplier_type_id") or None,
@@ -272,6 +282,12 @@ def _form_fields(form):
         "web_page": form.get("web_page", "").strip() or None,
         "notes": form.get("notes", "").strip() or None,
         "knowledge_graph_data": form.get("knowledge_graph_data", "").strip() or None,
+        # 'Primary' / 'Secondary' / None -- see schema.sql's CHECK constraint.
+        # A form value outside those two is treated the same as blank
+        # (None) rather than trusted straight into the query, since it's a
+        # plain <select> value an unmodified client can only ever send as
+        # one of the three.
+        "preference": preference if preference in ("Primary", "Secondary") else None,
     }
 
 
@@ -303,11 +319,11 @@ def new_supplier():
         db.execute(
             """INSERT INTO suppliers
                (tenant_id, supplier_name, supplier_type_id, supplier_subtype_id,
-                web_page, notes, knowledge_graph_data)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                web_page, notes, knowledge_graph_data, preference)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 g.tenant_id, f["supplier_name"], f["supplier_type_id"], f["supplier_subtype_id"],
-                f["web_page"], f["notes"], f["knowledge_graph_data"],
+                f["web_page"], f["notes"], f["knowledge_graph_data"], f["preference"],
             ),
         )
         db.commit()
@@ -402,11 +418,11 @@ def edit_supplier(supplier_id):
             )
         db.execute(
             """UPDATE suppliers SET supplier_name=?, supplier_type_id=?, supplier_subtype_id=?,
-               web_page=?, notes=?, knowledge_graph_data=?, updated_at=datetime('now')
+               web_page=?, notes=?, knowledge_graph_data=?, preference=?, updated_at=datetime('now')
                WHERE supplier_id=? AND tenant_id=?""",
             (
                 f["supplier_name"], f["supplier_type_id"], f["supplier_subtype_id"],
-                f["web_page"], f["notes"], f["knowledge_graph_data"], supplier_id, g.tenant_id,
+                f["web_page"], f["notes"], f["knowledge_graph_data"], f["preference"], supplier_id, g.tenant_id,
             ),
         )
         db.commit()

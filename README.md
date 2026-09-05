@@ -89,8 +89,8 @@ error page that leaks that the record exists).
 |---|---|
 | E — System Tables (lookups) | Built, seeded per-tenant with PIMS's proposed starter values |
 | A — Contacts | Full CRUD, multi-value emails/phones/addresses with history tracking, reference links, quick-add organizations, per-contact history view |
-| B — Platforms & Subscriptions | Cloud platforms (with support phones/emails), subscriptions with encrypted password, software licenses with encrypted serial number (plus phones/emails/reference links) |
-| C — Accounts | Encrypted account number/CVV/PIN/password, shared `addresses` table, per-account history view |
+| B — Platforms & Subscriptions | **Removed.** This was carried over from the PIMS skeleton (personal cloud accounts, subscriptions, software licenses) along with Contacts and Organizations, but it isn't a fit for a Tourism/Travel Management System — no blueprint, route, or menu item references it any more. Superseded by the Points of Interest module. See `migrate_poi_remove_platforms_accounts.py` (disconnected it) and `migrate_drop_platforms_subscriptions_module.py` (permanently dropped its tables — every one was confirmed empty or unused seed data, nothing lost). |
+| C — Accounts | Encrypted account number/CVV/PIN/password, shared `addresses` table, per-account history view — also currently disconnected from the app's navigation (not requested for removal; noted here for awareness) |
 | D — Documents & Knowledge Base | Multiple locations per item, many-to-many knowledge domains, keyword/hashtag tagging |
 | F — Data Exchange | CSV import staging for Contacts (upload → validate → review → commit), JSON export for all four data modules, plus CSV and vCard export for Contacts |
 | System Management | Login, per-user password change, password reset via recovery seed phrase, DB integrity/health check, audit log viewer (tenant-scoped), retention setting (per-tenant), backup/restore (whole-database) |
