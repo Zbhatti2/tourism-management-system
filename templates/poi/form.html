@@ -22,9 +22,18 @@
       </div>
     </div>
 
-    <div class="mb-3" style="max-width: 220px;">
-      <label class="form-label">Year established</label>
-      <input class="form-control" name="year_established" value="{{ (poi.year_established | orblank) if poi else '' }}">
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-auto" style="max-width: 220px;">
+        <label class="form-label">Year established</label>
+        <input class="form-control" name="year_established" value="{{ (poi.year_established | orblank) if poi else '' }}">
+      </div>
+      <div class="col-auto">
+        {% if poi %}
+        <a href="{{ url_for('poi.view_poi_images', poi_id=poi.poi_id) }}" class="btn btn-outline-secondary"><i class="bi bi-images"></i> Images/Photographs</a>
+        {% else %}
+        <span class="text-muted small">Save the point of interest first to add Images/Photographs.</span>
+        {% endif %}
+      </div>
     </div>
 
     <h2 class="h6 text-muted mt-4 mb-2">Location</h2>
@@ -89,8 +98,12 @@
       <textarea class="form-control" name="notes" rows="3">{{ (poi.notes | orblank) if poi else '' }}</textarea>
     </div>
     <div class="mb-3">
-      <label class="form-label">Links</label>
-      <textarea class="form-control" name="links" rows="2" placeholder="One link per line">{{ (poi.links | orblank) if poi else '' }}</textarea>
+      <label class="form-label d-flex justify-content-between align-items-center">
+        <span>Links</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addLinkRow()"><i class="bi bi-plus"></i> Add link</button>
+      </label>
+      <div id="link_rows"></div>
+      <p class="text-muted small mb-0" id="link_rows_empty_hint">No links yet — Add link to attach a URL or document path with a short description.</p>
     </div>
     <div class="mb-3">
       <label class="form-label">Knowledge graph data <span class="text-muted small">(freeform, ';'-separated — e.g. "Sister site of Wazir Khan Mosque; Managed by the Auqaf Department; UNESCO tentative list")</span></label>
@@ -106,6 +119,69 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/geography_picker.js') }}"></script>
 <script>
+  // Dynamic Link + Description row editor (Zeb, Sept 2026: "Fix the Links
+  // section for Link and Description as shown in the attached image") --
+  // each row submits as a link_url/link_description pair; blank rows are
+  // dropped server-side on save (see poi._save_poi_links_from_form).
+  let linkRowCount = 0;
+
+  function addLinkRow(url, description) {
+    linkRowCount += 1;
+    const wrap = document.getElementById('link_rows');
+    const row = document.createElement('div');
+    row.className = 'row g-2 mb-2 align-items-start link-row';
+
+    const numCol = document.createElement('div');
+    numCol.className = 'col-auto pt-2 text-muted small';
+    numCol.style.minWidth = '4.5rem';
+    numCol.textContent = 'Link #' + linkRowCount;
+    row.appendChild(numCol);
+
+    const urlCol = document.createElement('div');
+    urlCol.className = 'col-md-5';
+    const urlInput = document.createElement('input');
+    urlInput.className = 'form-control';
+    urlInput.name = 'link_url';
+    urlInput.placeholder = 'https://… or a document path';
+    urlInput.value = url || '';
+    urlCol.appendChild(urlInput);
+    row.appendChild(urlCol);
+
+    const descCol = document.createElement('div');
+    descCol.className = 'col-md-6';
+    const descInput = document.createElement('input');
+    descInput.className = 'form-control';
+    descInput.name = 'link_description';
+    descInput.placeholder = 'A single line description';
+    descInput.value = description || '';
+    descCol.appendChild(descInput);
+    row.appendChild(descCol);
+
+    const removeCol = document.createElement('div');
+    removeCol.className = 'col-auto pt-1';
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-sm btn-link text-danger py-1';
+    removeBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+    removeBtn.onclick = () => { row.remove(); updateLinkRowsEmptyHint(); };
+    removeCol.appendChild(removeBtn);
+    row.appendChild(removeCol);
+
+    wrap.appendChild(row);
+    updateLinkRowsEmptyHint();
+  }
+
+  function updateLinkRowsEmptyHint() {
+    const hint = document.getElementById('link_rows_empty_hint');
+    const rows = document.getElementById('link_rows').children.length;
+    hint.hidden = rows > 0;
+  }
+
+  {% for l in poi_links %}
+  addLinkRow({{ (l.url | default('')) | tojson }}, {{ (l.description | default('')) | tojson }});
+  {% endfor %}
+  updateLinkRowsEmptyHint();
+
   initGeographyPicker({
     initial: {
       region_id: {{ (poi.region_id if poi else '') | tojson }},

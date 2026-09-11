@@ -2174,3 +2174,147 @@ CREATE TABLE supplier_rooms (
 );
 CREATE INDEX idx_supplier_rooms_supplier ON supplier_rooms(supplier_id);
 CREATE INDEX idx_supplier_rooms_type ON supplier_rooms(room_type_id);
+
+-- ============================================================================
+-- MODULE X -- Supplier Documents, Links and Images (Sept 2026)
+--
+-- Per Zeb's request: "In the Suppliers Form and Table, please add a
+-- sub-module called 'Documents, Links and Images'. Each supplier's copies
+-- of business licenses, permissions, rules and regulations, agreements and
+-- Images / photographs will be stored in this sub-module. The example form
+-- from 'Organization Intelligence/Documents' can be used as reference."
+--
+-- Mirrors MODULE D's content/content_locations/content_keywords/
+-- content_hashtags shape almost exactly (same Details + multi-location
+-- pattern: a document can carry both a Local Drive Path copy and a Cloud
+-- Link, or several of either), scoped to one Supplier instead of being a
+-- tenant-wide, unattached knowledge base. Two deliberate differences from
+-- the Module D reference form:
+--   1. No Knowledge Domains link -- "Notice I have removed 'Knowledge
+--      domains' as that is not required for Suppliers."
+--   2. No Contacts Link sub-feature -- out of scope for what was asked
+--      (business licenses/permits/rules/agreements/images), and Suppliers
+--      already has its own Contacts sub-module for people.
+-- Everything else (Author(s)/Description/Notes/Keywords/Hashtags on the
+-- document, Local Drive Path + Cloud Link locations, browse-for-file) is
+-- carried over so the UI and workflow feel identical to the reference.
+-- ============================================================================
+
+-- Lookup for supplier_documents.document_type_id below -- what KIND of
+-- document this is (Business License, Permit, Agreement, ...). A flat
+-- lookup, not nested under supplier_types like hotel_amenity_options/
+-- hotel_room_types -- every Supplier Type can have licenses/permits/
+-- agreements/images, so this isn't Hotel-specific. Table Maintenance-
+-- managed, seeded from seed_data.SUPPLIER_DOCUMENT_TYPES.
+CREATE TABLE supplier_document_types (
+    document_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    code            TEXT,
+    label           TEXT NOT NULL,
+    description     TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (tenant_id, code)
+);
+CREATE INDEX idx_supplier_document_types_tenant ON supplier_document_types(tenant_id);
+
+-- One row per document/link/image record on a Supplier's "Documents, Links
+-- and Images" card. Mirrors `content` (MODULE D) minus knowledge-domain
+-- linkage; is_deleted follows the same soft-delete convention as `content`.
+CREATE TABLE supplier_documents (
+    supplier_document_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_id     INTEGER NOT NULL REFERENCES suppliers(supplier_id),
+    document_name   TEXT NOT NULL,
+    document_type_id INTEGER REFERENCES supplier_document_types(document_type_id),
+    authors         TEXT,                    -- e.g. issuing authority/signatory -- optional, same field as Module D's Author(s)
+    description     TEXT,
+    notes           TEXT,                    -- brief summary; web URLs are auto-linked on display
+    is_deleted      INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_supplier_documents_tenant ON supplier_documents(tenant_id);
+CREATE INDEX idx_supplier_documents_supplier ON supplier_documents(supplier_id);
+CREATE INDEX idx_supplier_documents_type ON supplier_documents(document_type_id);
+
+-- Where a copy of the document actually lives -- a local drive path and/or
+-- a cloud link, any number of each ("copies... will be stored" -- a
+-- license might have both a scanned local file and a cloud-drive backup
+-- link). Mirrors content_locations exactly.
+CREATE TABLE supplier_document_locations (
+    location_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_document_id INTEGER NOT NULL REFERENCES supplier_documents(supplier_document_id),
+    location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path')),
+    path_or_url     TEXT NOT NULL
+);
+CREATE INDEX idx_supplier_document_locations_tenant ON supplier_document_locations(tenant_id);
+CREATE INDEX idx_supplier_document_locations_document ON supplier_document_locations(supplier_document_id);
+
+CREATE TABLE supplier_document_keywords (
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_document_id INTEGER NOT NULL REFERENCES supplier_documents(supplier_document_id),
+    term            TEXT NOT NULL,
+    PRIMARY KEY (supplier_document_id, term)
+);
+CREATE INDEX idx_supplier_document_keywords_tenant ON supplier_document_keywords(tenant_id);
+
+CREATE TABLE supplier_document_hashtags (
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_document_id INTEGER NOT NULL REFERENCES supplier_documents(supplier_document_id),
+    term            TEXT NOT NULL,
+    PRIMARY KEY (supplier_document_id, term)
+);
+CREATE INDEX idx_supplier_document_hashtags_tenant ON supplier_document_hashtags(tenant_id);
+
+-- ============================================================================
+-- MODULE Y -- Point of Interest Images/Photographs & Structured Links (Sept 2026)
+--
+-- Per Zeb's request: "Add (1) 'Images/Photographs' to 'Point Of Interest'
+-- form. (2) Bulk import Images. (3) Fix the Links section for Link and
+-- Description as shown in the attached image."
+--
+-- poi_images -- one row per image/photograph, each with its own Cloud Link
+-- or Local Drive Path (mirrors supplier_document_locations' shape exactly),
+-- reached via a "Bulk Import Images" flow identical in spirit to the one
+-- just built for Suppliers (utils.pick_files_dialog). No "document" wrapper
+-- table is needed here the way Suppliers has supplier_documents -- Zeb only
+-- asked for Images/Photographs on POIs, not a general license/permit system
+-- -- so each image IS its own row.
+CREATE TABLE poi_images (
+    poi_image_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    poi_id          INTEGER NOT NULL REFERENCES points_of_interest(poi_id),
+    location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path')),
+    path_or_url     TEXT NOT NULL,
+    caption         TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_poi_images_tenant ON poi_images(tenant_id);
+CREATE INDEX idx_poi_images_poi ON poi_images(poi_id);
+
+-- poi_reference_links -- replaces the single freeform points_of_interest.
+-- links textarea with the structured, multi-row "Link #1/#2/#3 + Description"
+-- editor from Zeb's mockup. Mirrors the shape (and the role) already
+-- established elsewhere in the app for organization_reference_links /
+-- supplier_reference_links / contact_reference_links -- just url +
+-- description here, since that's all the mockup showed (no document_path/
+-- notes columns, to keep the inline row editor as simple as the mockup).
+-- The legacy points_of_interest.links column is left in place, untouched,
+-- for audit -- migrate_add_poi_images_links.py copies any non-blank legacy
+-- text into one poi_reference_links row per line so nothing is lost, and
+-- the form itself no longer writes to points_of_interest.links going
+-- forward.
+CREATE TABLE poi_reference_links (
+    link_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    poi_id          INTEGER NOT NULL REFERENCES points_of_interest(poi_id),
+    url             TEXT,
+    description     TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_poi_reference_links_tenant ON poi_reference_links(tenant_id);
+CREATE INDEX idx_poi_reference_links_poi ON poi_reference_links(poi_id);

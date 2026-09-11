@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Bulk Import Images{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">Bulk Import Images / Photographs</h1>
+<p class="text-muted mb-4">{{ poi.name }}</p>
+
+<form method="post" class="card shadow-sm border-0" id="bulkImportForm">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <button class="btn btn-outline-primary" type="button" id="pick_btn" onclick="pickFiles()"><i class="bi bi-images"></i> Select Images…</button>
+      <span class="text-muted small" id="pick_hint">No images selected yet — you can Ctrl/Shift-click to select several at once.</span>
+    </div>
+    <div id="pick_error" class="text-danger small mb-3"></div>
+
+    <div class="table-responsive" id="file_table_wrap" hidden>
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr><th style="width: 40%;">Caption</th><th>File</th><th></th></tr>
+        </thead>
+        <tbody id="file_rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('poi.view_poi_images', poi_id=poi.poi_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit" id="submit_btn" disabled>Import</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  function pickFiles() {
+    const hint = document.getElementById('pick_hint');
+    const err = document.getElementById('pick_error');
+    err.textContent = '';
+    hint.textContent = 'Opening the file browser…';
+    fetch("{{ url_for('poi.pick_bulk_import_poi_images', poi_id=poi.poi_id) }}")
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          err.textContent = data.error;
+          hint.textContent = 'No images selected yet.';
+          return;
+        }
+        addFiles(data.files || []);
+      })
+      .catch(() => {
+        err.textContent = 'Could not reach the file browser.';
+        hint.textContent = 'No images selected yet.';
+      });
+  }
+
+  function addFiles(files) {
+    const tbody = document.getElementById('file_rows');
+    files.forEach(f => {
+      const tr = document.createElement('tr');
+
+      const captionTd = document.createElement('td');
+      const captionInput = document.createElement('input');
+      captionInput.className = 'form-control form-control-sm';
+      captionInput.name = 'captions';
+      captionInput.value = f.name;
+      captionTd.appendChild(captionInput);
+
+      const pathTd = document.createElement('td');
+      pathTd.className = 'text-muted small text-break';
+      pathTd.textContent = f.path;
+      const pathHidden = document.createElement('input');
+      pathHidden.type = 'hidden';
+      pathHidden.name = 'paths';
+      pathHidden.value = f.path;
+      pathTd.appendChild(pathHidden);
+
+      const actionTd = document.createElement('td');
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'btn btn-sm btn-link text-danger py-0';
+      removeBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+      removeBtn.onclick = () => { tr.remove(); updateState(); };
+      actionTd.appendChild(removeBtn);
+
+      tr.appendChild(captionTd);
+      tr.appendChild(pathTd);
+      tr.appendChild(actionTd);
+      tbody.appendChild(tr);
+    });
+    updateState();
+  }
+
+  function updateState() {
+    const rows = document.getElementById('file_rows').children.length;
+    document.getElementById('file_table_wrap').hidden = rows === 0;
+    document.getElementById('submit_btn').disabled = rows === 0;
+    document.getElementById('pick_hint').textContent = rows === 0
+      ? 'No images selected yet — you can Ctrl/Shift-click to select several at once.'
+      : `${rows} image${rows !== 1 ? 's' : ''} selected — Select Images… again to add more, or remove one below.`;
+  }
+</script>
+{% endblock %}

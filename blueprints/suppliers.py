@@ -47,7 +47,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from auth.decorators import login_required
 from db import get_db, log_action
-from utils import open_local_path
+from utils import basename, open_local_path, pick_file_dialog, pick_files_dialog
 
 suppliers_bp = Blueprint("suppliers", __name__)
 
@@ -150,6 +150,58 @@ def _hotel_room_types(db, supplier_type_id):
     ).fetchall()
 
 
+def _document_types(db):
+    """Supplier Document Types (Business License, Permit, Agreement, ... —
+    MODULE X, "Documents, Links and Images"). A flat lookup, not nested
+    under Supplier Type -- every Supplier can have licenses/permits/
+    agreements/images regardless of type."""
+    return db.execute(
+        "SELECT * FROM supplier_document_types WHERE is_active = 1 AND tenant_id = ? ORDER BY sort_order, label COLLATE NOCASE",
+        (g.tenant_id,),
+    ).fetchall()
+
+
+def _split_terms(raw: str):
+    """Comma-separated Keywords/Hashtags field -> a sorted, de-duplicated
+    set of terms, same convention as documents.py's Module D helper."""
+    return sorted({t.strip() for t in raw.split(",") if t.strip()})
+
+
+def _save_document_locations_from_form(db, form, document_id):
+    """Reads the optional "Cloud Link" / "Local Drive Path" fields right on
+    the Add/Edit Document form (Zeb, Sept 2026: "I don't see a Cloud Link
+    (http) entry place in the Supplier Documents") and adds a location row
+    for each one that's filled in -- on top of (not instead of) the
+    dedicated Locations card on the document's own page, which still
+    handles reviewing/removing what's on file and adding further copies."""
+    cloud_link = form.get("cloud_link", "").strip()
+    if cloud_link:
+        db.execute(
+            "INSERT INTO supplier_document_locations (tenant_id, supplier_document_id, location_type, path_or_url) VALUES (?, ?, 'Cloud Link', ?)",
+            (g.tenant_id, document_id, cloud_link),
+        )
+    local_path = form.get("local_drive_path", "").strip()
+    if local_path:
+        db.execute(
+            "INSERT INTO supplier_document_locations (tenant_id, supplier_document_id, location_type, path_or_url) VALUES (?, ?, 'Local Drive Path', ?)",
+            (g.tenant_id, document_id, local_path),
+        )
+    if cloud_link or local_path:
+        db.commit()
+
+
+def _get_supplier_document(db, supplier_id, document_id):
+    doc = db.execute(
+        """SELECT d.*, dt.label AS document_type_label FROM supplier_documents d
+           LEFT JOIN supplier_document_types dt ON dt.document_type_id = d.document_type_id
+           WHERE d.supplier_document_id = ? AND d.supplier_id = ? AND d.is_deleted = 0 AND d.tenant_id = ?""",
+        (document_id, supplier_id, g.tenant_id),
+    ).fetchone()
+    if doc is None:
+        abort(404)
+    return doc
+
+
 # ---------------------------------------------------------------- list/view
 
 @suppliers_bp.route("/")
@@ -166,7 +218,8 @@ def list_suppliers():
         SELECT s.*, t.label AS type_label, st.label AS subtype_label,
                COALESCE(pc.label, pa.city_text) AS city_label,
                COALESCE(ps.label, pa.state_province_text) AS state_label,
-               pco.label AS country_label
+               pco.label AS country_label,
+               (SELECT COUNT(*) FROM supplier_documents sd WHERE sd.supplier_id = s.supplier_id AND sd.is_deleted = 0) AS document_count
         FROM suppliers s
         LEFT JOIN supplier_types t ON t.supplier_type_id = s.supplier_type_id
         LEFT JOIN supplier_subtypes st ON st.supplier_subtype_id = s.supplier_subtype_id
@@ -303,9 +356,20 @@ def view_supplier(supplier_id):
         ).fetchall()
         hotel_room_total = sum(r["number_of_rooms"] for r in hotel_rooms)
 
+    documents = db.execute(
+        """SELECT d.*, dt.label AS document_type_label,
+                  (SELECT COUNT(*) FROM supplier_document_locations l WHERE l.supplier_document_id = d.supplier_document_id) AS location_count
+           FROM supplier_documents d
+           LEFT JOIN supplier_document_types dt ON dt.document_type_id = d.document_type_id
+           WHERE d.supplier_id = ? AND d.is_deleted = 0 AND d.tenant_id = ?
+           ORDER BY d.document_name COLLATE NOCASE""",
+        (supplier_id, g.tenant_id),
+    ).fetchall()
+
     return render_template(
         "suppliers/view.html", supplier=supplier, addresses=addresses, contacts=contacts, kg_edges=kg_edges,
         hotel_amenities_by_category=hotel_amenities_by_category, hotel_rooms=hotel_rooms, hotel_room_total=hotel_room_total,
+        documents=documents,
     )
 
 
@@ -737,6 +801,303 @@ def delete_supplier_room(supplier_id, room_id):
     log_action("Delete", "supplier_room", supplier_id, f"Deleted Room Type #{room_id}")
     flash("Room Type removed.", "success")
     return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+
+
+# --------------------------------------------------- documents, links and images
+#
+# "Documents, Links and Images" sub-module (MODULE X, Sept 2026) -- per
+# Zeb's request, copies of a Supplier's business licenses, permits, rules &
+# regulations, agreements and images/photographs. Mirrors the Module D
+# Documents & Knowledge Base pattern (documents.py's content/
+# content_locations) but scoped to one Supplier, without the Knowledge
+# Domains link ("not required for Suppliers") or the Contacts Link feature
+# (out of scope for what was asked; Suppliers already has its own Contacts
+# sub-module above). Applies to every Supplier Type -- not gated behind
+# template_key like Amenities & Facilities/Rooms are.
+
+DOCUMENT_DESCRIPTION_MAX_LENGTH = 200
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/new", methods=["GET", "POST"])
+@login_required
+def new_supplier_document(supplier_id):
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    if request.method == "POST":
+        form = request.form
+        document_name = form.get("document_name", "").strip()
+        description = form.get("description", "").strip()
+        if not document_name:
+            flash("Document name is required.", "error")
+            return render_template(
+                "suppliers/document_form.html", supplier=supplier, item=form, document_id=None,
+                keywords=form.get("keywords", ""), hashtags=form.get("hashtags", ""), document_types=_document_types(db),
+            )
+        if len(description) > DOCUMENT_DESCRIPTION_MAX_LENGTH:
+            flash(f"Description must be {DOCUMENT_DESCRIPTION_MAX_LENGTH} characters or fewer (currently {len(description)}).", "error")
+            return render_template(
+                "suppliers/document_form.html", supplier=supplier, item=form, document_id=None,
+                keywords=form.get("keywords", ""), hashtags=form.get("hashtags", ""), document_types=_document_types(db),
+            )
+        db.execute(
+            "INSERT INTO supplier_documents (tenant_id, supplier_id, document_name, document_type_id, authors, description, notes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                g.tenant_id, supplier_id, document_name, form.get("document_type_id") or None,
+                form.get("authors", "").strip() or None, description or None,
+                form.get("notes", "").strip() or None,
+            ),
+        )
+        db.commit()
+        document_id = db.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+
+        for term in _split_terms(form.get("keywords", "")):
+            db.execute(
+                "INSERT OR IGNORE INTO supplier_document_keywords (tenant_id, supplier_document_id, term) VALUES (?, ?, ?)",
+                (g.tenant_id, document_id, term),
+            )
+        for term in _split_terms(form.get("hashtags", "")):
+            db.execute(
+                "INSERT OR IGNORE INTO supplier_document_hashtags (tenant_id, supplier_document_id, term) VALUES (?, ?, ?)",
+                (g.tenant_id, document_id, term),
+            )
+        db.commit()
+        _save_document_locations_from_form(db, form, document_id)
+
+        log_action("Create", "supplier_document", document_id, f"Added document '{document_name}' to {supplier['supplier_name']}")
+        flash("Document added.", "success")
+        return redirect(url_for("suppliers.view_supplier_document", supplier_id=supplier_id, document_id=document_id))
+    return render_template(
+        "suppliers/document_form.html", supplier=supplier, item=None, document_id=None,
+        keywords="", hashtags="", document_types=_document_types(db),
+    )
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>")
+@login_required
+def view_supplier_document(supplier_id, document_id):
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    item = _get_supplier_document(db, supplier_id, document_id)
+    locations = db.execute(
+        "SELECT * FROM supplier_document_locations WHERE supplier_document_id = ? ORDER BY location_id", (document_id,)
+    ).fetchall()
+    keywords = db.execute(
+        "SELECT term FROM supplier_document_keywords WHERE supplier_document_id = ? ORDER BY term", (document_id,)
+    ).fetchall()
+    hashtags = db.execute(
+        "SELECT term FROM supplier_document_hashtags WHERE supplier_document_id = ? ORDER BY term", (document_id,)
+    ).fetchall()
+    return render_template(
+        "suppliers/document_view.html", supplier=supplier, item=item, locations=locations,
+        keywords=keywords, hashtags=hashtags,
+    )
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_supplier_document(supplier_id, document_id):
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    item = _get_supplier_document(db, supplier_id, document_id)
+    if request.method == "POST":
+        form = request.form
+        document_name = form.get("document_name", "").strip()
+        description = form.get("description", "").strip()
+        if not document_name:
+            flash("Document name is required.", "error")
+            return render_template(
+                "suppliers/document_form.html", supplier=supplier, item=form, document_id=document_id,
+                keywords=form.get("keywords", ""), hashtags=form.get("hashtags", ""), document_types=_document_types(db),
+            )
+        if len(description) > DOCUMENT_DESCRIPTION_MAX_LENGTH:
+            flash(f"Description must be {DOCUMENT_DESCRIPTION_MAX_LENGTH} characters or fewer (currently {len(description)}).", "error")
+            return render_template(
+                "suppliers/document_form.html", supplier=supplier, item=form, document_id=document_id,
+                keywords=form.get("keywords", ""), hashtags=form.get("hashtags", ""), document_types=_document_types(db),
+            )
+        db.execute(
+            "UPDATE supplier_documents SET document_name=?, document_type_id=?, authors=?, description=?, notes=?, updated_at=datetime('now') "
+            "WHERE supplier_document_id=? AND supplier_id=? AND tenant_id=?",
+            (
+                document_name, form.get("document_type_id") or None, form.get("authors", "").strip() or None,
+                description or None, form.get("notes", "").strip() or None, document_id, supplier_id, g.tenant_id,
+            ),
+        )
+        db.execute("DELETE FROM supplier_document_keywords WHERE supplier_document_id = ? AND tenant_id = ?", (document_id, g.tenant_id))
+        for term in _split_terms(form.get("keywords", "")):
+            db.execute(
+                "INSERT OR IGNORE INTO supplier_document_keywords (tenant_id, supplier_document_id, term) VALUES (?, ?, ?)",
+                (g.tenant_id, document_id, term),
+            )
+        db.execute("DELETE FROM supplier_document_hashtags WHERE supplier_document_id = ? AND tenant_id = ?", (document_id, g.tenant_id))
+        for term in _split_terms(form.get("hashtags", "")):
+            db.execute(
+                "INSERT OR IGNORE INTO supplier_document_hashtags (tenant_id, supplier_document_id, term) VALUES (?, ?, ?)",
+                (g.tenant_id, document_id, term),
+            )
+        db.commit()
+        _save_document_locations_from_form(db, form, document_id)
+
+        log_action("Update", "supplier_document", document_id, f"Updated document '{document_name}'")
+        flash("Document updated.", "success")
+        return redirect(url_for("suppliers.view_supplier_document", supplier_id=supplier_id, document_id=document_id))
+
+    keywords = ", ".join(r["term"] for r in db.execute("SELECT term FROM supplier_document_keywords WHERE supplier_document_id = ? ORDER BY term", (document_id,)).fetchall())
+    hashtags = ", ".join(r["term"] for r in db.execute("SELECT term FROM supplier_document_hashtags WHERE supplier_document_id = ? ORDER BY term", (document_id,)).fetchall())
+    return render_template(
+        "suppliers/document_form.html", supplier=supplier, item=item, document_id=document_id,
+        keywords=keywords, hashtags=hashtags, document_types=_document_types(db),
+    )
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/delete", methods=["POST"])
+@login_required
+def delete_supplier_document(supplier_id, document_id):
+    db = get_db()
+    _get_supplier(db, supplier_id)
+    item = _get_supplier_document(db, supplier_id, document_id)
+    db.execute(
+        "UPDATE supplier_documents SET is_deleted = 1, updated_at = datetime('now') WHERE supplier_document_id = ? AND tenant_id = ?",
+        (document_id, g.tenant_id),
+    )
+    db.commit()
+    log_action("Delete", "supplier_document", document_id, f"Deleted document '{item['document_name']}'")
+    flash("Document deleted.", "success")
+    return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/browse-file")
+@login_required
+def browse_document_file(supplier_id):
+    path, error = pick_file_dialog()
+    return jsonify(path=path, error=error)
+
+
+# Extensions offered by the bulk-import file picker's "Image files" filter.
+# "All files" is offered alongside it in the dialog for anything scanned/
+# exported under an unusual extension.
+IMAGE_FILE_TYPES = [
+    ("Image files", "*.jpg *.jpeg *.png *.gif *.bmp *.webp *.tif *.tiff *.heic"),
+    ("All files", "*.*"),
+]
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/bulk-import-images", methods=["GET", "POST"])
+@login_required
+def bulk_import_images(supplier_id):
+    """Bulk-import several Images/Photographs at once (Zeb, Sept 2026: "add
+    a bulk import feature for importing images/photographs") -- one native
+    multi-select file dialog (see pick_bulk_import_files below) instead of
+    the one-at-a-time Add Document flow. Each file picked becomes its own
+    supplier_documents row (Document Type defaulted to 'Image /
+    Photograph', overridable) with one Local Drive Path location pointing
+    at that file."""
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    if request.method == "POST":
+        form = request.form
+        paths = form.getlist("paths")
+        names = form.getlist("names")
+        document_type_id = form.get("document_type_id") or None
+        notes = form.get("notes", "").strip() or None
+        imported = 0
+        for path, name in zip(paths, names):
+            path = path.strip()
+            name = name.strip()
+            if not path or not name:
+                continue
+            db.execute(
+                "INSERT INTO supplier_documents (tenant_id, supplier_id, document_name, document_type_id, notes) VALUES (?, ?, ?, ?, ?)",
+                (g.tenant_id, supplier_id, name, document_type_id, notes),
+            )
+            new_document_id = db.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+            db.execute(
+                "INSERT INTO supplier_document_locations (tenant_id, supplier_document_id, location_type, path_or_url) VALUES (?, ?, 'Local Drive Path', ?)",
+                (g.tenant_id, new_document_id, path),
+            )
+            imported += 1
+        db.commit()
+        if imported:
+            log_action("Create", "supplier_document", supplier_id, f"Bulk-imported {imported} image(s)/photograph(s) for {supplier['supplier_name']}")
+            flash(f"Imported {imported} image{'s' if imported != 1 else ''}.", "success")
+        else:
+            flash("Nothing was imported — select at least one file first.", "error")
+        return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+
+    image_type = db.execute(
+        "SELECT document_type_id FROM supplier_document_types WHERE tenant_id = ? AND label = 'Image / Photograph'",
+        (g.tenant_id,),
+    ).fetchone()
+    return render_template(
+        "suppliers/bulk_import_images.html", supplier=supplier, document_types=_document_types(db),
+        default_document_type_id=image_type["document_type_id"] if image_type else None,
+    )
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/bulk-import-images/pick")
+@login_required
+def pick_bulk_import_files(supplier_id):
+    paths, error = pick_files_dialog(title="Select Images / Photographs to import", filetypes=IMAGE_FILE_TYPES)
+    files = [{"path": p, "name": os.path.splitext(basename(p))[0]} for p in paths]
+    return jsonify(files=files, error=error)
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/locations/new", methods=["GET", "POST"])
+@login_required
+def new_document_location(supplier_id, document_id):
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    item = _get_supplier_document(db, supplier_id, document_id)
+    if request.method == "POST":
+        form = request.form
+        db.execute(
+            "INSERT INTO supplier_document_locations (tenant_id, supplier_document_id, location_type, path_or_url) VALUES (?, ?, ?, ?)",
+            (g.tenant_id, document_id, form["location_type"], form["path_or_url"].strip()),
+        )
+        db.commit()
+        log_action("Create", "supplier_document_location", document_id, "Added location")
+        return redirect(url_for("suppliers.view_supplier_document", supplier_id=supplier_id, document_id=document_id))
+    return render_template("suppliers/document_location_form.html", supplier=supplier, item=item)
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/locations/<int:location_id>/delete", methods=["POST"])
+@login_required
+def delete_document_location(supplier_id, document_id, location_id):
+    db = get_db()
+    _get_supplier(db, supplier_id)
+    _get_supplier_document(db, supplier_id, document_id)
+    db.execute(
+        "DELETE FROM supplier_document_locations WHERE location_id = ? AND supplier_document_id = ? AND tenant_id = ?",
+        (location_id, document_id, g.tenant_id),
+    )
+    db.commit()
+    log_action("Delete", "supplier_document_location", document_id, f"Deleted location #{location_id}")
+    return redirect(url_for("suppliers.view_supplier_document", supplier_id=supplier_id, document_id=document_id))
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/locations/<int:location_id>/open")
+@login_required
+def open_document_location(supplier_id, document_id, location_id):
+    db = get_db()
+    _get_supplier(db, supplier_id)
+    loc = db.execute(
+        "SELECT * FROM supplier_document_locations WHERE location_id = ? AND supplier_document_id = ? AND tenant_id = ?",
+        (location_id, document_id, g.tenant_id),
+    ).fetchone()
+    if loc is None:
+        return jsonify(ok=False, error="Location not found."), 404
+    if loc["location_type"] != "Local Drive Path":
+        return jsonify(ok=True)
+    path = loc["path_or_url"]
+    if not os.path.exists(path):
+        return jsonify(ok=False, error=f"File not found on disk: {path}")
+    try:
+        open_local_path(path)
+    except Exception as e:
+        return jsonify(ok=False, error=f"Couldn't open the file: {e}")
+    log_action("Open", "supplier_document_location", document_id, f"Opened {path}")
+    return jsonify(ok=True)
 
 
 # ---------------------------------------------------------------- contacts

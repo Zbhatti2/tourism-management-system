@@ -241,6 +241,20 @@ def seed_hotel_template(db, tenant_id: int):
     )
     db.commit()
 
+# Starter list for supplier_document_types (MODULE X, Sept 2026) -- what
+# KIND of document a Supplier's "Documents, Links and Images" entry is.
+# Flat lookup, not nested under a Supplier Type -- every Supplier can have
+# licenses/permits/agreements/images regardless of type. Table Maintenance-
+# managed; a tenant can add more of its own.
+SUPPLIER_DOCUMENT_TYPES = [
+    "Business License",
+    "Permit / Permission",
+    "Rules & Regulations",
+    "Agreement",
+    "Image / Photograph",
+    "Other",
+]
+
 # ---------------------------------------------------------------------------
 # Human Resource Module (Human_Resource_Module1a.docx)
 # ---------------------------------------------------------------------------
@@ -2095,6 +2109,7 @@ def seed_lookup_tables(db, tenant_id: int):
     _seed_simple(db, "phone_types", tenant_id, SUPPLIER_PHONE_TYPES)
     seed_supplier_lookups(db, tenant_id)
     seed_hotel_template(db, tenant_id)  # Hotel Supplier Type Template -- requires the 'Hotel' row seed_supplier_lookups() just created
+    _seed_simple(db, "supplier_document_types", tenant_id, SUPPLIER_DOCUMENT_TYPES)
 
     # Human Resources (Human_Resource_Module1a.docx) — all generic starter
     # lookups + the tenant's one auto-provisioned Host Organization record.

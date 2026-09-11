@@ -159,6 +159,29 @@
       </div>
     </div>
 
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Documents, Links and Images</h2>
+          <div class="d-flex gap-1">
+            <a href="{{ url_for('suppliers.bulk_import_images', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-secondary" title="Bulk import images/photographs"><i class="bi bi-images"></i> Bulk Import</a>
+            <a href="{{ url_for('suppliers.new_supplier_document', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+          </div>
+        </div>
+        {% for d in documents %}
+        <div class="d-flex justify-content-between align-items-start border-top py-2">
+          <a href="{{ url_for('suppliers.view_supplier_document', supplier_id=supplier.supplier_id, document_id=d.supplier_document_id) }}" class="small text-decoration-none">
+            <strong>{{ d.document_name }}</strong>
+            {% if d.document_type_label %}<span class="badge bg-secondary-subtle text-dark ms-1">{{ d.document_type_label }}</span>{% endif %}
+            <br>
+            {% if d.description %}<span class="text-muted">{{ d.description }}</span><br>{% endif %}
+            <span class="text-muted"><i class="bi bi-paperclip"></i> {{ d.location_count }} location{{ 's' if d.location_count != 1 else '' }}</span>
+          </a>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No documents, links or images on file. Select "+" to add a business license, permit, rules &amp; regulations, agreement or image — or "Bulk Import" to add several images/photographs at once.</p>{% endfor %}
+      </div>
+    </div>
+
     {% if supplier.template_key == "hotel" %}
     <div class="card shadow-sm border-0 mb-3">
       <div class="card-body">

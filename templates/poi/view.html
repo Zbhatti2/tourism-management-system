@@ -76,7 +76,40 @@
     <div class="card shadow-sm border-0 mb-3">
       <div class="card-body">
         <h2 class="h6">Links</h2>
-        <p class="small mb-0" style="white-space: pre-line;">{{ (poi.links | linkify) if poi.links else "—" }}</p>
+        {% if poi_links %}
+        <dl class="row mb-0 small">
+          {% for l in poi_links %}
+          <dt class="col-sm-4">Link #{{ loop.index }}</dt>
+          <dd class="col-sm-8">
+            {% if l.url %}{{ l.url | linkify }}{% else %}—{% endif %}
+            {% if l.description %}<div class="text-muted">{{ l.description }}</div>{% endif %}
+          </dd>
+          {% endfor %}
+        </dl>
+        {% else %}
+        <p class="small mb-0">—</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Images / Photographs</h2>
+          <a href="{{ url_for('poi.view_poi_images', poi_id=poi.poi_id) }}" class="btn btn-sm btn-outline-primary">
+            {{ poi_images | length }} image{{ 's' if poi_images | length != 1 else '' }}
+          </a>
+        </div>
+        {% if poi_images %}
+        <ul class="small mb-0 ps-3">
+          {% for img in poi_images[:5] %}
+          <li>{{ img.caption or (img.path_or_url | basename) }} <span class="text-muted">({{ img.location_type }})</span></li>
+          {% endfor %}
+          {% if poi_images | length > 5 %}<li class="text-muted">…and {{ poi_images | length - 5 }} more</li>{% endif %}
+        </ul>
+        {% else %}
+        <p class="small mb-0">No images/photographs on file yet.</p>
+        {% endif %}
       </div>
     </div>
 

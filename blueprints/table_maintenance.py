@@ -330,6 +330,14 @@ TABLES = {
             "nav_label": "Supplier Type",
         },
     },
+    "supplier_document_types": {
+        "label": "Supplier Document Types",
+        "table": "supplier_document_types",
+        "pk": "document_type_id",
+        "references": [
+            {"table": "supplier_documents", "fk": "document_type_id", "label": "supplier document(s)"},
+        ],
+    },
 }
 
 
@@ -364,6 +372,7 @@ TABLE_GROUPS = [
         "supplier_types",
         "hotel_amenity_options",
         "hotel_room_types",
+        "supplier_document_types",
     ]),
     ("Knowledge Group", [
         "knowledge_domains",

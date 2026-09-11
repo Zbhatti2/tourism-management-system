@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Add Image{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">Add Image / Photograph</h1>
+<p class="text-muted mb-4">{{ poi.name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 640px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Caption <span class="text-muted small">(optional)</span></label>
+      <input class="form-control" name="caption" value="{{ (item.caption | orblank) if item else '' }}" autofocus>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Cloud Link <span class="text-muted small">(a web URL, e.g. https://…)</span></label>
+      <input class="form-control" type="url" name="cloud_link" placeholder="https://…" value="{{ (item.cloud_link | orblank) if item else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Local Drive Path</label>
+      <div class="input-group">
+        <input class="form-control" id="local_drive_path" name="local_drive_path" placeholder="C:\path\to\photo.jpg" value="{{ (item.local_drive_path | orblank) if item else '' }}">
+        <button class="btn btn-outline-secondary" type="button" id="browse_btn" onclick="browseFile()">Browse…</button>
+      </div>
+      <div id="browse_hint" class="form-text text-danger"></div>
+    </div>
+    <p class="text-muted small mb-0">Fill in a Cloud Link, a Local Drive Path, or both — each becomes its own entry in the Images/Photographs list.</p>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('poi.view_poi_images', poi_id=poi.poi_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  function browseFile() {
+    var hint = document.getElementById('browse_hint');
+    hint.textContent = '';
+    fetch("{{ url_for('poi.browse_poi_image_file', poi_id=poi.poi_id) }}")
+      .then(r => r.json())
+      .then(data => {
+        if (data.path) {
+          document.getElementById('local_drive_path').value = data.path;
+        } else if (data.error) {
+          hint.textContent = data.error;
+        }
+      })
+      .catch(() => { hint.textContent = 'Could not reach the file browser — type or paste the path instead.'; });
+  }
+</script>
+{% endblock %}

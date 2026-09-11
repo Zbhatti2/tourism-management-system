@@ -299,3 +299,27 @@ def pick_file_dialog():
     except Exception as e:
         return None, f"Couldn't open the file browser ({e}) — type or paste the path instead."
     return (path or None), None
+
+
+def pick_files_dialog(title="Select files", filetypes=None):
+    """Like pick_file_dialog, but lets the user multi-select any number of
+    files in one go (Ctrl/Shift-click, or drag a selection box) — used by
+    the Supplier Documents "Bulk Import Images" feature so a whole folder
+    of photos can be picked at once instead of one Browse… per file.
+    Returns (list_of_paths, error); list_of_paths is [] (not None) when
+    nothing was picked or the dialog was cancelled, so callers can always
+    iterate the result without a None-check."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError:
+        return [], "The file browser isn't available in this environment — add files individually instead."
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        paths = filedialog.askopenfilenames(title=title, filetypes=filetypes or [("All files", "*.*")])
+        root.destroy()
+    except Exception as e:
+        return [], f"Couldn't open the file browser ({e}) — add files individually instead."
+    return list(paths), None

@@ -619,6 +619,35 @@ def init_app(app):
         migrate()
         click.echo("Done.")
 
+    @app.cli.command("migrate-add-supplier-documents")
+    def migrate_add_supplier_documents_command():
+        """Flask CLI: `flask --app app migrate-add-supplier-documents` —
+        adds the Suppliers "Documents, Links and Images" sub-module
+        (supplier_document_types, supplier_documents,
+        supplier_document_locations, supplier_document_keywords,
+        supplier_document_hashtags) and seeds the starter document-type
+        lookup for every tenant. Safe to re-run; does not touch any
+        documents already on file. See migrate_add_supplier_documents.py
+        for the full story."""
+        from migrate_add_supplier_documents import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-poi-images-links")
+    def migrate_add_poi_images_links_command():
+        """Flask CLI: `flask --app app migrate-add-poi-images-links` — adds
+        Images/Photographs (poi_images) and structured Link + Description
+        rows (poi_reference_links, replacing the old freeform
+        points_of_interest.links textarea) to Points of Interest, and
+        backfills any existing freeform links text into the new structured
+        table. Safe to re-run; does not touch any images or links already
+        on file. See migrate_add_poi_images_links.py for the full story."""
+        from migrate_add_poi_images_links import migrate
+
+        migrate()
+        click.echo("Done.")
+
     @app.cli.command("seed-tenant")
     def seed_tenant_command():
         """Flask CLI: `flask --app app seed-tenant` — creates the first

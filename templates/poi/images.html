@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Images / Photographs{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-0">Images / Photographs</h1>
+    <p class="text-muted mb-0">{{ poi.name }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('poi.bulk_import_poi_images', poi_id=poi.poi_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-images"></i> Bulk Import</a>
+    <a href="{{ url_for('poi.new_poi_image', poi_id=poi.poi_id) }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Add Image</a>
+    <a href="{{ url_for('poi.view_poi', poi_id=poi.poi_id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body">
+    {% for img in images %}
+    <div class="d-flex justify-content-between align-items-center border-top py-2 {{ 'border-0' if loop.first else '' }}">
+      <span class="small">
+        <span class="badge bg-light text-dark border">{{ img.location_type }}</span>
+        {% if img.caption %}<strong>{{ img.caption }}</strong> &middot; {% endif %}
+        {% if img.location_type == "Cloud Link" %}
+        <a href="{{ img.path_or_url }}" target="_blank" rel="noopener" class="text-break">{{ img.path_or_url }}</a>
+        {% else %}
+        <a href="#" onclick="openImage(event, {{ img.poi_image_id }})" title="Open with the default app for this file type">
+          <i class="bi bi-file-earmark-image"></i> {{ img.path_or_url | basename }}
+        </a>
+        <div class="text-muted text-break" style="font-size:0.78em;">{{ img.path_or_url }}</div>
+        {% endif %}
+      </span>
+      <form method="post" action="{{ url_for('poi.delete_poi_image', poi_id=poi.poi_id, image_id=img.poi_image_id) }}" onsubmit="return confirm('Delete this image?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+      </form>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">No images/photographs on file yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const openImageUrlTemplate = "{{ url_for('poi.open_poi_image', poi_id=poi.poi_id, image_id=0) }}";
+  function openImage(e, imageId) {
+    e.preventDefault();
+    const url = openImageUrlTemplate.replace('/0/open', `/${imageId}/open`);
+    fetch(url)
+      .then(r => r.json())
+      .then(data => { if (!data.ok) alert(data.error || 'Could not open the file.'); })
+      .catch(() => alert('Could not reach the server to open the file.'));
+  }
+</script>
+{% endblock %}

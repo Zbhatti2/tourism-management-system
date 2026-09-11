@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if document_id else "Add" }} Document{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">{{ "Edit" if document_id else "Add" }} Document, Link or Image</h1>
+<p class="text-muted mb-4">{{ supplier.supplier_name }}</p>
+<form method="post" class="card shadow-sm border-0">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Document name *</label>
+        <input class="form-control" name="document_name" required value="{{ (item.document_name | orblank) if item else '' }}" autofocus>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Document type</label>
+        <select class="form-select" name="document_type_id">
+          <option value="">— None —</option>
+          {% for t in document_types %}
+          <option value="{{ t.document_type_id }}" {{ "selected" if item and (item.document_type_id | string) == (t.document_type_id | string) else "" }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Author(s) <span class="text-muted small">(e.g. issuing authority or signatory)</span></label>
+        <input class="form-control" name="authors" value="{{ (item.authors | orblank) if item else '' }}">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Description <span class="text-muted small">(max 200 characters)</span></label>
+        <textarea class="form-control" name="description" id="description" rows="5" maxlength="200">{{ (item.description | orblank) if item else '' }}</textarea>
+        <div class="form-text"><span id="description-count">0</span>/200 characters</div>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Notes <span class="text-muted small">(brief summary — web URLs are automatically turned into clickable links)</span></label>
+        <textarea class="form-control" name="notes" rows="4">{{ (item.notes | orblank) if item else '' }}</textarea>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Keywords <span class="text-muted small">(comma-separated)</span></label>
+        <input class="form-control" name="keywords" value="{{ keywords }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Hashtags <span class="text-muted small">(comma-separated)</span></label>
+        <input class="form-control" name="hashtags" value="{{ hashtags }}">
+      </div>
+
+      <div class="col-12"><hr class="my-2"></div>
+      <div class="col-12">
+        <h2 class="h6 mb-1">Location {% if document_id %}<span class="text-muted small fw-normal">(add another copy)</span>{% endif %}</h2>
+        <p class="text-muted small">Where a copy of this document lives — a web link, a local file, or both. {% if document_id %}Existing locations, and removing one, are managed below on this document's own page after you save.{% else %}You can add more (or remove one) from the document's own page after you save.{% endif %}</p>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Cloud Link <span class="text-muted small">(a web URL, e.g. https://…)</span></label>
+        <input class="form-control" type="url" name="cloud_link" placeholder="https://…" value="{{ (item.cloud_link | orblank) if item else '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Local Drive Path</label>
+        <div class="input-group">
+          <input class="form-control" id="local_drive_path" name="local_drive_path" placeholder="C:\path\to\file.pdf" value="{{ (item.local_drive_path | orblank) if item else '' }}">
+          <button class="btn btn-outline-secondary" type="button" id="browse_btn" onclick="browseFile()">Browse…</button>
+        </div>
+        <div id="browse_hint" class="form-text text-danger"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('suppliers.view_supplier_document', supplier_id=supplier.supplier_id, document_id=document_id) if document_id else url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% if document_id %}<p class="text-muted small mt-2">All of this document's locations — including ones added here — can be reviewed, added to, or removed from its own page.</p>{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    const ta = document.getElementById('description');
+    const counter = document.getElementById('description-count');
+    if (!ta || !counter) return;
+    const update = () => { counter.textContent = ta.value.length; };
+    ta.addEventListener('input', update);
+    update();
+  })();
+
+  function browseFile() {
+    var hint = document.getElementById('browse_hint');
+    hint.textContent = '';
+    fetch("{{ url_for('suppliers.browse_document_file', supplier_id=supplier.supplier_id) }}")
+      .then(r => r.json())
+      .then(data => {
+        if (data.path) {
+          document.getElementById('local_drive_path').value = data.path;
+        } else if (data.error) {
+          hint.textContent = data.error;
+        }
+      })
+      .catch(() => { hint.textContent = 'Could not reach the file browser — type or paste the path instead.'; });
+  }
+</script>
+{% endblock %}

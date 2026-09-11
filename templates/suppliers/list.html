@@ -77,6 +77,7 @@
           <th>City</th>
           <th>Province/State</th>
           <th>Country</th>
+          <th class="text-end">Docs</th>
         </tr>
       </thead>
       <tbody>
@@ -99,9 +100,14 @@
           <td class="text-muted small">{{ s.city_label or "" }}</td>
           <td class="text-muted small">{{ s.state_label or "" }}</td>
           <td class="text-muted small">{{ s.country_label or "" }}</td>
+          <td class="text-end">
+            {% if s.document_count %}
+            <span class="badge bg-light text-dark border"><i class="bi bi-paperclip"></i> {{ s.document_count }}</span>
+            {% endif %}
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="text-center text-muted py-5">No suppliers yet — <a href="{{ url_for('suppliers.new_external_resource') if is_external_resource else url_for('suppliers.new_supplier') }}">add the first one</a>.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-5">No suppliers yet — <a href="{{ url_for('suppliers.new_external_resource') if is_external_resource else url_for('suppliers.new_supplier') }}">add the first one</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

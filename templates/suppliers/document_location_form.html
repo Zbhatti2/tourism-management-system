@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Add Location{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">Add Location — {{ item.document_name }}</h1>
+<p class="text-muted mb-4">{{ supplier.supplier_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Type *</label>
+      <select class="form-select" id="location_type" name="location_type" required onchange="toggleLocationType()">
+        <option value="Cloud Link">Cloud Link</option>
+        <option value="Local Drive Path">Local Drive Path</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Path or URL *</label>
+      <div class="input-group">
+        <input class="form-control" id="path_or_url" name="path_or_url" required autofocus>
+        <button class="btn btn-outline-secondary" type="button" id="browse_btn" onclick="browseFile()">Browse…</button>
+      </div>
+      <div id="browse_hint" class="form-text text-danger"></div>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('suppliers.view_supplier_document', supplier_id=supplier.supplier_id, document_id=item.supplier_document_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  function toggleLocationType() {
+    var isLocal = document.getElementById('location_type').value === 'Local Drive Path';
+    document.getElementById('browse_btn').style.display = isLocal ? '' : 'none';
+    document.getElementById('path_or_url').placeholder = isLocal ? 'C:\\path\\to\\file.pdf' : 'https://...';
+  }
+  function browseFile() {
+    var hint = document.getElementById('browse_hint');
+    hint.textContent = '';
+    fetch("{{ url_for('suppliers.browse_document_file', supplier_id=supplier.supplier_id) }}")
+      .then(r => r.json())
+      .then(data => {
+        if (data.path) {
+          document.getElementById('path_or_url').value = data.path;
+        } else if (data.error) {
+          hint.textContent = data.error;
+        }
+      })
+      .catch(() => { hint.textContent = 'Could not reach the file browser — type or paste the path instead.'; });
+  }
+  toggleLocationType();
+</script>
+{% endblock %}
