@@ -290,6 +290,46 @@ TABLES = {
             {"table": "host_phones", "fk": "phone_type_id", "label": "host phone(s)"},
         ],
     },
+    "hotel_amenity_options": {
+        "label": "Amenities & Facilities Options",
+        "table": "hotel_amenity_options",
+        "pk": "amenity_option_id",
+        "references": [
+            {"table": "supplier_amenities", "fk": "amenity_option_id", "label": "supplier amenity checklist entry(ies)"},
+        ],
+        "parent": {
+            "table": "supplier_types",
+            "pk": "supplier_type_id",
+            "fk": "supplier_type_id",
+            "label_field": "label",
+            "nav_label": "Supplier Type",
+        },
+        "extra_fields": [
+            {
+                "name": "category",
+                "label": "Category",
+                "type": "select",
+                "required": True,
+                "options": ["In-Room", "Food & Drink", "Wellness", "Business", "Convenience"],
+            },
+            {"name": "icon", "label": "Icon", "type": "icon", "required": False},
+        ],
+    },
+    "hotel_room_types": {
+        "label": "Room Types",
+        "table": "hotel_room_types",
+        "pk": "room_type_id",
+        "references": [
+            {"table": "supplier_rooms", "fk": "room_type_id", "label": "supplier Room row(s)"},
+        ],
+        "parent": {
+            "table": "supplier_types",
+            "pk": "supplier_type_id",
+            "fk": "supplier_type_id",
+            "label_field": "label",
+            "nav_label": "Supplier Type",
+        },
+    },
 }
 
 
@@ -322,6 +362,8 @@ TABLE_GROUPS = [
         "supplier_address_types",
         "supplier_subtypes",
         "supplier_types",
+        "hotel_amenity_options",
+        "hotel_room_types",
     ]),
     ("Knowledge Group", [
         "knowledge_domains",
@@ -371,6 +413,15 @@ def _usage_count(db, cfg, entry_id):
     return total, breakdown
 
 
+def _missing_required_extra_field(values, cfg):
+    """Label of the first required extra_fields entry left blank, or None
+    if all required ones are filled."""
+    for field in cfg.get("extra_fields", []):
+        if field.get("required") and not values.get(field["name"]):
+            return field["label"]
+    return None
+
+
 def _parent_options(db, cfg):
     """Active rows from a table's parent lookup, for the picker on its
     add/edit form. None when the table isn't nested under anything."""
@@ -385,7 +436,10 @@ def _parent_options(db, cfg):
 
 def _row_values(form, cfg):
     """Column -> value for an insert/update, built from the submitted form.
-    Includes the parent foreign key column too when this table is nested."""
+    Includes the parent foreign key column too when this table is nested,
+    plus any table-specific "extra_fields" (e.g. hotel_amenity_options'
+    Category/Icon) beyond the standard code/label/description/sort_order/
+    is_active shape every lookup table otherwise shares."""
     label = form.get("label", "").strip()
     values = {
         "code": form.get("code", "").strip() or None,
@@ -396,6 +450,8 @@ def _row_values(form, cfg):
     }
     if cfg.get("parent"):
         values[cfg["parent"]["fk"]] = _safe_int(form.get("parent_id"), None)
+    for field in cfg.get("extra_fields", []):
+        values[field["name"]] = form.get(field["name"], "").strip() or None
     return label, values
 
 
@@ -490,6 +546,10 @@ def new_entry(table_key):
         if cfg.get("parent") and not values[cfg["parent"]["fk"]]:
             flash(f"{cfg['parent']['nav_label']} is required.", "error")
             return render_template("table_maintenance/form.html", cfg=cfg, table_key=table_key, entry=None, parent_options=_parent_options(db, cfg))
+        missing_field = _missing_required_extra_field(values, cfg)
+        if missing_field:
+            flash(f"{missing_field} is required.", "error")
+            return render_template("table_maintenance/form.html", cfg=cfg, table_key=table_key, entry=None, parent_options=_parent_options(db, cfg))
         try:
             values = {"tenant_id": g.tenant_id, **values}
             cols = ", ".join(values.keys())
@@ -525,6 +585,10 @@ def edit_entry(table_key, entry_id):
             return render_template("table_maintenance/form.html", cfg=cfg, table_key=table_key, entry=entry, parent_options=_parent_options(db, cfg))
         if cfg.get("parent") and not values[cfg["parent"]["fk"]]:
             flash(f"{cfg['parent']['nav_label']} is required.", "error")
+            return render_template("table_maintenance/form.html", cfg=cfg, table_key=table_key, entry=entry, parent_options=_parent_options(db, cfg))
+        missing_field = _missing_required_extra_field(values, cfg)
+        if missing_field:
+            flash(f"{missing_field} is required.", "error")
             return render_template("table_maintenance/form.html", cfg=cfg, table_key=table_key, entry=entry, parent_options=_parent_options(db, cfg))
         try:
             set_clause = ", ".join(f"{col}=?" for col in values.keys())

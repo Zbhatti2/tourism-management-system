@@ -22,6 +22,7 @@
           <th>Code</th>
           <th>Label</th>
           {% if cfg.parent %}<th>{{ cfg.parent.nav_label }}</th>{% endif %}
+          {% for field in cfg.get("extra_fields", []) %}<th>{{ field.label }}</th>{% endfor %}
           <th>Description</th>
           <th>Sort</th>
           <th>Status</th>
@@ -35,6 +36,15 @@
           <td class="text-muted small">{{ item.row.code or "" }}</td>
           <td><strong>{{ item.row.label }}</strong></td>
           {% if cfg.parent %}<td class="text-muted small">{{ item.row.parent_label or "" }}</td>{% endif %}
+          {% for field in cfg.get("extra_fields", []) %}
+          <td class="text-muted small">
+            {% if field.type == "icon" and item.row[field.name] %}
+            <i class="bi {{ item.row[field.name] }}"></i> <span class="small">{{ item.row[field.name] }}</span>
+            {% else %}
+            {{ item.row[field.name] or "" }}
+            {% endif %}
+          </td>
+          {% endfor %}
           <td class="text-muted small">{{ item.row.description or "" }}</td>
           <td class="text-muted small">{{ item.row.sort_order }}</td>
           <td>
@@ -69,7 +79,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="{{ 8 if cfg.parent else 7 }}" class="text-center text-muted py-5">No entries yet — <a href="{{ url_for('table_maintenance.new_entry', table_key=table_key) }}">add the first one</a>.</td></tr>
+        <tr><td colspan="{{ 7 + (1 if cfg.parent else 0) + cfg.get('extra_fields', []) | length }}" class="text-center text-muted py-5">No entries yet — <a href="{{ url_for('table_maintenance.new_entry', table_key=table_key) }}">add the first one</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

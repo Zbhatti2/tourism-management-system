@@ -29,6 +29,29 @@
       <label class="form-label">Description</label>
       <textarea class="form-control" name="description" rows="3">{{ (entry.description | orblank) if entry else '' }}</textarea>
     </div>
+    {% for field in cfg.get("extra_fields", []) %}
+    <div class="mb-3">
+      <label class="form-label">{{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}</label>
+      {% if field.type == "select" %}
+      <select class="form-select" name="{{ field.name }}" {{ "required" if field.required else "" }}>
+        <option value="">Choose…</option>
+        {% for opt in field.options %}
+        <option value="{{ opt }}" {{ "selected" if entry and entry[field.name] == opt else "" }}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+      {% elif field.type == "icon" %}
+      <div class="input-group" style="max-width: 320px;">
+        <span class="input-group-text" id="icon-preview">
+          <i class="bi {{ (entry[field.name] | orblank) if entry else '' }}" id="icon-preview-glyph"></i>
+        </span>
+        <input class="form-control" name="{{ field.name }}" id="icon-input" value="{{ (entry[field.name] | orblank) if entry else '' }}" placeholder="bi-wifi">
+      </div>
+      <div class="form-text">A <a href="https://icons.getbootstrap.com/" target="_blank" rel="noopener">Bootstrap Icons</a> class name, e.g. <code>bi-wifi</code>.</div>
+      {% else %}
+      <input class="form-control" name="{{ field.name }}" value="{{ (entry[field.name] | orblank) if entry else '' }}" {{ "required" if field.required else "" }}>
+      {% endif %}
+    </div>
+    {% endfor %}
     <div class="mb-3">
       <label class="form-label">Sort order</label>
       <input type="number" class="form-control" name="sort_order" value="{{ (entry.sort_order | orblank) if entry else 0 }}" style="max-width: 140px;">
@@ -43,4 +66,18 @@
     <button class="btn btn-primary" type="submit">Save</button>
   </div>
 </form>
+{% endblock %}
+{% block scripts %}
+{% if cfg.get("extra_fields") | selectattr("type", "equalto", "icon") | list %}
+<script>
+  // Live-update the icon glyph preview as the class name is typed.
+  const iconInput = document.getElementById('icon-input');
+  const iconGlyph = document.getElementById('icon-preview-glyph');
+  if (iconInput && iconGlyph) {
+    iconInput.addEventListener('input', () => {
+      iconGlyph.className = 'bi ' + iconInput.value.trim();
+    });
+  }
+</script>
+{% endif %}
 {% endblock %}

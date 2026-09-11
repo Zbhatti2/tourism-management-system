@@ -118,7 +118,7 @@ def _city_options(db):
 
 def _get_supplier(db, supplier_id):
     supplier = db.execute(
-        """SELECT s.*, t.label AS type_label, st.label AS subtype_label
+        """SELECT s.*, t.label AS type_label, t.template_key AS template_key, st.label AS subtype_label
            FROM suppliers s
            LEFT JOIN supplier_types t ON t.supplier_type_id = s.supplier_type_id
            LEFT JOIN supplier_subtypes st ON st.supplier_subtype_id = s.supplier_subtype_id
@@ -128,6 +128,26 @@ def _get_supplier(db, supplier_id):
     if supplier is None:
         abort(404)
     return supplier
+
+
+def _hotel_amenity_options(db, supplier_type_id):
+    """The Hotel Template's master Amenities & Facilities list, scoped to
+    one Supplier Type (nested lookup — see hotel_amenity_options / Zeb's
+    Amenities_and_Facilities1a.txt request and Table Maintenance's
+    "associated with Supplier Type Hotel" follow-up), in sub-section
+    (category) order."""
+    return db.execute(
+        "SELECT * FROM hotel_amenity_options WHERE is_active = 1 AND tenant_id = ? AND supplier_type_id = ? "
+        "ORDER BY sort_order, category, label",
+        (g.tenant_id, supplier_type_id),
+    ).fetchall()
+
+
+def _hotel_room_types(db, supplier_type_id):
+    return db.execute(
+        "SELECT * FROM hotel_room_types WHERE is_active = 1 AND tenant_id = ? AND supplier_type_id = ? ORDER BY sort_order, label",
+        (g.tenant_id, supplier_type_id),
+    ).fetchall()
 
 
 # ---------------------------------------------------------------- list/view
@@ -257,7 +277,36 @@ def view_supplier(supplier_id):
         contacts.append({"row": c, "phones": phones})
     from knowledge_graph import get_edges_for
     kg_edges = get_edges_for(db, g.tenant_id, "Supplier", supplier_id)
-    return render_template("suppliers/view.html", supplier=supplier, addresses=addresses, contacts=contacts, kg_edges=kg_edges)
+
+    hotel_amenities_by_category = None
+    hotel_rooms = None
+    hotel_room_total = 0
+    if supplier["template_key"] == "hotel":
+        checked = db.execute(
+            """SELECT o.category, o.label, o.icon
+               FROM supplier_amenities sa
+               JOIN hotel_amenity_options o ON o.amenity_option_id = sa.amenity_option_id
+               WHERE sa.supplier_id = ? AND sa.tenant_id = ?
+               ORDER BY o.sort_order, o.category, o.label""",
+            (supplier_id, g.tenant_id),
+        ).fetchall()
+        hotel_amenities_by_category = {}
+        for row in checked:
+            hotel_amenities_by_category.setdefault(row["category"], []).append(row)
+        hotel_rooms = db.execute(
+            """SELECT r.*, rt.label AS room_type_label, rt.description AS default_description
+               FROM supplier_rooms r
+               JOIN hotel_room_types rt ON rt.room_type_id = r.room_type_id
+               WHERE r.supplier_id = ? AND r.tenant_id = ?
+               ORDER BY rt.sort_order, rt.label""",
+            (supplier_id, g.tenant_id),
+        ).fetchall()
+        hotel_room_total = sum(r["number_of_rooms"] for r in hotel_rooms)
+
+    return render_template(
+        "suppliers/view.html", supplier=supplier, addresses=addresses, contacts=contacts, kg_edges=kg_edges,
+        hotel_amenities_by_category=hotel_amenities_by_category, hotel_rooms=hotel_rooms, hotel_room_total=hotel_room_total,
+    )
 
 
 # ------------------------------------------------------------------- form
@@ -561,6 +610,132 @@ def delete_supplier_address(supplier_id, address_id):
     db.commit()
     log_action("Delete", "supplier_address", supplier_id, f"Deleted supplier address #{address_id}")
     flash("Address deleted.", "success")
+    return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+
+
+# ------------------------------------------------ Hotel Template: amenities
+
+@suppliers_bp.route("/<int:supplier_id>/amenities/edit", methods=["GET", "POST"])
+@login_required
+def edit_supplier_amenities(supplier_id):
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    if supplier["template_key"] != "hotel":
+        abort(404)
+    if request.method == "POST":
+        checked_ids = {int(v) for v in request.form.getlist("amenity_option_id") if v.strip()}
+        db.execute("DELETE FROM supplier_amenities WHERE supplier_id = ? AND tenant_id = ?", (supplier_id, g.tenant_id))
+        for option_id in checked_ids:
+            db.execute(
+                "INSERT INTO supplier_amenities (tenant_id, supplier_id, amenity_option_id) VALUES (?, ?, ?)",
+                (g.tenant_id, supplier_id, option_id),
+            )
+        db.commit()
+        log_action("Update", "supplier_amenities", supplier_id, "Updated Amenities & Facilities")
+        flash("Amenities & Facilities updated.", "success")
+        return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+
+    options = _hotel_amenity_options(db, supplier["supplier_type_id"])
+    checked = {
+        r["amenity_option_id"] for r in db.execute(
+            "SELECT amenity_option_id FROM supplier_amenities WHERE supplier_id = ? AND tenant_id = ?",
+            (supplier_id, g.tenant_id),
+        ).fetchall()
+    }
+    grouped_options = {}
+    for opt in options:
+        grouped_options.setdefault(opt["category"], []).append(opt)
+    return render_template(
+        "suppliers/amenities_form.html", supplier=supplier, grouped_options=grouped_options, checked=checked
+    )
+
+
+# ---------------------------------------------------- Hotel Template: rooms
+
+@suppliers_bp.route("/<int:supplier_id>/rooms/new", methods=["GET", "POST"])
+@login_required
+def new_supplier_room(supplier_id):
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    if supplier["template_key"] != "hotel":
+        abort(404)
+    # One row per Room Type -- Types already on file for this Supplier are
+    # excluded from the picker; edit that existing row to change its count
+    # instead of adding a duplicate.
+    used_type_ids = {
+        r["room_type_id"] for r in db.execute(
+            "SELECT room_type_id FROM supplier_rooms WHERE supplier_id = ? AND tenant_id = ?",
+            (supplier_id, g.tenant_id),
+        ).fetchall()
+    }
+    available_types = [t for t in _hotel_room_types(db, supplier["supplier_type_id"]) if t["room_type_id"] not in used_type_ids]
+    if request.method == "POST":
+        form = request.form
+        room_type_id = form.get("room_type_id") or None
+        if not room_type_id:
+            flash("Choose a Room Type.", "danger")
+            return render_template("suppliers/room_form.html", supplier=supplier, room=None, room_types=available_types)
+        db.execute(
+            "INSERT INTO supplier_rooms (tenant_id, supplier_id, room_type_id, description, number_of_rooms) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                g.tenant_id, supplier_id, room_type_id,
+                form.get("description", "").strip() or None,
+                int(form.get("number_of_rooms") or 0),
+            ),
+        )
+        db.commit()
+        log_action("Create", "supplier_room", supplier_id, "Added a Room Type")
+        flash("Room Type added.", "success")
+        return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+    return render_template("suppliers/room_form.html", supplier=supplier, room=None, room_types=available_types)
+
+
+@suppliers_bp.route("/<int:supplier_id>/rooms/<int:room_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_supplier_room(supplier_id, room_id):
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    if supplier["template_key"] != "hotel":
+        abort(404)
+    room = db.execute(
+        """SELECT r.*, rt.label AS room_type_label, rt.description AS default_description
+           FROM supplier_rooms r JOIN hotel_room_types rt ON rt.room_type_id = r.room_type_id
+           WHERE r.supplier_room_id = ? AND r.supplier_id = ? AND r.tenant_id = ?""",
+        (room_id, supplier_id, g.tenant_id),
+    ).fetchone()
+    if room is None:
+        abort(404)
+    if request.method == "POST":
+        form = request.form
+        db.execute(
+            "UPDATE supplier_rooms SET description = ?, number_of_rooms = ?, updated_at = datetime('now') "
+            "WHERE supplier_room_id = ? AND tenant_id = ?",
+            (form.get("description", "").strip() or None, int(form.get("number_of_rooms") or 0), room_id, g.tenant_id),
+        )
+        db.commit()
+        log_action("Update", "supplier_room", supplier_id, f"Updated Room Type #{room_id}")
+        flash("Room Type updated.", "success")
+        return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+    # Editing an existing row keeps its Room Type fixed (shown read-only) -- only description/count change.
+    return render_template("suppliers/room_form.html", supplier=supplier, room=room, room_types=None)
+
+
+@suppliers_bp.route("/<int:supplier_id>/rooms/<int:room_id>/delete", methods=["POST"])
+@login_required
+def delete_supplier_room(supplier_id, room_id):
+    db = get_db()
+    _get_supplier(db, supplier_id)
+    room = db.execute(
+        "SELECT * FROM supplier_rooms WHERE supplier_room_id = ? AND supplier_id = ? AND tenant_id = ?",
+        (room_id, supplier_id, g.tenant_id),
+    ).fetchone()
+    if room is None:
+        abort(404)
+    db.execute("DELETE FROM supplier_rooms WHERE supplier_room_id = ? AND tenant_id = ?", (room_id, g.tenant_id))
+    db.commit()
+    log_action("Delete", "supplier_room", supplier_id, f"Deleted Room Type #{room_id}")
+    flash("Room Type removed.", "success")
     return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
 
 

@@ -591,6 +591,34 @@ def init_app(app):
         migrate()
         click.echo("Done.")
 
+    @app.cli.command("migrate-add-hotel-template")
+    def migrate_add_hotel_template_command():
+        """Flask CLI: `flask --app app migrate-add-hotel-template` — adds
+        the "Hotel" Supplier Type Template: supplier_types.template_key,
+        the hotel_amenity_options / supplier_amenities / hotel_room_types /
+        supplier_rooms tables, and seeds the Amenities & Facilities +
+        Room Types master lists for every existing tenant, flagging their
+        'Hotel' Supplier Type. Safe to re-run; does not touch any existing
+        data. See migrate_add_hotel_template.py for the full story."""
+        from migrate_add_hotel_template import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-hotel-lookup-parent")
+    def migrate_add_hotel_lookup_parent_command():
+        """Flask CLI: `flask --app app migrate-add-hotel-lookup-parent` —
+        nests hotel_amenity_options and hotel_room_types under
+        supplier_types (parent = 'Hotel'), so both are manageable from
+        Table Maintenance, and renames hotel_room_types.default_description
+        to description to match the standard lookup-table shape. Safe to
+        re-run; does not touch any Amenities/Room Types data already on
+        file. See migrate_add_hotel_lookup_parent.py for the full story."""
+        from migrate_add_hotel_lookup_parent import migrate
+
+        migrate()
+        click.echo("Done.")
+
     @app.cli.command("seed-tenant")
     def seed_tenant_command():
         """Flask CLI: `flask --app app seed-tenant` — creates the first

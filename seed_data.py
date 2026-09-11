@@ -151,6 +151,97 @@ ORGANIZATION_PHONE_TYPES = ["Office", "Mobile", "Fax"]
 SUPPLIER_PHONE_TYPES = ["Cell", "Office", "Fax"]
 
 # ---------------------------------------------------------------------------
+# Supplier Type Templates -- Hotel (Sept 2026, Amenities_and_Facilities1a.txt)
+# ---------------------------------------------------------------------------
+
+# (category, label, icon) -- the Hotel Template's Amenities & Facilities
+# master list (hotel_amenity_options -- see schema.sql's "the display
+# icons can be kept in the Templates table" note). Categories become the
+# checklist form's sub-sections, in this exact order. `icon` is a
+# Bootstrap Icons class name (the app already loads Bootstrap Icons); a
+# handful of items (Tennis Courts, ATM) have no exact match in that set,
+# so the closest reasonable icon was picked -- edit hotel_amenity_options.
+# icon directly (or via a future Table Maintenance entry) to swap any of
+# these without a code change.
+HOTEL_AMENITY_OPTIONS = [
+    ("In-Room", "Wi-Fi", "bi-wifi"),
+    ("In-Room", "TV", "bi-tv"),
+    ("In-Room", "Safe", "bi-safe2"),
+    ("In-Room", "Mini-bar", "bi-cup-straw"),
+    ("In-Room", "Coffee maker", "bi-cup-hot"),
+    ("Food & Drink", "Restaurant", "bi-shop"),
+    ("Food & Drink", "Bar", "bi-cup"),
+    ("Food & Drink", "Room service", "bi-bell"),
+    ("Food & Drink", "Café", "bi-cup-hot-fill"),
+    ("Wellness", "Gym", "bi-activity"),
+    ("Wellness", "Pool", "bi-water"),
+    ("Wellness", "Spa", "bi-flower1"),
+    ("Wellness", "Sauna", "bi-thermometer-sun"),
+    ("Wellness", "Tennis Courts", "bi-trophy"),
+    ("Business", "Meeting rooms", "bi-people"),
+    ("Business", "Business center", "bi-briefcase"),
+    ("Business", "Printer", "bi-printer"),
+    ("Convenience", "Parking", "bi-p-square"),
+    ("Convenience", "Shuttle", "bi-truck"),
+    ("Convenience", "ATM", "bi-cash-stack"),
+    ("Convenience", "Gift shop", "bi-gift"),
+]
+
+# (label, description) -- the Hotel Template's Room Types master
+# list (hotel_room_types), verbatim from the request's own table. A
+# Supplier's own supplier_rooms row can override the description; the
+# label always comes from this lookup.
+HOTEL_ROOM_TYPES = [
+    ("Single Room", "One single/twin bed, sleeps one guest. Common in Europe and business hotels."),
+    ("Double Room", "One double bed (full size), sleeps two guests."),
+    ("Twin Room", "Two separate single beds, sleeps two guests. Common for friends or colleagues."),
+    ("Queen Room", "One queen-size bed, sleeps two guests. Slightly larger than a double."),
+    ("King Room", "One king-size bed, sleeps two guests. Premium comfort."),
+    ("Double-Double Room", "Two double beds, sleeps up to four guests. Popular with families."),
+    ("Queen-Queen Room", "Two queen beds, sleeps up to four guests."),
+]
+
+
+def seed_hotel_template(db, tenant_id: int):
+    """Seeds the Hotel Template's two master lists (HOTEL_AMENITY_OPTIONS
+    into hotel_amenity_options, HOTEL_ROOM_TYPES into hotel_room_types),
+    nested under the tenant's 'Hotel' supplier_types row (both tables'
+    supplier_type_id -- same "nested lookup" pattern as supplier_subtypes,
+    per Zeb's "Amenities Options and Room Type will be Lookup tables
+    associated with Supplier Type Hotel" -- Sept 2026), and flags that
+    'Hotel' row with template_key='hotel' so the Supplier view/edit UI
+    shows the Amenities & Facilities / Rooms sections. Requires
+    seed_supplier_lookups() to have already run (needs the 'Hotel' row to
+    exist). Idempotent -- INSERT OR IGNORE keyed on (tenant_id, code); the
+    UPDATE is itself idempotent."""
+    hotel_type = db.execute(
+        "SELECT supplier_type_id FROM supplier_types WHERE tenant_id = ? AND label = 'Hotel'", (tenant_id,)
+    ).fetchone()
+    if not hotel_type:
+        return
+    hotel_type_id = hotel_type["supplier_type_id"]
+
+    for i, (category, label, icon) in enumerate(HOTEL_AMENITY_OPTIONS):
+        code = _slug(f"{category} {label}")
+        db.execute(
+            "INSERT OR IGNORE INTO hotel_amenity_options (tenant_id, supplier_type_id, category, code, label, icon, sort_order, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+            (tenant_id, hotel_type_id, category, code, label, icon, i),
+        )
+    for i, (label, description) in enumerate(HOTEL_ROOM_TYPES):
+        code = _slug(label)
+        db.execute(
+            "INSERT OR IGNORE INTO hotel_room_types (tenant_id, supplier_type_id, code, label, description, sort_order, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, 1)",
+            (tenant_id, hotel_type_id, code, label, description, i),
+        )
+    db.execute(
+        "UPDATE supplier_types SET template_key = 'hotel' WHERE tenant_id = ? AND label = 'Hotel'",
+        (tenant_id,),
+    )
+    db.commit()
+
+# ---------------------------------------------------------------------------
 # Human Resource Module (Human_Resource_Module1a.docx)
 # ---------------------------------------------------------------------------
 
@@ -2003,6 +2094,7 @@ def seed_lookup_tables(db, tenant_id: int):
     _seed_simple(db, "organization_phone_types", tenant_id, ORGANIZATION_PHONE_TYPES)
     _seed_simple(db, "phone_types", tenant_id, SUPPLIER_PHONE_TYPES)
     seed_supplier_lookups(db, tenant_id)
+    seed_hotel_template(db, tenant_id)  # Hotel Supplier Type Template -- requires the 'Hotel' row seed_supplier_lookups() just created
 
     # Human Resources (Human_Resource_Module1a.docx) — all generic starter
     # lookups + the tenant's one auto-provisioned Host Organization record.

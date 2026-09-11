@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if room else "Add" }} Room Type{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">{{ "Edit" if room else "Add" }} Room Type</h1>
+<p class="text-muted mb-4">{{ supplier.supplier_name }}</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if room %}
+    <div class="mb-3">
+      <label class="form-label">Room Type</label>
+      <input class="form-control" value="{{ room.room_type_label }}" disabled>
+    </div>
+    {% else %}
+    <div class="mb-3">
+      <label class="form-label">Room Type <span class="text-danger">*</span></label>
+      <select class="form-select" id="room_type_id" name="room_type_id" required {{ "disabled" if not room_types else "" }}>
+        <option value="">— Select —</option>
+        {% for t in room_types %}
+        <option value="{{ t.room_type_id }}" data-default-description="{{ t.description | orblank }}">{{ t.label }}</option>
+        {% endfor %}
+      </select>
+      {% if not room_types %}
+      <div class="form-text">Every Room Type already has a row for this Hotel — edit its row instead of adding a duplicate.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea class="form-control" id="description" name="description" rows="3">{{ (room.description | orblank) if room else '' }}</textarea>
+      <div class="form-text">Defaults to the Room Type's standard description — edit freely for this Hotel.</div>
+    </div>
+    <div class="mb-3" style="max-width: 220px;">
+      <label class="form-label">Number of Rooms</label>
+      <input class="form-control" type="number" min="0" step="1" name="number_of_rooms"
+             value="{{ room.number_of_rooms if room else 0 }}">
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit" {{ "disabled" if (not room and not room_types) else "" }}>Save</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+{% if not room %}
+<script>
+  // Auto-fill Description from the chosen Room Type's standard description
+  // -- only when Description is still empty, so it never clobbers text the
+  // user has already started typing.
+  const typeSelect = document.getElementById('room_type_id');
+  const descField = document.getElementById('description');
+  typeSelect.addEventListener('change', () => {
+    if (descField.value.trim()) return;
+    const opt = typeSelect.options[typeSelect.selectedIndex];
+    descField.value = opt ? (opt.getAttribute('data-default-description') || '') : '';
+  });
+</script>
+{% endif %}
+{% endblock %}

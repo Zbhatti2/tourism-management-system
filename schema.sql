@@ -385,6 +385,7 @@ CREATE TABLE supplier_types (
     description     TEXT,
     sort_order      INTEGER DEFAULT 0,
     is_active       INTEGER NOT NULL DEFAULT 1,
+    template_key    TEXT,                   -- e.g. 'hotel'; NULL = no specialized Template (most types). Per Zeb's "Template linked to the Supplier" request (Sept 2026) -- tells the Supplier view/edit UI which extra Type-specific sections to show (Amenities & Facilities / Rooms for 'hotel'; a future Type gets its own key + sections). See hotel_amenity_options/hotel_room_types below.
     UNIQUE (tenant_id, code)
 );
 CREATE INDEX idx_supplier_types_tenant ON supplier_types(tenant_id);
@@ -2076,3 +2077,100 @@ CREATE TABLE knowledge_graph_edges (
 CREATE INDEX idx_kg_edges_tenant ON knowledge_graph_edges(tenant_id);
 CREATE INDEX idx_kg_edges_subject ON knowledge_graph_edges(tenant_id, subject_type, subject_id);
 CREATE INDEX idx_kg_edges_object ON knowledge_graph_edges(tenant_id, object_type, object_id);
+
+-- ============================================================================
+-- MODULE W -- Supplier Type Templates: Hotel (Sept 2026)
+-- ============================================================================
+-- Per Zeb's request: "For Each Supplier Type, there will be a Template
+-- linked to the Supplier" -- a Type-specific set of extra attributes shown
+-- on the Supplier form/view (see supplier_types.template_key above). This
+-- phase builds the one Template actually specified: Hotel, with (1) an
+-- Amenities & Facilities checklist and (2) a Room Types / room-count
+-- table. A future Template (e.g. Transport) gets its own template_key and
+-- its own tables, following this same shape.
+
+-- The master "Template" list of possible Hotel amenities/facilities,
+-- grouped into fixed sub-sections, each with a display icon (a Bootstrap
+-- Icons class name, e.g. 'bi-wifi' -- the app already loads Bootstrap
+-- Icons). This table IS where "the display icons can be kept" per the
+-- request -- edit a row's `icon` to change what's shown, no code change
+-- needed. Tenant-scoped like every other lookup table; seeded from
+-- Amenities_and_Facilities1a.txt's exact category/item list (see
+-- seed_data.HOTEL_AMENITY_OPTIONS) -- the specific icon choices are a
+-- first pass, easily swapped later.
+-- Nested under supplier_types (parent = the 'Hotel' row), same pattern as
+-- supplier_subtypes -- lets Table Maintenance manage this list directly
+-- (Zeb, Sept 2026: "Amenities Options and Room Type will be Lookup tables
+-- associated with Supplier Type Hotel"). `description` is the standard
+-- lookup-table column (unused by the Amenities & Facilities form itself,
+-- but present for consistency with every other Table Maintenance table).
+CREATE TABLE hotel_amenity_options (
+    amenity_option_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_type_id INTEGER REFERENCES supplier_types(supplier_type_id),  -- parent -- the Supplier Type (Template) this option belongs to, e.g. 'Hotel'
+    category        TEXT NOT NULL,           -- 'In-Room' | 'Food & Drink' | 'Wellness' | 'Business' | 'Convenience' -- the checklist form's sub-sections
+    code            TEXT,
+    label           TEXT NOT NULL,
+    description     TEXT,
+    icon            TEXT,                    -- Bootstrap Icons class name, e.g. 'bi-wifi' (without the leading 'bi ' base class -- the template adds that)
+    sort_order      INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (tenant_id, code)
+);
+CREATE INDEX idx_hotel_amenity_options_tenant ON hotel_amenity_options(tenant_id);
+CREATE INDEX idx_hotel_amenity_options_supplier_type ON hotel_amenity_options(supplier_type_id);
+
+-- Which of those amenities a given Hotel Supplier actually offers --
+-- presence of a row = checked, same convention as supplier_amenities'
+-- sibling junction tables elsewhere in this schema. One row per
+-- (supplier, amenity).
+CREATE TABLE supplier_amenities (
+    supplier_amenity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_id     INTEGER NOT NULL REFERENCES suppliers(supplier_id),
+    amenity_option_id INTEGER NOT NULL REFERENCES hotel_amenity_options(amenity_option_id),
+    UNIQUE (tenant_id, supplier_id, amenity_option_id)
+);
+CREATE INDEX idx_supplier_amenities_supplier ON supplier_amenities(supplier_id);
+CREATE INDEX idx_supplier_amenities_option ON supplier_amenities(amenity_option_id);
+
+-- Master list of standard Room Types (Single/Double/Twin/Queen/King/
+-- Double-Double/Queen-Queen), each carrying the request's own description
+-- as a sensible per-tenant default (overridable per-supplier below).
+-- Tenant-scoped lookup, seeded from seed_data.HOTEL_ROOM_TYPES.
+-- Nested under supplier_types (parent = the 'Hotel' row), same reasoning
+-- as hotel_amenity_options above. `description` here IS the field a
+-- Supplier's own Room row (supplier_rooms.description) defaults from and
+-- can override -- named "description", not "default_description", so it
+-- lines up with the standard Table Maintenance column set.
+CREATE TABLE hotel_room_types (
+    room_type_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_type_id INTEGER REFERENCES supplier_types(supplier_type_id),  -- parent -- the Supplier Type (Template) this Room Type belongs to, e.g. 'Hotel'
+    code            TEXT,
+    label           TEXT NOT NULL,
+    description     TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (tenant_id, code)
+);
+CREATE INDEX idx_hotel_room_types_tenant ON hotel_room_types(tenant_id);
+CREATE INDEX idx_hotel_room_types_supplier_type ON hotel_room_types(supplier_type_id);
+
+-- One row per (Hotel Supplier, Room Type) -- "the Room Types and Number of
+-- Rooms for each Type" table shown on the Hotel form. Total Number of
+-- Rooms in the hotel is computed as SUM(number_of_rooms) at display time,
+-- not stored, so it can never drift out of sync.
+CREATE TABLE supplier_rooms (
+    supplier_room_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_id     INTEGER NOT NULL REFERENCES suppliers(supplier_id),
+    room_type_id    INTEGER NOT NULL REFERENCES hotel_room_types(room_type_id),
+    description     TEXT,                    -- optional override of the Room Type's own description
+    number_of_rooms INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (tenant_id, supplier_id, room_type_id)
+);
+CREATE INDEX idx_supplier_rooms_supplier ON supplier_rooms(supplier_id);
+CREATE INDEX idx_supplier_rooms_type ON supplier_rooms(room_type_id);
