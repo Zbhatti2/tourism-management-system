@@ -10,7 +10,7 @@ from flask import Flask, render_template
 
 import db as db_module
 from security import csrf
-from utils import basename, format_date, format_phone, linkify, map_coordinates_link, orblank
+from utils import basename, format_date, format_date_abbrev, format_phone, format_price, linkify, map_coordinates_link, orblank
 
 
 # Points of Interest was removed from this sidebar list (its blueprint,
@@ -103,9 +103,13 @@ def create_app():
     from blueprints.geography import geography_bp
     from blueprints.geography_admin import geography_admin_bp
     from blueprints.service_taxonomy_admin import service_taxonomy_admin_bp
+    from blueprints.help import help_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
+    # No url_prefix: /help, /help/tree, /help/page/<id> are pages, not a
+    # tenant-scoped module -- same as the reference project's help_bp.
+    app.register_blueprint(help_bp)
     app.register_blueprint(contacts_bp, url_prefix="/contacts")
     app.register_blueprint(organizations_bp, url_prefix="/organizations")
     app.register_blueprint(suppliers_bp, url_prefix="/suppliers")
@@ -131,6 +135,8 @@ def create_app():
     app.jinja_env.globals["modules"] = MODULES
     app.jinja_env.filters["format_phone"] = format_phone
     app.jinja_env.filters["format_date"] = format_date
+    app.jinja_env.filters["format_date_abbrev"] = format_date_abbrev
+    app.jinja_env.filters["format_price"] = format_price
     app.jinja_env.filters["linkify"] = linkify
     app.jinja_env.filters["basename"] = basename
     app.jinja_env.filters["orblank"] = orblank

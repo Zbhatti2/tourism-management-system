@@ -246,6 +246,53 @@ def format_date(value):
         return text
 
 
+# Chicago Manual of Style's month abbreviations -- May/June/July are
+# already short enough that they're conventionally left unabbreviated;
+# September is "Sept." (4 letters), not the 3-letter "Sep." strftime's
+# %b would give. Used only by format_date_abbrev below, for the Hotel
+# Room Type price/price-history date display Zeb specifically mocked up
+# as "Sept. 05, 2026" -- format_date above (full month name, no period)
+# stays the app-wide default everywhere else.
+_ABBREV_MONTHS = [
+    "Jan.", "Feb.", "Mar.", "Apr.", "May", "June",
+    "July", "Aug.", "Sept.", "Oct.", "Nov.", "Dec.",
+]
+
+
+def format_date_abbrev(value):
+    """Render a stored 'YYYY-MM-DD' date as 'Mon. DD, YYYY' (Chicago-style
+    abbreviated month + period, e.g. '2026-09-05' -> 'Sept. 05, 2026') --
+    the exact display format on the Edit Room Type mock (Zeb, Sept 2026:
+    "Date display on form must be explicit in the format on the Mock
+    Form"). Falls back to the raw stored value for anything that isn't a
+    clean ISO date, and to "" for a missing value. Usable as a Jinja
+    filter: {{ room.price_as_of | format_date_abbrev }}.
+    """
+    text = _clean(value)
+    if not text:
+        return ""
+    try:
+        d = datetime.strptime(text, "%Y-%m-%d")
+    except ValueError:
+        return text
+    return f"{_ABBREV_MONTHS[d.month - 1]} {d.day:02d}, {d.year}"
+
+
+def format_price(value, currency="$"):
+    """Render a stored price as '$100.00' -- 2 decimal places, thousands
+    separator, currency symbol prefixed. Returns "" for a missing/blank
+    value rather than "$0.00", so an unset Room Type price shows as an
+    empty cell, not a misleading zero. Usable as a Jinja filter:
+    {{ room.price_per_night | format_price }}.
+    """
+    if value is None or value == "":
+        return ""
+    try:
+        return f"{currency}{float(value):,.2f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def orblank(value):
     """A DB NULL becomes '' instead of Jinja printing the literal word
     "None" into an input's value="..." (the classic `{{ x.field if x else

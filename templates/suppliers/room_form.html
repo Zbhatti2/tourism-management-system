@@ -30,10 +30,28 @@
       <textarea class="form-control" id="description" name="description" rows="3">{{ (room.description | orblank) if room else '' }}</textarea>
       <div class="form-text">Defaults to the Room Type's standard description — edit freely for this Hotel.</div>
     </div>
-    <div class="mb-3" style="max-width: 220px;">
-      <label class="form-label">Number of Rooms</label>
-      <input class="form-control" type="number" min="0" step="1" name="number_of_rooms"
-             value="{{ room.number_of_rooms if room else 0 }}">
+    <div class="row g-2">
+      <div class="col-auto" style="width: 180px;">
+        <label class="form-label">Number of Rooms</label>
+        <input class="form-control" type="number" min="0" step="1" name="number_of_rooms"
+               value="{{ room.number_of_rooms if room else 0 }}">
+      </div>
+      <div class="col-auto" style="width: 180px;">
+        <label class="form-label">Price/Night (USD)</label>
+        <input class="form-control" type="number" min="0" step="0.01" name="price_per_night"
+               value="{{ room.price_per_night if (room and room.price_per_night is not none) else '' }}">
+      </div>
+      <div class="col-auto" style="width: 220px;">
+        <label class="form-label">As of <span class="text-muted small">(mm/dd/yy)</span></label>
+        <div class="d-flex align-items-center gap-2">
+          <input class="form-control" type="date" name="price_as_of"
+                 value="{{ (room.price_as_of | orblank) if room else '' }}">
+          {% if room %}
+          <a href="{{ url_for('suppliers.room_price_history', supplier_id=supplier.supplier_id, room_id=room.supplier_room_id) }}"
+             class="text-nowrap text-decoration-underline small">History</a>
+          {% endif %}
+        </div>
+      </div>
     </div>
   </div>
   <div class="card-footer bg-white d-flex gap-2 justify-content-end">

@@ -218,7 +218,7 @@
         {% if hotel_rooms %}
         <table class="table table-sm mb-2">
           <thead>
-            <tr><th>Room Type</th><th>Description</th><th class="text-end">No. of Rooms</th><th></th></tr>
+            <tr><th>Room Type</th><th>Description</th><th class="text-end">No. of Rooms</th><th class="text-end">Price/Night</th><th>As of</th><th></th></tr>
           </thead>
           <tbody>
             {% for r in hotel_rooms %}
@@ -226,7 +226,10 @@
               <td>{{ r.room_type_label }}</td>
               <td class="text-muted small">{{ r.description or r.default_description or "—" }}</td>
               <td class="text-end">{{ r.number_of_rooms }}</td>
+              <td class="text-end">{{ (r.price_per_night | format_price) or "—" }}</td>
+              <td class="text-muted small">{{ (r.price_as_of | format_date_abbrev) or "—" }}</td>
               <td class="text-nowrap text-end">
+                <a href="{{ url_for('suppliers.room_price_history', supplier_id=supplier.supplier_id, room_id=r.supplier_room_id) }}" class="btn btn-sm btn-link py-0" title="Price History"><i class="bi bi-clock-history"></i></a>
                 <a href="{{ url_for('suppliers.edit_supplier_room', supplier_id=supplier.supplier_id, room_id=r.supplier_room_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
                 <form method="post" action="{{ url_for('suppliers.delete_supplier_room', supplier_id=supplier.supplier_id, room_id=r.supplier_room_id) }}" class="d-inline" onsubmit="return confirm('Remove this Room Type?');">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

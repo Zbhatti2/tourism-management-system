@@ -1,0 +1,31 @@
+{# The contextual help drawer shell -- included once in base.html for every
+   signed-in page. Its content is filled in entirely by static/js/help.js
+   (fetching from blueprints/help.py's /help/tree and /help/page/<id>),
+   so this markup never changes per page; only the help_id the top-right
+   "Help" button opens with varies (see base.html, which derives it from
+   request.blueprint automatically -- a page can still override it by
+   passing help_id= to render_template). #}
+<div class="offcanvas offcanvas-end help-drawer" tabindex="-1" id="helpDrawer" aria-labelledby="helpDrawerLabel">
+  <div class="offcanvas-header border-bottom py-2">
+    <h5 class="offcanvas-title" id="helpDrawerLabel"><i class="bi bi-question-circle me-1"></i>Help</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body p-0">
+    <div class="help-body">
+      <div class="help-nav border-end">
+        <div class="p-2 border-bottom">
+          <input type="search" class="form-control form-control-sm" id="helpSearch" placeholder="Search help…" autocomplete="off">
+        </div>
+        <div id="helpTree" class="help-tree">
+          <div class="text-muted small p-3">Loading…</div>
+        </div>
+      </div>
+      <div class="help-content">
+        <nav aria-label="breadcrumb" id="helpBreadcrumb" class="small text-muted mb-2"></nav>
+        <div id="helpPage">
+          <div class="text-muted">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

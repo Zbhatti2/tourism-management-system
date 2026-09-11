@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Help{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-center">
+  <div class="card shadow-sm border-0 text-center" style="max-width: 520px; width: 100%;">
+    <div class="card-body py-5">
+      <h1 class="h5 mb-3">{{ label }}</h1>
+      <p class="{{ 'text-success' if status == 'opened' else 'text-danger' }} small mb-2">
+        {{ detail }}
+      </p>
+      {% if status != 'opened' %}
+      <p class="text-muted small mb-3"><code>{{ path }}</code></p>
+      {% endif %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('dashboard.index') }}">Back to the dashboard</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -42,6 +42,7 @@ to route between the generic and resource templates; the generic New/Edit
 Supplier form no longer offers the External Resource checkbox at all.
 """
 import os
+from datetime import date
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
@@ -716,6 +717,60 @@ def edit_supplier_amenities(supplier_id):
 
 # ---------------------------------------------------- Hotel Template: rooms
 
+def _parse_price(raw):
+    """Form price field -> float, or None if blank/unparseable. Never
+    raises -- an un-parseable price is treated the same as a blank one
+    rather than 500ing the whole save."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _save_room_price(db, supplier_room_id, price, as_of):
+    """Updates a Room Type's current price cache (supplier_rooms.
+    price_per_night/price_as_of) and appends a supplier_room_price_history
+    row -- but only when there's actually a new price to record, and only
+    when it's genuinely different from what's already on file (comparing
+    against the row's OWN current price/as_of, not the form's old values,
+    so this stays correct however it's called). A blank price clears the
+    cache without logging anything (there's no price to log); an
+    unchanged price+date pair is a silent no-op, so re-saving the same
+    Room Type without touching pricing doesn't spam the history log with
+    identical entries. Zeb, Sept 2026: "Pricing will change over time so
+    I need to track history prices in a price history log as well."
+    """
+    if price is None:
+        db.execute(
+            "UPDATE supplier_rooms SET price_per_night = NULL, price_as_of = NULL, updated_at = datetime('now') "
+            "WHERE supplier_room_id = ? AND tenant_id = ?",
+            (supplier_room_id, g.tenant_id),
+        )
+        db.commit()
+        return
+    as_of = as_of or date.today().isoformat()
+    current = db.execute(
+        "SELECT price_per_night, price_as_of FROM supplier_rooms WHERE supplier_room_id = ? AND tenant_id = ?",
+        (supplier_room_id, g.tenant_id),
+    ).fetchone()
+    if current and current["price_per_night"] == price and current["price_as_of"] == as_of:
+        return  # nothing actually changed -- don't log a duplicate entry
+    db.execute(
+        "UPDATE supplier_rooms SET price_per_night = ?, price_as_of = ?, updated_at = datetime('now') "
+        "WHERE supplier_room_id = ? AND tenant_id = ?",
+        (price, as_of, supplier_room_id, g.tenant_id),
+    )
+    db.execute(
+        "INSERT INTO supplier_room_price_history (tenant_id, supplier_room_id, price_per_night, price_as_of) "
+        "VALUES (?, ?, ?, ?)",
+        (g.tenant_id, supplier_room_id, price, as_of),
+    )
+    db.commit()
+
+
 @suppliers_bp.route("/<int:supplier_id>/rooms/new", methods=["GET", "POST"])
 @login_required
 def new_supplier_room(supplier_id):
@@ -749,6 +804,8 @@ def new_supplier_room(supplier_id):
             ),
         )
         db.commit()
+        new_room_id = db.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+        _save_room_price(db, new_room_id, _parse_price(form.get("price_per_night")), form.get("price_as_of", "").strip() or None)
         log_action("Create", "supplier_room", supplier_id, "Added a Room Type")
         flash("Room Type added.", "success")
         return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
@@ -778,10 +835,11 @@ def edit_supplier_room(supplier_id, room_id):
             (form.get("description", "").strip() or None, int(form.get("number_of_rooms") or 0), room_id, g.tenant_id),
         )
         db.commit()
+        _save_room_price(db, room_id, _parse_price(form.get("price_per_night")), form.get("price_as_of", "").strip() or None)
         log_action("Update", "supplier_room", supplier_id, f"Updated Room Type #{room_id}")
         flash("Room Type updated.", "success")
         return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
-    # Editing an existing row keeps its Room Type fixed (shown read-only) -- only description/count change.
+    # Editing an existing row keeps its Room Type fixed (shown read-only) -- only description/count/price change.
     return render_template("suppliers/room_form.html", supplier=supplier, room=room, room_types=None)
 
 
@@ -801,6 +859,29 @@ def delete_supplier_room(supplier_id, room_id):
     log_action("Delete", "supplier_room", supplier_id, f"Deleted Room Type #{room_id}")
     flash("Room Type removed.", "success")
     return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+
+
+@suppliers_bp.route("/<int:supplier_id>/rooms/<int:room_id>/price-history")
+@login_required
+def room_price_history(supplier_id, room_id):
+    """The "History" link on the Edit Room Type form -- every price this
+    Room Type has ever had on file for this Hotel, newest first."""
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    room = db.execute(
+        """SELECT r.*, rt.label AS room_type_label
+           FROM supplier_rooms r JOIN hotel_room_types rt ON rt.room_type_id = r.room_type_id
+           WHERE r.supplier_room_id = ? AND r.supplier_id = ? AND r.tenant_id = ?""",
+        (room_id, supplier_id, g.tenant_id),
+    ).fetchone()
+    if room is None:
+        abort(404)
+    history = db.execute(
+        "SELECT * FROM supplier_room_price_history WHERE supplier_room_id = ? AND tenant_id = ? "
+        "ORDER BY price_as_of DESC, price_history_id DESC",
+        (room_id, g.tenant_id),
+    ).fetchall()
+    return render_template("suppliers/room_price_history.html", supplier=supplier, room=room, history=history)
 
 
 # --------------------------------------------------- documents, links and images

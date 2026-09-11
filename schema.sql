@@ -2168,12 +2168,38 @@ CREATE TABLE supplier_rooms (
     room_type_id    INTEGER NOT NULL REFERENCES hotel_room_types(room_type_id),
     description     TEXT,                    -- optional override of the Room Type's own description
     number_of_rooms INTEGER NOT NULL DEFAULT 0,
+    -- Current price cache -- always equal to the most recent row for this
+    -- room in supplier_room_price_history below (same
+    -- "cached current value + append-only history" split used elsewhere,
+    -- e.g. hotel_room_types itself vs. its per-supplier override here).
+    -- Kept on this row too so the Rooms list/form can show today's price
+    -- without a join, while the full history lives in its own table.
+    -- Zeb, Sept 2026: "Pricing will change over time so I need to track
+    -- history prices in a price history log as well."
+    price_per_night REAL,                   -- USD; NULL until a price is first entered
+    price_as_of     TEXT,                   -- ISO 'YYYY-MM-DD' -- the date this price took/takes effect
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (tenant_id, supplier_id, room_type_id)
 );
 CREATE INDEX idx_supplier_rooms_supplier ON supplier_rooms(supplier_id);
 CREATE INDEX idx_supplier_rooms_type ON supplier_rooms(room_type_id);
+
+-- Append-only price history for a Hotel's Room Types -- one row per price
+-- change (or explicit reconfirmation of the same price on a new "as of"
+-- date). Never updated or deleted; supplier_rooms.price_per_night/
+-- price_as_of above always mirror the newest row here for the same room.
+-- Reached by clicking "History" on the Edit Room Type form.
+CREATE TABLE supplier_room_price_history (
+    price_history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_room_id INTEGER NOT NULL REFERENCES supplier_rooms(supplier_room_id),
+    price_per_night REAL NOT NULL,          -- USD
+    price_as_of     TEXT NOT NULL,          -- ISO 'YYYY-MM-DD'
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_supplier_room_price_history_tenant ON supplier_room_price_history(tenant_id);
+CREATE INDEX idx_supplier_room_price_history_room ON supplier_room_price_history(supplier_room_id);
 
 -- ============================================================================
 -- MODULE X -- Supplier Documents, Links and Images (Sept 2026)

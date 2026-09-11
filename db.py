@@ -648,6 +648,19 @@ def init_app(app):
         migrate()
         click.echo("Done.")
 
+    @app.cli.command("migrate-add-room-price-history")
+    def migrate_add_room_price_history_command():
+        """Flask CLI: `flask --app app migrate-add-room-price-history` —
+        adds price tracking (supplier_rooms.price_per_night/price_as_of)
+        and a full append-only price history log
+        (supplier_room_price_history) to Hotel Room Types. Safe to re-run;
+        does not touch any Room Type rows already on file. See
+        migrate_add_room_price_history.py for the full story."""
+        from migrate_add_room_price_history import migrate
+
+        migrate()
+        click.echo("Done.")
+
     @app.cli.command("seed-tenant")
     def seed_tenant_command():
         """Flask CLI: `flask --app app seed-tenant` — creates the first

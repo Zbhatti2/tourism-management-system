@@ -121,3 +121,164 @@ body {
   border-radius: .75rem;
   padding: 1.25rem;
 }
+
+/* ==========================================================================
+   Help Module -- ported from "Book to Movie" studio's identical drawer
+   (Zeb: "create a 'Help Module' for TMS exactly following the pattern of
+   the Help features in [that] project ... with a tree structure"), just
+   recolored from that project's dark theme onto TMS's own light one
+   (--pims-navy / --pims-accent, same palette the sidebar already uses).
+   See templates/_help_drawer.html and static/js/help.js.
+   ========================================================================== */
+
+/* Persistent Help affordance, top-right of the shell on every signed-in
+   page. Fixed rather than placed in a pane so it survives whatever page
+   content is doing underneath it. */
+.app-help {
+  position: fixed;
+  top: .6rem;
+  right: 1rem;
+  z-index: 1040;
+}
+
+.app-help-link {
+  font: inherit;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  cursor: pointer;
+  font-size: .8rem;
+  color: var(--pims-navy);
+  text-decoration: none;
+  padding: .3rem .65rem;
+  border-radius: .375rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+}
+
+.app-help-link:hover {
+  background: var(--pims-navy);
+  color: #fff;
+  border-color: var(--pims-navy);
+}
+
+/* Two independently scrolling columns (tree + page), rather than
+   Bootstrap's single-scroll offcanvas-body default. */
+.help-drawer {
+  --bs-offcanvas-width: min(760px, 100vw);
+}
+
+.help-body {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.help-nav {
+  width: 240px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background-color: #f8f9fa;
+}
+
+.help-tree {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: .5rem 0;
+}
+
+.help-section-toggle {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: .45rem .75rem;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--pims-navy);
+}
+
+.help-section-toggle:hover {
+  background-color: #e9ecf1;
+}
+
+.help-chevron {
+  display: inline-block;
+  width: 1rem;
+  margin-right: .15rem;
+  font-size: 1.1em;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+
+.help-section-toggle[aria-expanded="true"] .help-chevron {
+  transform: rotate(90deg);
+}
+
+.help-page-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 .25rem;
+}
+
+.help-page-link {
+  display: block;
+  padding: .3rem .75rem .3rem 2rem;
+  font-size: .85rem;
+  color: #495057;
+  text-decoration: none;
+  border-radius: 0 .25rem .25rem 0;
+}
+
+.help-page-link:hover {
+  background-color: #e9ecf1;
+  color: #212529;
+}
+
+.help-page-link.active {
+  background-color: var(--pims-accent);
+  color: #fff;
+  font-weight: 500;
+}
+
+.help-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem;
+}
+
+.help-content :last-child {
+  margin-bottom: 0;
+}
+
+.help-content pre {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: .375rem;
+  padding: .75rem;
+  overflow-x: auto;
+}
+
+.help-content code {
+  color: var(--pims-accent);
+}
+
+.help-content a {
+  color: var(--pims-accent);
+}
+
+@media (max-width: 576px) {
+  .help-body {
+    flex-direction: column;
+  }
+  .help-nav {
+    width: 100%;
+    min-width: 0;
+    max-height: 40vh;
+    border-right: none !important;
+    border-bottom: 1px solid #dee2e6;
+  }
+}
