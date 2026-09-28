@@ -7,7 +7,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, session, url_for
 
-from auth.decorators import login_required, tenant_admin_required
+from auth.decorators import login_required, system_admin_required, tenant_admin_required
 from security.passwords import hash_password, verify_password
 from config import Config
 from db import close_db, get_db, log_action
@@ -19,8 +19,17 @@ system_mgmt_bp = Blueprint("system_mgmt", __name__)
 @login_required
 def index():
     db = get_db()
+    if g.role == "SystemAdmin":
+        # The platform-level (TMS) account belongs to no tenant, so none of
+        # the tenant settings below apply -- it gets its own small page:
+        # its account, plus the whole-database tools only it can use.
+        last_backup_row = db.execute("SELECT MAX(created_at) c FROM backups").fetchone()
+        tenant_count = db.execute("SELECT COUNT(*) c FROM tenants WHERE is_platform = 0").fetchone()["c"]
+        return render_template("system/index.html", tenant=None, last_backup_at=last_backup_row["c"],
+                               tenant_count=tenant_count, purge_eligible_count=0, host_org=None,
+                               host_currencies=[])
     tenant_row = db.execute(
-        "SELECT tenant_name, data_retention_days, last_purge_at, created_at, host_currency_code FROM tenants WHERE tenant_id = ?",
+        "SELECT tenant_name, account_number, website_domain, data_retention_days, last_purge_at, created_at, host_currency_code FROM tenants WHERE tenant_id = ?",
         (g.tenant_id,),
     ).fetchone()
     host_currencies = db.execute(
@@ -84,11 +93,15 @@ def change_password():
             flash("New password must be different from your current password.", "error")
             return render_template("system/change_password.html")
 
+        # Choosing your own password also ends any "temporary password"
+        # state set by an admin (see blueprints/users.py and
+        # auth/decorators.py's must_change_password enforcement).
         db.execute(
-            "UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?",
+            "UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime('now') WHERE user_id = ?",
             (hash_password(new_password), g.user_id),
         )
         db.commit()
+        session["must_change_password"] = False
         log_action("PasswordChange", "users", g.user_id, "Password changed from System Management")
         flash("Password changed.", "success")
         return redirect(url_for("system_mgmt.index"))
@@ -97,16 +110,12 @@ def change_password():
 
 
 # Backups, restore, and the raw database health check touch the WHOLE
-# database file (every tenant's data lives in the one SQLite file), so they
-# stay gated to admin roles (TenantAdmin or SystemAdmin) rather than any
-# logged-in user. In Phase 1's single-tenant desktop deployment the Tenant
-# Admin (Zeb) is effectively the sole operator, so tenant_admin_required is
-# used here rather than a stricter system_admin_required — tighten this once
-# a real multi-tenant deployment introduces a dedicated SystemAdmin/ops role
-# distinct from each tenant's own admin.
+# database file -- every tenant's data lives in the one SQLite file -- so
+# they are SystemAdmin-only (the platform-level "TMS" account). A Tenant
+# Admin must never be able to download or restore other tenants' data.
 
 @system_mgmt_bp.route("/health")
-@tenant_admin_required
+@system_admin_required
 def health():
     db = get_db()
     integrity = db.execute("PRAGMA integrity_check").fetchall()
@@ -816,7 +825,7 @@ def _write_backup_file(db, file_name):
 
 
 @system_mgmt_bp.route("/backups")
-@tenant_admin_required
+@system_admin_required
 def backups_index():
     db = get_db()
     rows = db.execute("SELECT * FROM backups ORDER BY backup_id DESC").fetchall()
@@ -825,7 +834,7 @@ def backups_index():
 
 
 @system_mgmt_bp.route("/backups/create", methods=["POST"])
-@tenant_admin_required
+@system_admin_required
 def create_backup():
     db = get_db()
     file_name = f"tms_backup_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.db"
@@ -847,7 +856,7 @@ def create_backup():
 
 
 @system_mgmt_bp.route("/backups/<int:backup_id>/download")
-@tenant_admin_required
+@system_admin_required
 def download_backup(backup_id):
     db = get_db()
     b = db.execute("SELECT * FROM backups WHERE backup_id = ?", (backup_id,)).fetchone()
@@ -857,7 +866,7 @@ def download_backup(backup_id):
 
 
 @system_mgmt_bp.route("/backups/<int:backup_id>/restore", methods=["POST"])
-@tenant_admin_required
+@system_admin_required
 def restore_backup(backup_id):
     db = get_db()
     b = db.execute("SELECT * FROM backups WHERE backup_id = ?", (backup_id,)).fetchone()
@@ -915,7 +924,7 @@ def restore_backup(backup_id):
 
 
 @system_mgmt_bp.route("/backups/<int:backup_id>/delete", methods=["POST"])
-@tenant_admin_required
+@system_admin_required
 def delete_backup(backup_id):
     db = get_db()
     b = db.execute("SELECT * FROM backups WHERE backup_id = ?", (backup_id,)).fetchone()

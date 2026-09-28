@@ -97,3 +97,10 @@ class Config:
     # in .env.
     ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
     ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
+
+    # Whether the session cookie requires HTTPS. Must stay False for local
+    # use (Start_TMS.bat serves plain http://127.0.0.1, where a Secure cookie
+    # is dropped and login silently fails). Set the environment variable
+    # SESSION_COOKIE_SECURE=true on the server (Coolify), where TMS is only
+    # reached over HTTPS.
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes")

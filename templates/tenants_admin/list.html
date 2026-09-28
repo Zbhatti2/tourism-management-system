@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Tenant Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">Tenant Management</h1>
+  </div>
+  <div class="d-flex gap-2">
+
+    <a href="{{ url_for('tenants_admin.new_tenant') }}" class="btn btn-primary btn-sm"><i class="bi bi-building-add"></i> New Tenant</a>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0 align-middle">
+      <thead>
+        <tr><th>Account #</th><th>Organization</th><th>Code</th><th>Website</th><th>Status</th><th>Users</th><th>Created</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for t in tenants %}
+        <tr>
+          <td class="text-nowrap">{{ t.account_number }}</td>
+          <td>{{ t.tenant_name }}</td>
+          <td class="small text-muted">{{ t.tenant_code }}</td>
+          <td class="small">{% if t.website_domain %}<a href="https://{{ t.website_domain }}" target="_blank" rel="noopener">{{ t.website_domain }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          <td>
+            {% if t.status == 'Active' %}
+            <span class="badge bg-success-subtle text-success">Active</span>
+            {% else %}
+            <span class="badge bg-danger-subtle text-danger">Suspended</span>
+            {% endif %}
+          </td>
+          <td>{{ t.active_user_count }} active / {{ t.user_count }} total</td>
+          <td class="small text-muted text-nowrap">{{ t.created_at }}</td>
+          <td class="text-end text-nowrap">
+            <form method="post" action="{{ url_for('tenants_admin.toggle_status', tenant_id=t.tenant_id) }}" class="d-inline"
+                  onsubmit="return confirm({{ ((t.tenant_name ~ ': suspend this tenant? Every one of its users will be immediately unable to log in.') if t.status == 'Active' else (t.tenant_name ~ ': reactivate this tenant? Its users will be able to log in again.')) | tojson }});">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-{{ 'danger' if t.status == 'Active' else 'success' }} btn-sm" type="submit">
+                {{ 'Suspend' if t.status == 'Active' else 'Reactivate' }}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-5">No tenants yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

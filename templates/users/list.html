@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Manage Users{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Manage Users</h1>
+  <div class="d-flex gap-2">
+
+    <a href="{{ url_for('users.new_user') }}" class="btn btn-primary btn-sm"><i class="bi bi-person-plus"></i> Add User</a>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0 align-middle">
+      <thead>
+        <tr><th>Name</th><th>User ID</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.display_name }}{% if u.user_id == g.user_id %} <span class="text-muted small">(you)</span>{% endif %}</td>
+          <td>{{ u.username }}</td>
+          <td class="small text-muted">{{ u.email or "—" }}</td>
+          <td><span class="badge bg-secondary-subtle text-secondary">{{ u.role }}</span></td>
+          <td>
+            {% if u.is_active %}
+            <span class="badge bg-success-subtle text-success">Active</span>
+            {% else %}
+            <span class="badge bg-danger-subtle text-danger">Deactivated</span>
+            {% endif %}
+            {% if u.must_change_password %}
+            <span class="badge bg-warning-subtle text-dark" title="Will be asked to set a new password on next login">Temp password</span>
+            {% endif %}
+          </td>
+          <td class="small text-muted text-nowrap">{{ u.last_login_at or "Never" }}</td>
+          <td class="text-end text-nowrap">
+            <div class="btn-group btn-group-sm">
+              <a href="{{ url_for('users.edit_user', user_id=u.user_id) }}" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+              <a href="{{ url_for('users.reset_password', user_id=u.user_id) }}" class="btn btn-outline-secondary" title="Reset password"><i class="bi bi-key"></i></a>
+              {% if u.user_id != g.user_id %}
+              <form method="post" action="{{ url_for('users.toggle_active', user_id=u.user_id) }}" class="d-inline"
+                    onsubmit="return confirm({{ ((u.display_name ~ ' will no longer be able to log in.') if u.is_active else (u.display_name ~ ' will be able to log in again.')) | tojson }});">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-{{ 'danger' if u.is_active else 'success' }}" type="submit" title="{{ 'Deactivate' if u.is_active else 'Activate' }}">
+                  <i class="bi bi-{{ 'person-dash' if u.is_active else 'person-check' }}"></i>
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('users.delete_user', user_id=u.user_id) }}" class="d-inline"
+                    onsubmit="return confirm({{ ('Permanently delete ' ~ u.display_name ~ '? This only works if nothing is still assigned to them, and cannot be undone.') | tojson }});">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-danger" type="submit" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No users yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

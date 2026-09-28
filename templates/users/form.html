@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit User' if user else 'Add User' }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">{{ 'Edit User' if user else 'Add User' }}</h1>
+
+</div>
+
+<div class="card shadow-sm border-0" style="max-width: 640px;">
+  <div class="card-body">
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      {% if not user %}
+      <div class="mb-3">
+        <label class="form-label" for="username">User ID</label>
+        <input class="form-control" id="username" name="username" value="{{ form.username or '' }}" required autofocus>
+        <div class="form-text">This is their login — unique across the whole system, not just your organization. Can't be changed later.</div>
+      </div>
+      {% else %}
+      <div class="mb-3">
+        <label class="form-label">User ID</label>
+        <input class="form-control" value="{{ user.username }}" disabled>
+      </div>
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label" for="display_name">Display name</label>
+        <input class="form-control" id="display_name" name="display_name" value="{{ form.display_name or '' }}" placeholder="Defaults to User ID">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="email">Email (optional)</label>
+        <input class="form-control" id="email" name="email" type="email" value="{{ form.email or '' }}">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="role">Role</label>
+        <select class="form-select" id="role" name="role" {{ 'disabled' if is_self else '' }}>
+          {% for r in roles %}
+          <option value="{{ r }}" {{ 'selected' if (form.role or 'User') == r else '' }}>{{ r }}</option>
+          {% endfor %}
+        </select>
+        {% if is_self %}
+        <div class="form-text">You can't change your own role.</div>
+        <input type="hidden" name="role" value="{{ user.role }}">
+        {% else %}
+        <div class="form-text">Tenant Admins can manage users and whole-tenant settings; Users have regular day-to-day access.</div>
+        {% endif %}
+      </div>
+
+      {% if not user %}
+      <div class="mb-3">
+        <label class="form-label" for="password">Temporary password</label>
+        <input class="form-control" id="password" name="password" type="password" minlength="8" required>
+        <div class="form-text">Give this to them directly (not by email). They'll be required to set their own on first login.</div>
+      </div>
+      <div class="mb-4">
+        <label class="form-label" for="confirm_password">Confirm password</label>
+        <input class="form-control" id="confirm_password" name="confirm_password" type="password" minlength="8" required>
+      </div>
+      {% endif %}
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">{{ 'Save' if user else 'Add User' }}</button>
+        <a href="{{ url_for('users.list_users') }}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

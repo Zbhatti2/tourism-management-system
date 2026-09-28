@@ -1,0 +1,17 @@
+# Never bake secrets or live data into the image -- instance/ (tms.db, keys,
+# uploads, backups) lives on the Coolify persistent volume, and .env values
+# become Coolify environment variables.
+instance/
+.env
+.git
+.gitignore
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.db
+*.docx
+*.pdf
+*.lnk
+Start_TMS.bat

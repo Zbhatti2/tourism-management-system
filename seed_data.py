@@ -2298,29 +2298,36 @@ def seed_lookup_tables(db, tenant_id: int):
 
 
 def seed_first_tenant(db):
-    """Phase 1.1 initial data: the first tenant (Heritage Tours) with its
-    Tenant Admin (username 'Zeb', password 'Zebra' — the person running this
-    should change it after first login), its own set of lookup tables, and
-    the shared global geography tables. Safe to re-run: does nothing if
-    Heritage Tours already exists.
+    """Initial data for a BRAND-NEW, empty database only: the first tenant
+    (Ma Vie Tours, code MAVIE, account #10000002) with its Tenant Admin
+    (username 'Zeb', password 'Zebra' — change it after first login), its
+    own set of lookup tables, and the shared global geography tables. Safe to
+    re-run: does nothing if the tenant already exists.
 
-    Called by `flask --app app seed-tenant`. This is how Phase 1.1 gets its
-    first working login without anyone needing to go through the /setup
-    wizard (which still exists, for provisioning additional tenants later).
+    Your real, populated database never goes through this: it was built as
+    "Heritage Tours" and is renamed in place to Ma Vie Tours by db.py's
+    _migration_rename_first_tenant_ma_vie_tours.
+
+    Called by `flask --app app seed-tenant`.
     """
     from security import crypto
     from security.passwords import hash_password
     from security.wordlist import generate_seed_phrase, hash_phrase
 
-    existing = db.execute("SELECT tenant_id FROM tenants WHERE tenant_code = ?", ("HERITAGE",)).fetchone()
+    from db import next_account_number
+
+    existing = db.execute(
+        "SELECT tenant_id FROM tenants WHERE tenant_code IN ('MAVIE', 'HERITAGE')"
+    ).fetchone()
     if existing:
         return existing["tenant_id"]
 
     dek = crypto.new_tenant_dek()
     dek_wrapped = crypto.wrap_tenant_dek(dek)
     cur = db.execute(
-        "INSERT INTO tenants (tenant_code, tenant_name, dek_wrapped) VALUES (?, ?, ?)",
-        ("HERITAGE", "Heritage Tours", dek_wrapped),
+        "INSERT INTO tenants (tenant_code, tenant_name, dek_wrapped, account_number, website_domain) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("MAVIE", "Ma Vie Tours", dek_wrapped, next_account_number(db), "www.mavietours.com"),
     )
     tenant_id = cur.lastrowid
 

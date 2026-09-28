@@ -1,10 +1,18 @@
 """
 Tourism Management System — Flask app factory / entry point.
 
-Run locally with:
+Run locally with Start_TMS.bat (or `flask --app app run --debug`).
+Schema changes are applied automatically at startup (db.py's
+run_pending_migrations). A brand-new, empty database only:
     flask --app app init-db        # creates instance/tms.db from schema.sql
-    flask --app app seed-tenant    # creates the Heritage Tours tenant + Zeb (TenantAdmin)
-    flask --app app run --debug    # http://127.0.0.1:5000
+    flask --app app seed-tenant    # creates Ma Vie Tours + Zeb (TenantAdmin)
+Platform-level login (once per database):
+    flask --app app create-system-admin
+
+Roles: "roles": [...] on a MODULES entry limits who sees it in the sidebar
+(templates/base.html); omitted means every logged-in user. The SystemAdmin
+belongs to no tenant, so every tenant module is hidden from it and Tenant
+Management is the mirror image -- SystemAdmin only.
 """
 from flask import Flask, render_template
 
@@ -27,12 +35,12 @@ from utils import basename, format_date, format_date_abbrev, format_phone, forma
 # is the second sub-module, following the identical GLOBAL-taxonomy +
 # tenant-scoped-catalog pattern.
 MODULES = [
-    {"key": "dashboard", "label": "Dashboard", "icon": "speedometer2", "endpoint": "dashboard.index"},
-    {"key": "contacts", "label": "Contacts", "icon": "people", "endpoint": "contacts.list_contacts"},
-    {"key": "organizations", "label": "Organizations", "icon": "building", "endpoint": "organizations.list_organizations"},
-    {"key": "suppliers", "label": "Suppliers", "icon": "truck", "endpoint": "suppliers.list_suppliers"},
-    {"key": "hr", "label": "Human Resources", "icon": "person-badge", "endpoint": "hr.index"},
-    {"key": "inventory", "label": "Inventory Management", "icon": "boxes", "children": [
+    {"key": "dashboard", "label": "Dashboard", "icon": "speedometer2", "roles": ["TenantAdmin", "User"], "endpoint": "dashboard.index"},
+    {"key": "contacts", "label": "Contacts", "icon": "people", "roles": ["TenantAdmin", "User"], "endpoint": "contacts.list_contacts"},
+    {"key": "organizations", "label": "Organizations", "icon": "building", "roles": ["TenantAdmin", "User"], "endpoint": "organizations.list_organizations"},
+    {"key": "suppliers", "label": "Suppliers", "icon": "truck", "roles": ["TenantAdmin", "User"], "endpoint": "suppliers.list_suppliers"},
+    {"key": "hr", "label": "Human Resources", "icon": "person-badge", "roles": ["TenantAdmin", "User"], "endpoint": "hr.index"},
+    {"key": "inventory", "label": "Inventory Management", "icon": "boxes", "roles": ["TenantAdmin", "User"], "children": [
         {"key": "services", "label": "Services", "icon": "list-check", "endpoint": "services.list_services"},
         {"key": "products", "label": "Products", "icon": "box-seam", "endpoint": "products.list_products"},
     ]},
@@ -42,33 +50,37 @@ MODULES = [
     # sub-modules yet (Departures/Bookings are later roadmap phases), so
     # this is a single top-level entry rather than a parent-with-children
     # group like Inventory Management above.
-    {"key": "packages", "label": "Package Management", "icon": "map", "endpoint": "packages.list_packages"},
+    {"key": "packages", "label": "Package Management", "icon": "map", "roles": ["TenantAdmin", "User"], "endpoint": "packages.list_packages"},
     # Foundations for Zeb's "First Agents" plan (Sept 2026) -- Agent Runs +
     # Human Review Queue. Single top-level entry (Review Queue is a tab on
     # the Agent Runs page, not a separate sidebar child -- see
     # blueprints/ai_agents.py's module docstring for the full design note).
-    {"key": "ai_agents", "label": "AI Agents", "icon": "robot", "endpoint": "ai_agents.list_runs"},
+    {"key": "ai_agents", "label": "AI Agents", "icon": "robot", "roles": ["TenantAdmin", "User"], "endpoint": "ai_agents.list_runs"},
     # "Accounting / Finance" and "Tables & Utilities" below are parent nav
     # items with no page of their own, same pattern as "Organization
     # Intelligence" -- each just groups its sub-modules' blueprint keys in
     # the sidebar. See templates/base.html for how "children" is rendered
     # as a collapsible sub-menu.
-    {"key": "accounting_finance", "label": "Accounting / Finance", "icon": "lightbulb", "children": [
+    {"key": "accounting_finance", "label": "Accounting / Finance", "icon": "lightbulb", "roles": ["TenantAdmin", "User"], "children": [
         {"key": "billing_ar", "label": "Billing & A/R", "icon": "receipt", "endpoint": "billing_ar.index"},
         {"key": "purchasing_ap", "label": "Purchasing & A/P", "icon": "cart-check", "endpoint": "purchasing_ap.index"},
         {"key": "accounts_gl", "label": "Accounts & G/L", "icon": "calculator", "endpoint": "accounts_gl.index"},
     ]},
-    {"key": "organization_intelligence", "label": "Organization Intelligence", "icon": "lightbulb", "children": [
+    {"key": "organization_intelligence", "label": "Organization Intelligence", "icon": "lightbulb", "roles": ["TenantAdmin", "User"], "children": [
         {"key": "documents", "label": "Documents", "icon": "folder2-open", "endpoint": "documents.index"},
         {"key": "intelligence", "label": "Intelligence", "icon": "journal-text", "endpoint": "intelligence.index"},
     ]},
     # Data Exchange and Table Maintenance are unchanged, existing
     # blueprints -- just moved off the top level and grouped under one
     # "Tables & Utilities" parent (matching the mockup's exact label).
-    {"key": "tables_utilities", "label": "Tables & Utilities", "icon": "lightbulb", "children": [
+    {"key": "tables_utilities", "label": "Tables & Utilities", "icon": "lightbulb", "roles": ["TenantAdmin", "User"], "children": [
         {"key": "data_exchange", "label": "Data Exchange", "icon": "arrow-left-right", "endpoint": "data_exchange.index"},
         {"key": "table_maintenance", "label": "Table Maintenance", "icon": "table", "endpoint": "table_maintenance.index"},
     ]},
+    {"key": "users", "label": "Manage Users", "icon": "people-fill", "endpoint": "users.list_users",
+     "roles": ["TenantAdmin"]},
+    {"key": "tenants_admin", "label": "Tenant Management", "icon": "diagram-3", "endpoint": "tenants_admin.list_tenants",
+     "roles": ["SystemAdmin"]},
     {"key": "system_mgmt", "label": "System Management", "icon": "gear", "endpoint": "system_mgmt.index"},
 ]
 
@@ -80,12 +92,22 @@ def create_app():
     app.config["SECRET_KEY"] = Config.get_secret_key()
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    # False for local http://127.0.0.1 (a Secure cookie is dropped over plain
+    # HTTP and login would silently fail); set SESSION_COOKIE_SECURE=true on
+    # the server, where TMS is only reached over HTTPS.
+    app.config["SESSION_COOKIE_SECURE"] = Config.SESSION_COOKIE_SECURE
     # Generous cap covering the largest legitimate upload (a profile photo,
     # capped separately at Config.MAX_UPLOAD_BYTES) plus CSV imports.
     app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
     db_module.init_app(app)
     csrf.init_app(app)
+
+    # Upgrade the database with any schema changes shipped since it was last
+    # opened -- automatic, additive, no data loss (see db.py MIGRATIONS).
+    # A no-op on an uninitialized database or one already up to date.
+    with app.app_context():
+        db_module.run_pending_migrations()
 
     from auth.routes import auth_bp
     from blueprints.dashboard import dashboard_bp
@@ -111,6 +133,8 @@ def create_app():
     from blueprints.currency_admin import currency_admin_bp
     from blueprints.help import help_bp
     from blueprints.ai_agents import ai_agents_bp
+    from blueprints.users import users_bp
+    from blueprints.tenants_admin import tenants_admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -140,6 +164,8 @@ def create_app():
     app.register_blueprint(geography_admin_bp, url_prefix="/geography-maintenance")
     app.register_blueprint(service_taxonomy_admin_bp, url_prefix="/service-code-maintenance")
     app.register_blueprint(currency_admin_bp, url_prefix="/currency-maintenance")
+    app.register_blueprint(users_bp, url_prefix="/users")
+    app.register_blueprint(tenants_admin_bp, url_prefix="/platform/tenants")
 
     app.jinja_env.globals["modules"] = MODULES
     app.jinja_env.filters["format_phone"] = format_phone

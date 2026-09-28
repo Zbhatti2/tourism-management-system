@@ -1,6 +1,55 @@
 {% extends "base.html" %}
 {% block title %}System Management{% endblock %}
 {% block content %}
+{% if g.role == 'SystemAdmin' %}
+<div class="mb-4">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">System Management</h1>
+</div>
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5">Account</h2>
+        <dl class="row mb-0">
+          <dt class="col-sm-5">User ID</dt><dd class="col-sm-7">{{ g.username }} <span class="text-muted small">(SystemAdmin)</span></dd>
+          <dt class="col-sm-5">Tenants</dt><dd class="col-sm-7">{{ tenant_count }}</dd>
+          <dt class="col-sm-5">Last backup</dt><dd class="col-sm-7">{{ last_backup_at or "Never" }}</dd>
+        </dl>
+        <a href="{{ url_for('system_mgmt.change_password') }}" class="btn btn-outline-primary btn-sm mt-2"><i class="bi bi-key"></i> Change Password</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-diagram-3"></i> Tenant Management</h2>
+        <p class="text-muted small mb-3">Create tour operators, and suspend or reactivate them.</p>
+        <a href="{{ url_for('tenants_admin.list_tenants') }}" class="btn btn-primary btn-sm">Open Tenant Management</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-heart-pulse"></i> Database health</h2>
+        <p class="text-muted small mb-3">SQLite integrity check, table counts, and file size — whole database, every tenant.</p>
+        <a href="{{ url_for('system_mgmt.health') }}" class="btn btn-primary btn-sm">Run health check</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-hdd-stack"></i> Backup &amp; restore</h2>
+        <p class="text-muted small mb-3">Back up the whole database (every tenant), review the backup log, or restore from an earlier one.</p>
+        <a href="{{ url_for('system_mgmt.backups_index') }}" class="btn btn-primary btn-sm">Backup &amp; restore</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
 <h1 class="h3 mb-4">System Management</h1>
 
 <div class="row g-3">
@@ -10,6 +59,8 @@
         <h2 class="h5">Account</h2>
         <dl class="row mb-0">
           <dt class="col-sm-5">Organization</dt><dd class="col-sm-7">{{ tenant.tenant_name }}</dd>
+          <dt class="col-sm-5">Account #</dt><dd class="col-sm-7">{{ tenant.account_number or "—" }}</dd>
+          <dt class="col-sm-5">Website</dt><dd class="col-sm-7">{{ tenant.website_domain or "—" }}</dd>
           <dt class="col-sm-5">User ID</dt><dd class="col-sm-7">{{ g.username }} <span class="text-muted small">({{ g.role }})</span></dd>
           <dt class="col-sm-5">Organization since</dt><dd class="col-sm-7">{{ tenant.created_at }}</dd>
           <dt class="col-sm-5">Last backup</dt><dd class="col-sm-7">{{ last_backup_at or "Never" }}</dd>
@@ -73,15 +124,17 @@
     </div>
   </div>
 
+  {% if g.role == 'TenantAdmin' %}
   <div class="col-md-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body">
-        <h2 class="h5"><i class="bi bi-heart-pulse"></i> Database health</h2>
-        <p class="text-muted small mb-3">SQLite integrity check, table counts, and file size.</p>
-        <a href="{{ url_for('system_mgmt.health') }}" class="btn btn-primary btn-sm">Run health check</a>
+        <h2 class="h5"><i class="bi bi-people-fill"></i> Users</h2>
+        <p class="text-muted small mb-3">Add teammates, change their role, reset a password, or deactivate an account.</p>
+        <a href="{{ url_for('users.list_users') }}" class="btn btn-primary btn-sm">Manage Users</a>
       </div>
     </div>
   </div>
+  {% endif %}
 
   <div class="col-md-6">
     <div class="card shadow-sm border-0 h-100">
@@ -96,11 +149,11 @@
   <div class="col-md-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body">
-        <h2 class="h5"><i class="bi bi-hdd-stack"></i> Backup &amp; restore</h2>
-        <p class="text-muted small mb-3">Create a backup of the whole database, review the backup log, or restore from an earlier one.</p>
-        <a href="{{ url_for('system_mgmt.backups_index') }}" class="btn btn-primary btn-sm">Backup &amp; restore</a>
+        <h2 class="h5 text-muted"><i class="bi bi-hdd-stack"></i> Database health &amp; backups</h2>
+        <p class="text-muted small mb-0">The database holds every tenant's data, so health checks, backups and restores are run by the TMS System Admin. Contact them if you need an earlier copy of your data restored.</p>
       </div>
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock %}

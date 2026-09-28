@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Recovery Phrase{% endblock %}
+{% block content %}
+<div class="card shadow-lg border-0" style="max-width: 560px;">
+  <div class="card-body p-4 p-md-5">
+    <h1 class="h4 mb-1"><i class="bi bi-shield-lock text-warning"></i> Save this recovery phrase</h1>
+    <p class="text-muted">This is the only way <strong>{{ label }}</strong> ({{ org }}'s first Tenant Admin) can reset their own password later. It is shown once, here, and is never stored anywhere in readable form.</p>
+    <div class="seed-phrase-box my-4">
+      {% for word in phrase.split() %}<span class="badge bg-light text-dark border me-1 mb-1">{{ loop.index }}. {{ word }}</span>{% endfor %}
+    </div>
+    <p class="small text-muted">Pass these 12 words to {{ label }} along with their temporary password, or write them down somewhere safe. Anyone with this phrase can reset that account's password.</p>
+    <a href="{{ url_for('tenants_admin.list_tenants') }}" class="btn btn-primary w-100">Done</a>
+  </div>
+</div>
+{% endblock %}

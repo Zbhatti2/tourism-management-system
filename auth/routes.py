@@ -1,21 +1,15 @@
-import re
 import secrets
 
 from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
 
+from auth.decorators import get_current_dek
 from db import get_db, is_configured, log_action
 from security import crypto, session_keys
 from security.passwords import hash_password, verify_password
-from security.wordlist import generate_seed_phrase, hash_phrase, normalize_phrase, verify_phrase
+from security.wordlist import verify_phrase
+from tenant_provisioning import provision_tenant
 
 auth_bp = Blueprint("auth_bp", __name__)
-
-
-def _slugify_tenant_code(tenant_name: str) -> str:
-    """'Heritage Tours' -> 'HERITAGE_TOURS'. Used as the tenant's short
-    internal code when the setup form doesn't ask for one separately."""
-    code = re.sub(r"[^A-Za-z0-9]+", "_", tenant_name.strip()).strip("_").upper()
-    return code or secrets.token_hex(4).upper()
 
 
 def _start_session(user_row, dek: bytes, tenant_name: str = None):
@@ -28,6 +22,7 @@ def _start_session(user_row, dek: bytes, tenant_name: str = None):
     session["username"] = user_row["username"]
     session["display_name"] = user_row["display_name"]
     session["role"] = user_row["role"]
+    session["must_change_password"] = bool(user_row["must_change_password"]) if "must_change_password" in user_row.keys() else False
     if tenant_name:
         session["tenant_name"] = tenant_name
 
@@ -47,11 +42,10 @@ def _require_setup_first():
 @auth_bp.route("/setup", methods=["GET", "POST"])
 def setup():
     """First-run (or new-tenant) provisioning: creates a tenant, its DEK,
-    and its first user as TenantAdmin. Phase 1.1 seeds Heritage Tours and
-    its admin (Zeb) directly via `flask --app app seed-tenant`, so in normal
-    use nobody hits this page for the first tenant — it exists for
-    provisioning additional tenants later (Phase 1.3+) and as a manual
-    fallback."""
+    and its first user as TenantAdmin. TMS seeds its first tenant directly
+    via `flask --app app seed-tenant`, so in normal use nobody hits this
+    page for the first tenant — it exists for provisioning additional
+    tenants later and as a manual fallback."""
     if is_configured():
         return redirect(url_for("auth_bp.login"))
 
@@ -78,28 +72,7 @@ def setup():
             return render_template("setup.html")
 
         db = get_db()
-
-        dek = crypto.new_tenant_dek()
-        dek_wrapped = crypto.wrap_tenant_dek(dek)
-        tenant_code = _slugify_tenant_code(tenant_name)
-
-        cur = db.execute(
-            "INSERT INTO tenants (tenant_code, tenant_name, dek_wrapped) VALUES (?, ?, ?)",
-            (tenant_code, tenant_name, dek_wrapped),
-        )
-        tenant_id = cur.lastrowid
-
-        seed_phrase = generate_seed_phrase()
-        db.execute(
-            """INSERT INTO users
-               (tenant_id, username, display_name, password_hash, role, recovery_seed_hash)
-               VALUES (?, ?, ?, ?, 'TenantAdmin', ?)""",
-            (tenant_id, username, display_name, hash_password(password), hash_phrase(seed_phrase)),
-        )
-        db.commit()
-
-        from seed_data import seed_lookup_tables
-        seed_lookup_tables(db, tenant_id)
+        tenant_id, seed_phrase = provision_tenant(db, tenant_name, username, display_name, password)
 
         log_action("Setup", "tenants", tenant_id, f"Provisioned tenant {tenant_name!r} with admin {username!r}",
                    tenant_id=tenant_id)
@@ -127,6 +100,30 @@ def setup_seed_phrase():
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
+    # Already signed in with a live session? Send them straight to where
+    # they belong instead of rendering the login form. base.html decides
+    # whether to show its whole sidebar-shell layout purely off
+    # session['auth_token'] being set -- and that signed cookie (plus the
+    # on-disk secret key it's signed with) survives a server restart, so a
+    # browser tab/cookie left over from an earlier run (e.g. the launcher
+    # batch files always open a fresh tab at /login on every start) lands
+    # here still authenticated. login.html only defines the LOGGED-OUT half
+    # of base.html (block auth_content) -- without this guard, base.html
+    # would take the logged-in branch instead and render an empty shell
+    # (no login form, no page content, since login.html never defines
+    # block content, and none of g.role/g.tenant_name/g.display_name are
+    # set since /login isn't behind login_required either).
+    #
+    # get_current_dek() returns None both for "never logged in" and for "the
+    # dev server restarted and wiped its in-memory session_keys store since
+    # this cookie was issued" (see auth/decorators.py) -- in the latter case
+    # the guard correctly falls through to the ordinary login form below,
+    # same as login_required does for every other page.
+    if get_current_dek() is not None:
+        if session.get("role") == "SystemAdmin":
+            return redirect(url_for("tenants_admin.list_tenants"))
+        return redirect(url_for("dashboard.index"))
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -170,6 +167,12 @@ def login():
         except Exception as e:
             log_action("Purge", None, None, f"Daily purge check failed: {e}")
 
+        # A SystemAdmin has no tenant_id of their own (schema.sql MODULE T),
+        # so every tile on the regular Dashboard would just show empty,
+        # meaningless zero-counts for them -- send them straight to the
+        # platform-wide screen that's actually theirs to use instead.
+        if user["role"] == "SystemAdmin":
+            return redirect(url_for("tenants_admin.list_tenants"))
         return redirect(url_for("dashboard.index"))
 
     return render_template("login.html")
@@ -188,10 +191,9 @@ def logout():
 @auth_bp.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     """Self-service password reset via a per-user recovery seed phrase.
-    Unlike PIMS's single-user version, this does NOT touch any encryption
-    key — the tenant DEK is independent of user passwords (see
-    security/crypto.py) — so a reset is just "verify the phrase, set a new
-    password_hash." Nothing needs to be re-encrypted."""
+    This does NOT touch any encryption key — the tenant DEK is independent
+    of user passwords (see security/crypto.py) — so a reset is just "verify
+    the phrase, set a new password_hash." Nothing needs to be re-encrypted."""
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         phrase = request.form.get("seed_phrase", "")
@@ -212,7 +214,13 @@ def forgot_password():
             return render_template("forgot_password.html")
 
         db.execute(
-            "UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?",
+            # A password the user chose themselves via this flow is never a
+            # "temporary" one, even if must_change_password had been set
+            # (e.g. a Tenant-Admin-issued temp password whose owner forgot
+            # it before ever changing it) — clear that flag here so they
+            # aren't immediately forced through Change Password again right
+            # after logging in with the password they just picked.
+            "UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime('now') WHERE user_id = ?",
             (hash_password(new_password), user["user_id"]),
         )
         db.commit()

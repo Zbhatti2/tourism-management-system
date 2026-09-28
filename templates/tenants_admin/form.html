@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — New Tenant{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">New Tenant</h1>
+  </div>
+
+</div>
+
+<div class="card shadow-sm border-0" style="max-width: 560px;">
+  <div class="card-body">
+    <p class="text-muted small">Creates a new organization with its own isolated data and encryption key, plus its first Tenant Admin login. That admin can then add their own teammates from Manage Users.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="tenant_name">Organization name</label>
+        <input class="form-control" id="tenant_name" name="tenant_name" value="{{ form.tenant_name or '' }}" required autofocus>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="website_domain">Website domain (optional)</label>
+        <input class="form-control" id="website_domain" name="website_domain" value="{{ form.website_domain or '' }}" placeholder="www.example.com">
+        <div class="form-text">The tenant's own public website, where it will sell its tours.</div>
+      </div>
+      <hr>
+      <h2 class="h6">First Tenant Admin</h2>
+      <div class="mb-3">
+        <label class="form-label" for="username">User ID</label>
+        <input class="form-control" id="username" name="username" value="{{ form.username or '' }}" required>
+        <div class="form-text">Their login — unique across the whole system.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="display_name">Display name (optional)</label>
+        <input class="form-control" id="display_name" name="display_name" value="{{ form.display_name or '' }}" placeholder="Defaults to User ID">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="password">Temporary password</label>
+        <input class="form-control" id="password" name="password" type="password" minlength="8" required>
+        <div class="form-text">Give this to them directly. They'll be required to set their own on first login.</div>
+      </div>
+      <div class="mb-4">
+        <label class="form-label" for="confirm_password">Confirm password</label>
+        <input class="form-control" id="confirm_password" name="confirm_password" type="password" minlength="8" required>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Create Tenant</button>
+        <a href="{{ url_for('tenants_admin.list_tenants') }}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

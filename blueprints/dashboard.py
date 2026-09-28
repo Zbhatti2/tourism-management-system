@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, g, render_template
+from flask import Blueprint, abort, g, redirect, render_template, url_for
 
 from auth.decorators import login_required
 from db import get_db
@@ -21,6 +21,10 @@ COMING_SOON_TILES = {
 @dashboard_bp.route("/")
 @login_required
 def index():
+    # The SystemAdmin has no tenant of its own, so every tile here would be
+    # an empty zero -- send it to the platform screen that is actually its.
+    if g.role == "SystemAdmin":
+        return redirect(url_for("tenants_admin.list_tenants"))
     db = get_db()
     tenant_id = g.tenant_id
     counts = {

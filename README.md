@@ -1,35 +1,69 @@
-# Tourism Management System — Phase 1.1
+# Tourism Management System (TMS)
 
-A multi-tenant, multi-user Flask + SQLite app. Phase 1.1 is the skeleton:
-the data model, login, and navigation shell, adapted from an existing
-single-user project called PIMS (Personal Information Management System),
-reworked for multi-tenancy per the Tourism Management System project brief.
+A multi-tenant, multi-user Flask + SQLite app for tour operators, run as a
+SaaS platform: each tour operator (tenant) has its own isolated data, its
+own users and its own encryption key.
 
-The first tenant is **Heritage Tours**, with **Zeb** (password **Zebra**) as
-its Tenant Admin.
+| Tenant | Account # | Code | Website |
+|---|---|---|---|
+| TMS Platform (reserved, no logins) | 10000001 | TMS_PLATFORM | — |
+| **Ma Vie Tours** (first tenant; Tenant Admin **Zeb**) | 10000002 | MAVIE | www.mavietours.com |
 
-## Setup
+Hosted at **https://tms.ipromise.com** (Hostinger VPS2, Docker via Coolify —
+same setup as the GSS app).
 
-Requires Python 3.10+.
+## Roles
+
+- **SystemAdmin** — the platform ("TMS") level. Belongs to no tenant.
+  Creates, suspends and reactivates tenants (Tenant Management), and runs
+  whole-database health checks and backups. Created once per database with
+  `flask --app app create-system-admin`.
+- **TenantAdmin** — manages their own organization: its users (Manage
+  Users), settings and data.
+- **User** — day-to-day work inside their organization.
+
+Usernames are unique across the whole system, so login needs no tenant
+picker.
+
+## Running locally
+
+Double-click `Start_TMS.bat` (http://127.0.0.1:5050). Database changes are
+applied automatically when the app starts (`db.py` → `MIGRATIONS`) — there
+is no separate migration step any more.
+
+Only for a brand-new, empty database:
 
 ```bash
-python -m venv venv
-source venv/bin/activate        # venv\Scripts\activate on Windows
-pip install -r requirements.txt
-
-flask --app app init-db         # creates instance/tms.db from schema.sql
-flask --app app seed-tenant     # creates Heritage Tours + Zeb (TenantAdmin), seeds its lookup tables
-
-flask --app app run --debug     # http://127.0.0.1:5000
+flask --app app init-db        # creates instance/tms.db from schema.sql
+flask --app app seed-tenant    # creates Ma Vie Tours + Zeb (TenantAdmin)
+flask --app app create-system-admin
 ```
 
-Then log in at `/login` with User ID `Zeb`, password `Zebra`. Change the
-password from System Management once you're in.
+Other useful commands: `flask --app app set-password` (reset any user's
+password), `flask --app app count-rows counts.txt` (row count of every
+table — used to verify a database move).
 
-A `/setup` wizard also exists for provisioning **additional** tenants later
-(Phase 1.3+, when this becomes a real SaaS with more than one tour
-operator) — it's not needed for this first run since `seed-tenant` already
-creates Heritage Tours directly.
+## Hosting (Hostinger VPS2 / Coolify)
+
+`Dockerfile` + `entrypoint.sh` build the production image (gunicorn, one
+worker). In Coolify:
+
+1. Application from this GitHub repo, branch `main`, build pack Dockerfile, port 5000.
+2. Persistent volume mounted at `/app/instance` (holds `tms.db`,
+   `tenant_master.key`, `secret_key`, uploads and backups).
+3. Environment variables: `SESSION_COOKIE_SECURE=true`, `ANTHROPIC_API_KEY`.
+4. Domain `https://tms.ipromise.com`.
+
+The container never creates an empty database on its own: upload the real
+`tms.db` **and its `tenant_master.key`** into the volume. (Set
+`TMS_ALLOW_INIT=true` only to start a brand-new, empty system.) The
+database cannot be read without the key it was created with.
+
+## What goes to GitHub
+
+Only the code needed to build and update TMS. `.gitignore` keeps secrets
+(`.env`, keys), the database, uploads, backups, notes, Word/PDF documents
+and one-off data scripts on the PC.
 
 ## What changed from PIMS, and why
 
@@ -37,7 +71,7 @@ PIMS was single-user and single-tenant: one master password unlocked the
 whole database, and that same password directly derived the key used to
 encrypt sensitive fields (subscription passwords, account numbers, CVVs,
 PINs, license serials). That's an elegant trick for one person on one
-machine, but it doesn't extend to "several employees at Heritage Tours who
+machine, but it doesn't extend to "several employees at Ma Vie Tours who
 all need to read the same company's data" — so Phase 1.1 splits
 authentication from field encryption:
 
@@ -49,7 +83,7 @@ authentication from field encryption:
   Encryption Key, wrapped under one system-level master key
   (`instance/tenant_master.key`) and unwrapped by the server once a user's
   password check succeeds — never derived from any password. That's what
-  lets several different users of Heritage Tours, and a Tenant Admin
+  lets several different users of Ma Vie Tours, and a Tenant Admin
   resetting a teammate's password, all read the same encrypted data without
   anything being re-encrypted.
 
@@ -68,7 +102,7 @@ each tour operator maintains its own picklists via Table Maintenance.
 
 Roles: **SystemAdmin** (not tied to a tenant — provisions new tenants, runs
 whole-database backups), **TenantAdmin** (manages users/settings within
-their own tenant — this is what Zeb is for Heritage Tours), **User**
+their own tenant — this is what Zeb is for Ma Vie Tours), **User**
 (day-to-day). In Phase 1.1's single-tenant desktop deployment, Backup &
 Restore and Database Health are gated to TenantAdmin (rather than a
 stricter SystemAdmin-only) since there's no separate ops team yet — tighten
@@ -97,17 +131,14 @@ error page that leaks that the record exists).
 
 ## Known follow-ups (not yet done)
 
-- **Form-submitted foreign keys aren't tenant-validated.** A request that
-  references another tenant's `platform_id`, `organization_id`, etc. by ID
-  in a form field (as opposed to a URL path segment, which *is* checked)
-  isn't currently rejected. Worth a follow-up pass before this is exposed
-  beyond a trusted desktop deployment.
-- **No user-management screens yet** (add/deactivate a teammate, assign
-  role) — Phase 1.1 gets the schema and login working; building the actual
-  "Users" admin UI is a natural next step.
+- **Adding images/files on the hosted app.** POI images, supplier
+  documents and document locations are added with a *Browse…* button that
+  opens a file dialog **on the machine running the server** — that works
+  on your PC but not on the VPS. Existing images are stored inside the
+  database and display fine everywhere; adding new ones from a browser
+  needs an upload button (browser → server) instead.
 - A physical purge job for archived/soft-deleted contacts past their
-  retention window exists (`contacts_archive.purge_eligible_at`,
-  `system_mgmt._purge_eligible`) but nothing schedules it beyond the
+  retention window exists but nothing schedules it beyond the
   once-a-day opportunistic check at login.
 - PDF export (an option in `schema.sql`'s `export_jobs.format` CHECK
   constraint) isn't implemented.
@@ -129,7 +160,7 @@ error page that leaks that the record exists).
 app.py                  Flask app factory, blueprint registration, module nav
 config.py                Paths, scrypt params, session timeout, tenant master key
 schema.sql                Full DDL — MODULE T at the top covers multi-tenancy
-seed_data.py               Lookup table seed values + seed_first_tenant() (Heritage Tours / Zeb)
+seed_data.py               Lookup table seed values + seed_first_tenant() (Ma Vie Tours / Zeb)
 db.py                       sqlite3 connection handling + audit log helper, CLI commands
 security/
   crypto.py                  Per-tenant DEK generation/wrap/unwrap, field encrypt/decrypt

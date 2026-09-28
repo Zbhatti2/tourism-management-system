@@ -1,0 +1,4 @@
+# Keep shell scripts LF (they run inside the Linux container) and Windows
+# batch files CRLF, whatever git's autocrlf setting is on the PC.
+*.sh text eol=lf
+*.bat text eol=crlf

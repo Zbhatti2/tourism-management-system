@@ -74,8 +74,8 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE tenants (
     tenant_id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_code     TEXT NOT NULL UNIQUE,    -- short slug, e.g. 'HERITAGE' — internal identifier (exports, future subdomains), not shown as "the" name to end users
-    tenant_name     TEXT NOT NULL,           -- display name, e.g. 'Heritage Tours'
+    tenant_code     TEXT NOT NULL UNIQUE,    -- short slug, e.g. 'MAVIE' — internal identifier (exports, future subdomains), not shown as "the" name to end users
+    tenant_name     TEXT NOT NULL,           -- display name, e.g. 'Ma Vie Tours'
     status          TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active','Suspended')),
     dek_wrapped     BLOB NOT NULL,           -- Fernet(system tenant-master-key).encrypt(tenant DEK) — see security/crypto.py + config.get_tenant_master_key()
     data_retention_days INTEGER DEFAULT NULL, -- days from a record's date of entry (created_at) until purge-eligible; NULL = indefinite (never auto-purge). Per-tenant: each tour operator sets its own policy.
@@ -88,8 +88,27 @@ CREATE TABLE tenants (
     -- currency can be relabeled without touching this column.
     host_currency_code TEXT REFERENCES currencies(code),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    -- 8-digit tenant account number, assigned ONLY via db.py's
+    -- next_account_number() from tenant_account_number_seq below -- never
+    -- reused. 10000001 = the reserved TMS Platform row; 10000002 = Ma Vie
+    -- Tours (the first real tenant); later tenants count up from there.
+    account_number  INTEGER UNIQUE,
+    -- 1 only for the single reserved "TMS Platform" row (tenant_code
+    -- TMS_PLATFORM): holds platform-level master data, nobody logs into it,
+    -- hidden from Tenant Management.
+    is_platform     INTEGER NOT NULL DEFAULT 0,
+    -- The tenant's own public website (e.g. www.mavietours.com), from which
+    -- it sells its tours.
+    website_domain  TEXT
 );
+
+-- Single-row counter behind tenants.account_number (see above).
+CREATE TABLE tenant_account_number_seq (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    next_value  INTEGER NOT NULL
+);
+INSERT INTO tenant_account_number_seq (id, next_value) VALUES (1, 10000001);
 
 CREATE TABLE users (
     user_id         INTEGER PRIMARY KEY AUTOINCREMENT,

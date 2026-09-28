@@ -18,3 +18,8 @@ cryptography>=42.0
 requests>=2.31
 python-dotenv>=1.0
 anthropic>=0.40
+
+# Production WSGI server for the Hostinger VPS / Coolify deployment (see
+# Dockerfile and entrypoint.sh). Not used by Start_TMS.bat, which runs
+# Flask's own dev server; harmless to have installed locally too.
+gunicorn>=21.2

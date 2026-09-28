@@ -6,7 +6,7 @@ single source of truth for structure.
 import sqlite3
 
 import click
-from flask import current_app, g, session
+from flask import current_app, g, has_request_context, session
 
 from config import Config
 
@@ -43,9 +43,11 @@ def log_action(action: str, entity_type: str = None, entity_id: int = None, deta
     explicitly. Pass them explicitly for pre-login events (e.g. a failed
     login attempt, where the tenant may or may not be known yet).
     """
-    if tenant_id is None:
+    # has_request_context(): also callable from a `flask` CLI command (e.g.
+    # create-system-admin) or a migration, where no session exists at all.
+    if tenant_id is None and has_request_context():
         tenant_id = session.get("tenant_id")
-    if user_id is None:
+    if user_id is None and has_request_context():
         user_id = session.get("user_id")
     db = get_db()
     db.execute(
@@ -56,15 +58,281 @@ def log_action(action: str, entity_type: str = None, entity_id: int = None, deta
     db.commit()
 
 
+def _table_exists(db, table: str) -> bool:
+    return db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?", (table,)
+    ).fetchone() is not None
+
+
+def _column_exists(db, table: str, column: str) -> bool:
+    return any(row[1] == column for row in db.execute(f'PRAGMA table_info("{table}")').fetchall())
+
+
 def is_configured() -> bool:
-    """Has at least one tenant been provisioned? Phase 1.1 seeds the first
-    tenant (Heritage Tours) directly via seed_data.py, so in normal use this
-    is already true by the time anyone hits the app; the /setup wizard
-    (auth/routes.py) exists for provisioning additional tenants later and as
-    a fallback if the database was created without seeding."""
+    """Has at least one real (non-platform) tenant been provisioned? The
+    first tenant (Ma Vie Tours) is seeded directly via seed_data.py, so in
+    normal use this is already true by the time anyone hits the app; the
+    /setup wizard (auth/routes.py) exists as a fallback if the database was
+    created without seeding. The reserved TMS Platform row (is_platform = 1)
+    doesn't count -- nobody can log into it."""
     db = get_db()
-    row = db.execute("SELECT 1 FROM tenants LIMIT 1").fetchone()
+    if not _table_exists(db, "tenants"):
+        return False
+    if _column_exists(db, "tenants", "is_platform"):
+        row = db.execute("SELECT 1 FROM tenants WHERE is_platform = 0 LIMIT 1").fetchone()
+    else:
+        row = db.execute("SELECT 1 FROM tenants LIMIT 1").fetchone()
     return row is not None
+
+
+# =============================================================================
+# Schema migrations -- additive, automatic, run once per schema change.
+#
+# schema.sql is the source of truth for a BRAND NEW database (flask init-db).
+# A database already in use (your real TMS data) picks up later changes
+# through MIGRATIONS below: run_pending_migrations() is called once at app
+# startup (app.py's create_app()), applies whichever entries this database
+# hasn't recorded yet, in order, and records each one in schema_migrations
+# so it is never applied twice. Every migration function must be safe to run
+# against a database that already has the change (it checks before it
+# CREATEs/ALTERs), since a freshly init-db'd database runs them too.
+#
+# The ~40 older `flask migrate-*` commands further down are NOT in this list:
+# every database that exists today has already had them applied by hand, and
+# schema.sql already includes everything they added. They stay available as
+# CLI commands for reference only.
+# =============================================================================
+
+def next_account_number(db) -> int:
+    """Consumes and returns the next 8-digit tenant account number from the
+    tenant_account_number_seq counter. This is the ONLY way an account number
+    is ever assigned -- never MAX()+1 or tenant_id -- so a number is never
+    reused, even if the tenant that held it is later removed. The reserved
+    TMS Platform row takes 10000001; the first real tenant (Ma Vie Tours)
+    takes 10000002; every tenant created after that gets the next one."""
+    row = db.execute("SELECT next_value FROM tenant_account_number_seq WHERE id = 1").fetchone()
+    value = row["next_value"]
+    db.execute("UPDATE tenant_account_number_seq SET next_value = next_value + 1 WHERE id = 1")
+    db.commit()
+    return value
+
+
+def _migration_account_number_infra(db):
+    """tenants.account_number + tenants.is_platform + the counter table.
+    ALTER TABLE ADD COLUMN can't carry UNIQUE in SQLite, so uniqueness is a
+    separate index (NULLs don't collide, which covers the moment between this
+    migration and the backfill below)."""
+    if not _column_exists(db, "tenants", "account_number"):
+        db.execute("ALTER TABLE tenants ADD COLUMN account_number INTEGER")
+    if not _column_exists(db, "tenants", "is_platform"):
+        db.execute("ALTER TABLE tenants ADD COLUMN is_platform INTEGER NOT NULL DEFAULT 0")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_account_number ON tenants(account_number)")
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS tenant_account_number_seq (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            next_value INTEGER NOT NULL
+        )"""
+    )
+    db.execute("INSERT OR IGNORE INTO tenant_account_number_seq (id, next_value) VALUES (1, 10000001)")
+    db.commit()
+
+
+def _migration_create_platform_tenant(db):
+    """Creates the single reserved "TMS Platform" row (tenant_code
+    TMS_PLATFORM, is_platform = 1). It MUST run right after the infra
+    migration and right before the backfill, so it is always the first
+    consumer of the counter (10000001) and the first real tenant lands on
+    10000002. Nobody logs into it; it's hidden from Tenant Management and
+    exists to hold platform-level master data for future tenants. It needs a
+    dek_wrapped only because that column is NOT NULL."""
+    if db.execute("SELECT 1 FROM tenants WHERE tenant_code = 'TMS_PLATFORM'").fetchone():
+        return
+    from security import crypto
+
+    dek_wrapped = crypto.wrap_tenant_dek(crypto.new_tenant_dek())
+    account_number = next_account_number(db)
+    db.execute(
+        "INSERT INTO tenants (tenant_code, account_number, tenant_name, is_platform, dek_wrapped) "
+        "VALUES ('TMS_PLATFORM', ?, 'TMS Platform', 1, ?)",
+        (account_number, dek_wrapped),
+    )
+    db.commit()
+
+
+def _migration_rename_first_tenant_ma_vie_tours(db):
+    """The first tenant was built and populated as "Heritage Tours"
+    (code HERITAGE). It is renamed IN PLACE to "Ma Vie Tours" (code MAVIE):
+    same tenant_id, so every row of existing data stays exactly where it is.
+    Only touches the row still carrying the original seeded code AND name,
+    so it can never overwrite a name someone changes later. The tenant's own
+    Host Organization record gets the same rename (again only if it still
+    has the original name) and the tenant's website."""
+    row = db.execute(
+        "SELECT tenant_id FROM tenants WHERE tenant_code = 'HERITAGE' AND tenant_name = 'Heritage Tours'"
+    ).fetchone()
+    if row is None:
+        return
+    tenant_id = row["tenant_id"]
+    db.execute(
+        "UPDATE tenants SET tenant_code = 'MAVIE', tenant_name = 'Ma Vie Tours', updated_at = datetime('now') "
+        "WHERE tenant_id = ?",
+        (tenant_id,),
+    )
+    if _table_exists(db, "host_organizations"):
+        db.execute(
+            "UPDATE host_organizations SET organization_name = 'Ma Vie Tours', website = 'https://www.mavietours.com', "
+            "updated_at = datetime('now') WHERE tenant_id = ? AND organization_name = 'Heritage Tours'",
+            (tenant_id,),
+        )
+    db.execute(
+        "INSERT INTO audit_log (tenant_id, action, entity_type, entity_id, detail) VALUES (?, 'Update', 'tenants', ?, ?)",
+        (tenant_id, tenant_id, "Tenant renamed from 'Heritage Tours' (HERITAGE) to 'Ma Vie Tours' (MAVIE)"),
+    )
+    db.commit()
+
+
+def _migration_backfill_tenant_account_numbers(db):
+    """Gives every tenant without an account number one, in creation order
+    (tenant_id). Runs after the platform row took 10000001, so the oldest
+    real tenant -- Ma Vie Tours, tenant_id 1 -- gets 10000002."""
+    rows = db.execute("SELECT tenant_id FROM tenants WHERE account_number IS NULL ORDER BY tenant_id").fetchall()
+    for row in rows:
+        db.execute(
+            "UPDATE tenants SET account_number = ?, updated_at = datetime('now') WHERE tenant_id = ?",
+            (next_account_number(db), row["tenant_id"]),
+        )
+    db.commit()
+
+
+def _migration_tenant_website_domain(db):
+    """tenants.website_domain -- the tenant's own public website (Step 2:
+    each tenant sells its tours from its own domain). Ma Vie Tours gets
+    www.mavietours.com."""
+    if not _column_exists(db, "tenants", "website_domain"):
+        db.execute("ALTER TABLE tenants ADD COLUMN website_domain TEXT")
+    db.execute(
+        "UPDATE tenants SET website_domain = 'www.mavietours.com' WHERE tenant_code = 'MAVIE' AND website_domain IS NULL"
+    )
+    db.commit()
+
+
+# Append-only. Each entry is (unique_name, function(db)). Never edit or remove
+# a shipped entry -- add a new one for any further change.
+MIGRATIONS = [
+    # Order matters for the first four: infra -> platform row (10000001) ->
+    # rename -> backfill (Ma Vie Tours = 10000002).
+    ("2026_09_account_number_infra", _migration_account_number_infra),
+    ("2026_09_create_platform_tenant", _migration_create_platform_tenant),
+    ("2026_09_rename_first_tenant_ma_vie_tours", _migration_rename_first_tenant_ma_vie_tours),
+    ("2026_09_backfill_tenant_account_numbers", _migration_backfill_tenant_account_numbers),
+    ("2026_09_tenant_website_domain", _migration_tenant_website_domain),
+]
+
+
+# =============================================================================
+# Tenant isolation -- cross-tenant foreign-key guard triggers.
+#
+# PRAGMA foreign_keys = ON guarantees a referenced row EXISTS, but not that it
+# belongs to the SAME tenant as the row pointing at it. Every screen builds
+# its dropdowns from tenant-scoped queries, so these should never fire in
+# normal use; they are a hard backstop against a form-submitted id for
+# another tenant's record (a bug, a hand-crafted request, or a future route
+# that forgets its WHERE tenant_id = ?). URL-path ids are already checked by
+# each route.
+#
+# Generated from the live schema rather than a hand-kept list, and re-checked
+# at every startup (CREATE TRIGGER IF NOT EXISTS), so tables added later are
+# covered automatically. A relationship is guarded when BOTH tables carry a
+# tenant_id; references to tenants/users (SystemAdmin has no tenant) and the
+# audit log are skipped. As a safety net, a relationship whose EXISTING data
+# would already fail the check is skipped and reported instead of guarded,
+# so a trigger can never block an ordinary edit of an existing record.
+# =============================================================================
+
+TENANT_FK_SKIP_TABLES = {"audit_log", "tenants", "users", "schema_migrations"}
+
+
+def tenant_fk_relationships(db):
+    """[(table, fk_column, referenced_table, referenced_column), ...] for
+    every foreign key where both sides are tenant-scoped."""
+    tables = [r[0] for r in db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ).fetchall()]
+    has_tenant = {t for t in tables if _column_exists(db, t, "tenant_id")}
+    rels = []
+    for t in tables:
+        if t not in has_tenant or t in TENANT_FK_SKIP_TABLES or t.startswith("_archived"):
+            continue
+        for fk in db.execute(f'PRAGMA foreign_key_list("{t}")').fetchall():
+            ref_table, from_col, to_col = fk[2], fk[3], fk[4]
+            if ref_table in TENANT_FK_SKIP_TABLES or ref_table not in has_tenant or from_col == "tenant_id":
+                continue
+            if not to_col:
+                pk = [r[1] for r in db.execute(f'PRAGMA table_info("{ref_table}")').fetchall() if r[5] == 1]
+                if len(pk) != 1:
+                    continue
+                to_col = pk[0]
+            rels.append((t, from_col, ref_table, to_col))
+    return rels
+
+
+def ensure_tenant_fk_triggers(db):
+    """Creates any missing cross-tenant guard triggers (see above). Returns
+    the list of relationships skipped because existing data already mixes
+    tenants (empty in a healthy database)."""
+    skipped = []
+    for table, col, ref_table, ref_col in tenant_fk_relationships(db):
+        name = f"trg_tenant_fk_{table}_{col}"
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name = ?", (name + "_ins",)).fetchone():
+            continue
+        bad = db.execute(
+            f'SELECT COUNT(*) FROM "{table}" x WHERE x."{col}" IS NOT NULL AND NOT EXISTS '
+            f'(SELECT 1 FROM "{ref_table}" r WHERE r."{ref_col}" = x."{col}" AND r.tenant_id = x.tenant_id)'
+        ).fetchone()[0]
+        if bad:
+            skipped.append((table, col, ref_table, bad))
+            continue
+        msg = f"{table}.{col}: cross-tenant reference not allowed"
+        for suffix, event in (("_ins", "INSERT"), ("_upd", "UPDATE")):
+            db.execute(f'''CREATE TRIGGER IF NOT EXISTS {name}{suffix}
+                BEFORE {event} ON "{table}"
+                WHEN NEW."{col}" IS NOT NULL
+                BEGIN
+                    SELECT RAISE(ABORT, '{msg}')
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM "{ref_table}"
+                        WHERE "{ref_col}" = NEW."{col}" AND tenant_id = NEW.tenant_id
+                    );
+                END''')
+    db.commit()
+    for table, col, ref_table, bad in skipped:
+        print(f"[tenant-isolation] NOT guarding {table}.{col} -> {ref_table}: "
+              f"{bad} existing row(s) already reference another tenant's record.")
+    return skipped
+
+
+def run_pending_migrations():
+    """Applies whichever MIGRATIONS this database hasn't recorded yet, in
+    order, then makes sure every tenant-isolation trigger exists. Called
+    once at app startup, so any database -- your local copy or the one on
+    the server -- is upgraded automatically the next time the app starts.
+    A no-op on a database that isn't initialized yet."""
+    db = get_db()
+    if not _table_exists(db, "tenants"):
+        return
+    db.execute("""CREATE TABLE IF NOT EXISTS schema_migrations (
+        name TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )""")
+    db.commit()
+    applied = {row["name"] for row in db.execute("SELECT name FROM schema_migrations").fetchall()}
+    for name, fn in MIGRATIONS:
+        if name in applied:
+            continue
+        fn(db)
+        db.execute("INSERT INTO schema_migrations (name) VALUES (?)", (name,))
+        db.commit()
+    ensure_tenant_fk_triggers(db)
 
 
 def init_app(app):
@@ -781,11 +1049,96 @@ def init_app(app):
     @app.cli.command("seed-tenant")
     def seed_tenant_command():
         """Flask CLI: `flask --app app seed-tenant` — creates the first
-        tenant (Heritage Tours) with its Tenant Admin (Zeb), plus that
-        tenant's lookup tables. Safe to re-run; does nothing if Heritage
-        Tours already exists."""
+        tenant (Ma Vie Tours) with its Tenant Admin (Zeb), plus that
+        tenant's lookup tables. Only used for a brand-new, empty database;
+        safe to re-run (does nothing if the tenant already exists)."""
         from seed_data import seed_first_tenant
 
         db = get_db()
         seed_first_tenant(db)
-        click.echo("Seeded the Heritage Tours tenant and its admin user.")
+        click.echo("Seeded the Ma Vie Tours tenant and its admin user.")
+
+    @app.cli.command("create-system-admin")
+    @click.option("--username", prompt=True, help="Login id for the new SystemAdmin.")
+    @click.option("--display-name", prompt="Display name", help="Shown in the UI (e.g. the person's real name).")
+    @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True,
+                  help="Prompted (hidden) if omitted -- don't pass it on the command line, where it lands in shell history.")
+    def create_system_admin_command(username, display_name, password):
+        """Flask CLI: `flask --app app create-system-admin` — creates a
+        SystemAdmin login: the platform-level ("TMS") role that provisions
+        and suspends tenants and runs whole-database health checks and
+        backups. A SystemAdmin belongs to no tenant (tenant_id is NULL) and
+        can't be created from inside the app, so this command is the
+        one-time bootstrap for that account."""
+        from security.passwords import hash_password
+
+        db = get_db()
+        username = username.strip()
+        if not username:
+            click.echo("Username is required.")
+            return
+        if db.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
+            click.echo(f"A user with username {username!r} already exists (usernames are unique across the whole system).")
+            return
+        if len(password) < 8:
+            click.echo("Password must be at least 8 characters.")
+            return
+        db.execute(
+            "INSERT INTO users (tenant_id, username, display_name, password_hash, role) "
+            "VALUES (NULL, ?, ?, ?, 'SystemAdmin')",
+            (username, display_name.strip() or username, hash_password(password)),
+        )
+        db.commit()
+        log_action("Create", "users", None, f"Created SystemAdmin {username!r} via CLI", tenant_id=None)
+        click.echo(f"Created SystemAdmin {username!r}. Log in at /login with this username and password.")
+
+    @app.cli.command("set-password")
+    @click.option("--username", prompt=True, help="An existing user's login id (any role, any tenant).")
+    @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True,
+                  help="Prompted (hidden) if omitted.")
+    def set_password_command(username, password):
+        """Flask CLI: `flask --app app set-password` — (re)sets an existing
+        user's password directly, e.g. to recover a locked-out account on
+        the server. Clears must_change_password."""
+        from security.passwords import hash_password
+
+        db = get_db()
+        username = username.strip()
+        user = db.execute("SELECT user_id, tenant_id FROM users WHERE username = ?", (username,)).fetchone()
+        if user is None:
+            click.echo(f"No user with username {username!r}.")
+            return
+        if len(password) < 8:
+            click.echo("Password must be at least 8 characters.")
+            return
+        db.execute(
+            "UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime('now') WHERE user_id = ?",
+            (hash_password(password), user["user_id"]),
+        )
+        db.commit()
+        log_action("Update", "users", user["user_id"], f"Password set via CLI for {username!r}",
+                   tenant_id=user["tenant_id"])
+        click.echo(f"Password set for {username!r}.")
+
+    @app.cli.command("count-rows")
+    @click.argument("output_file", required=False)
+    def count_rows_command(output_file):
+        """Flask CLI: `flask --app app count-rows counts.txt` — writes the
+        row count of every table (sorted by name) to a text file, or prints
+        it. Run it before and after moving the database to the server and
+        compare the two files: they must be identical."""
+        db = get_db()
+        tables = [r[0] for r in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        ).fetchall()]
+        lines = []
+        for t in tables:
+            count = db.execute('SELECT COUNT(*) FROM "' + t + '"').fetchone()[0]
+            lines.append(f"{t}\t{count}")
+        text = "\n".join(lines) + "\n"
+        if output_file:
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(text)
+            click.echo(f"Wrote row counts for {len(tables)} tables to {output_file}.")
+        else:
+            click.echo(text)
