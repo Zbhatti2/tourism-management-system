@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if currency else 'New' }} Currency{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('currency_admin.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Currency &amp; Exchange Rates</a>
+</nav>
+<h1 class="h3 mb-4">{{ 'Edit' if currency else 'New' }} Currency</h1>
+
+<div class="card shadow-sm border-0" style="max-width: 520px;">
+  <div class="card-body">
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="mb-3">
+        <label class="form-label">Code (ISO 4217)</label>
+        {% if currency %}
+        <input type="text" class="form-control" value="{{ currency.code }}" disabled>
+        <div class="form-text">Can't be changed once created — other tables (countries, exchange rates, a tenant's Host Currency) refer to a currency by this code.</div>
+        {% else %}
+        <input type="text" name="code" class="form-control text-uppercase" maxlength="3" placeholder="e.g. USD" required>
+        <div form-text class="form-text">Exactly 3 letters.</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Name</label>
+        <input type="text" name="label" class="form-control" value="{{ currency.label if currency else '' }}" placeholder="e.g. US Dollar" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Symbol</label>
+        <input type="text" name="symbol" class="form-control" style="max-width: 160px;" value="{{ currency.symbol if currency else '' }}" placeholder="e.g. $">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Sort order</label>
+        <input type="number" name="sort_order" class="form-control" style="max-width: 160px;" value="{{ currency.sort_order if currency else 0 }}">
+      </div>
+
+      <div class="form-check mb-4">
+        <input type="checkbox" name="is_active" class="form-check-input" id="is_active" {% if not currency or currency.is_active %}checked{% endif %}>
+        <label class="form-check-label" for="is_active">Active</label>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a href="{{ url_for('currency_admin.index') }}" class="btn btn-outline-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

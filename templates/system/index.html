@@ -44,6 +44,28 @@
   <div class="col-md-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body">
+        <h2 class="h5"><i class="bi bi-cash-coin"></i> Host Currency</h2>
+        <p class="text-muted small">Your own operating currency — shown alongside each Destination Currency when Planning Tours.</p>
+        <form method="post" action="{{ url_for('system_mgmt.update_host_currency') }}" class="d-flex gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <select name="host_currency_code" class="form-select" style="max-width: 260px;">
+            <option value="">— Not set —</option>
+            {% for c in host_currencies %}
+            <option value="{{ c.code }}" {% if tenant.host_currency_code == c.code %}selected{% endif %}>{{ c.code }} — {{ c.label }}{% if c.symbol %} ({{ c.symbol }}){% endif %}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-outline-primary" type="submit">Save</button>
+        </form>
+        <p class="text-muted small mt-2 mb-0">
+          <a href="{{ url_for('currency_admin.index') }}">Manage currencies &amp; exchange rates</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
         <h2 class="h5"><i class="bi bi-building-gear"></i> Host Organization</h2>
         <p class="text-muted small mb-3">Your own company — {{ host_org.organization_name if host_org else "not yet set up" }}. Its office addresses are where an Employee's Office Work Address is picked from (Human Resources).</p>
         <a href="{{ url_for('system_mgmt.host_organization') }}" class="btn btn-primary btn-sm">Manage Host Organization</a>

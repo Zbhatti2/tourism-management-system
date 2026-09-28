@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Agent Run — {{ run.scope_label }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h4 mb-1">
+      {{ run.scope_label }}
+      {% if run.status == "completed" %}<span class="badge bg-success-subtle text-success align-middle">Completed</span>
+      {% elif run.status == "running" %}<span class="badge bg-info-subtle text-info align-middle">Running</span>
+      {% elif run.status == "failed" %}<span class="badge bg-danger-subtle text-danger align-middle">Failed</span>
+      {% else %}<span class="badge bg-secondary-subtle text-muted align-middle">Pending</span>{% endif %}
+    </h1>
+    <p class="text-muted mb-0">
+      {{ agent_types.get(run.agent_type, run.agent_type) }} —
+      {{ task_types.get(run.task_type, run.task_type) }} —
+      <span class="text-muted small">logged {{ run.created_at }}</span>
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="post" action="{{ url_for('ai_agents.run_agent', run_id=run.run_id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-success btn-sm" type="submit" {{ "disabled" if not (sources and agent_ready) or run.status == "running" else "" }}>
+        <i class="bi bi-play-fill"></i> Run Agent
+      </button>
+    </form>
+    <a href="{{ url_for('ai_agents.list_runs') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+    {% if items | length == 0 and run.status != "running" %}
+    <form method="post" action="{{ url_for('ai_agents.delete_run', run_id=run.run_id) }}" class="d-inline" onsubmit="return confirm('Delete this run? It has no Review Items, so this can’t be undone.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Delete</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if not sources %}
+<div class="alert alert-warning small py-2">Add at least one Source URL or image below before Run Agent will work — it never guesses without something to read.</div>
+{% elif not agent_ready %}
+<div class="alert alert-warning small py-2">Run Agent needs an <code>ANTHROPIC_API_KEY</code> configured — see <code>.env.example</code> in the App folder.</div>
+{% endif %}
+
+{% if run.summary %}
+<div class="alert alert-light border mb-4">{{ run.summary }}</div>
+{% endif %}
+
+<div class="mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h6 text-muted mb-0">Sources</h2>
+    {% if run.status == "pending" %}
+    <a href="{{ url_for('ai_agents.add_source', run_id=run.run_id) }}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-plus-lg"></i> Add Source
+    </a>
+    {% endif %}
+  </div>
+  {% if sources %}
+  <ul class="list-unstyled mb-0">
+    {% for s in sources %}
+    <li class="mb-2 d-flex align-items-start gap-2">
+      {% if s.source_type == "image" %}
+      <a href="{{ url_for('ai_agents.source_image', run_id=run.run_id, source_id=s.source_id) }}" target="_blank" rel="noopener">
+        <img src="{{ url_for('ai_agents.source_image', run_id=run.run_id, source_id=s.source_id) }}" alt="{{ s.file_name or 'uploaded image' }}"
+             class="rounded border" style="height: 60px; width: 60px; object-fit: cover;">
+      </a>
+      <span>
+        <span class="d-block">{{ s.file_name or ('Image source #' ~ s.source_id) }}</span>
+        {% if s.note %}<span class="text-muted small">{{ s.note }}</span>{% endif %}
+      </span>
+      {% else %}
+      <span>
+        <a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.url }}</a>
+        {% if s.note %}<span class="text-muted small"> — {{ s.note }}</span>{% endif %}
+      </span>
+      {% endif %}
+      {% if run.status == "pending" %}
+      <form method="post" action="{{ url_for('ai_agents.delete_source', run_id=run.run_id, source_id=s.source_id) }}"
+            class="ms-auto" onsubmit="return confirm('Remove this source?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-x-lg"></i></button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted small mb-0">No specific sources were entered for this run.</p>
+  {% endif %}
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h2 class="h6 text-muted mb-0">Review Items</h2>
+  <a href="{{ url_for('ai_agents.new_review_item', run_id=run.run_id) }}" class="btn btn-sm btn-primary">
+    <i class="bi bi-plus-lg"></i> New Review Item
+  </a>
+</div>
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr><th>Item</th><th>Type</th><th>Action</th><th>Status</th><th>Created</th></tr>
+      </thead>
+      <tbody>
+        {% for i in items %}
+        <tr onclick="window.location='{{ url_for('ai_agents.view_review_item', review_id=i.review_id) }}'" style="cursor:pointer;">
+          <td>{{ i.entity_label }}</td>
+          <td class="text-muted small">{{ entity_short_labels.get(i.entity_type, i.entity_type) }}</td>
+          <td class="text-muted small">{{ i.action_type | title }}</td>
+          <td>
+            {% if i.status == "applied" %}<span class="badge bg-success-subtle text-success">Applied</span>
+            {% elif i.status == "approved" %}<span class="badge bg-success-subtle text-success">Approved</span>
+            {% elif i.status == "rejected" %}<span class="badge bg-danger-subtle text-danger">Rejected</span>
+            {% elif i.status == "needs_changes" %}<span class="badge bg-warning-subtle text-warning-emphasis">Needs Changes</span>
+            {% else %}<span class="badge bg-secondary-subtle text-muted">Pending</span>{% endif %}
+          </td>
+          <td class="text-muted small">{{ i.created_at }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-5">Nothing queued for this run yet — <a href="{{ url_for('ai_agents.new_review_item', run_id=run.run_id) }}">add a review item</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

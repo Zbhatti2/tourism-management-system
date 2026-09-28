@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Add Source{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">Add Source</h1>
+<p class="text-muted mb-4">
+  Run: <strong>{{ run.scope_label }}</strong> —
+  <a href="{{ url_for('ai_agents.view_run', run_id=run.run_id) }}">back to run</a>
+</p>
+
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 640px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="text-muted small">Give either a Source URL <em>or</em> upload an image (e.g. a hotel's own site vs. a booking-listing screenshot) — not both.</p>
+    <div class="mb-3">
+      <label class="form-label">Source URL</label>
+      <input class="form-control" name="source_url" placeholder="https://… or a document path">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">…or upload an image</label>
+      <input type="file" class="form-control" name="source_image" accept=".png,.jpg,.jpeg,.gif,.webp">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Note <span class="text-muted small fw-normal">(optional)</span></label>
+      <input class="form-control" name="source_note" placeholder='e.g. "official site" or "booking listing screenshot"'>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('ai_agents.view_run', run_id=run.run_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Add Source</button>
+  </div>
+</form>
+{% endblock %}

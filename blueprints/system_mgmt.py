@@ -20,9 +20,12 @@ system_mgmt_bp = Blueprint("system_mgmt", __name__)
 def index():
     db = get_db()
     tenant_row = db.execute(
-        "SELECT tenant_name, data_retention_days, last_purge_at, created_at FROM tenants WHERE tenant_id = ?",
+        "SELECT tenant_name, data_retention_days, last_purge_at, created_at, host_currency_code FROM tenants WHERE tenant_id = ?",
         (g.tenant_id,),
     ).fetchone()
+    host_currencies = db.execute(
+        "SELECT code, label, symbol FROM currencies WHERE is_active = 1 ORDER BY sort_order, label COLLATE NOCASE"
+    ).fetchall()
     last_backup_row = db.execute("SELECT MAX(created_at) c FROM backups").fetchone()
     # Contacts, Employees, and External Resources all share one retention
     # window (tenants.data_retention_days) and one "Run purge now" button —
@@ -43,6 +46,7 @@ def index():
         last_backup_at=last_backup_row["c"],
         purge_eligible_count=purge_eligible_count,
         host_org=host_org,
+        host_currencies=host_currencies,
     )
 
 
@@ -240,6 +244,42 @@ def update_retention():
     db.commit()
     log_action("Update", "tenants", g.tenant_id, f"Retention window set to {days} days")
     flash("Retention window updated.", "success")
+    return redirect(url_for("system_mgmt.index"))
+
+
+@system_mgmt_bp.route("/host-currency", methods=["POST"])
+@tenant_admin_required
+def update_host_currency():
+    """Sets this tenant's Host Currency -- Zeb: "it will be important to
+    show prices in both the Host Currency (the Tenants Currency) as well
+    as the Destination Currency." Foundation-only for now (see
+    schema.sql's "MODULE E -- Currencies & Exchange Rates" comment): this
+    just records the setting. Wiring it into an actual dual-currency price
+    display is a deferred follow-on phase."""
+    code = request.form.get("host_currency_code", "").strip().upper()
+    db = get_db()
+    if code == "":
+        db.execute(
+            "UPDATE tenants SET host_currency_code = NULL, updated_at = datetime('now') WHERE tenant_id = ?",
+            (g.tenant_id,),
+        )
+        db.commit()
+        log_action("Update", "tenants", g.tenant_id, "Host Currency cleared")
+        flash("Host Currency cleared.", "success")
+        return redirect(url_for("system_mgmt.index"))
+
+    currency = db.execute("SELECT code FROM currencies WHERE code = ? AND is_active = 1", (code,)).fetchone()
+    if currency is None:
+        flash("Choose a valid, active currency.", "error")
+        return redirect(url_for("system_mgmt.index"))
+
+    db.execute(
+        "UPDATE tenants SET host_currency_code = ?, updated_at = datetime('now') WHERE tenant_id = ?",
+        (code, g.tenant_id),
+    )
+    db.commit()
+    log_action("Update", "tenants", g.tenant_id, f"Host Currency set to {code}")
+    flash(f"Host Currency set to {code}.", "success")
     return redirect(url_for("system_mgmt.index"))
 
 

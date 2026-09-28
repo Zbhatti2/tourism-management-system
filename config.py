@@ -10,6 +10,19 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
+
+# Load a real ".env" file from the App folder (same directory as this file),
+# if one exists -- this is how the AI Agents module's ANTHROPIC_API_KEY
+# below gets set. See .env.example for the template; ".env" itself is
+# gitignored and never committed. python-dotenv is a soft dependency: if
+# it isn't installed yet, .env just won't be picked up automatically (an
+# OS-level environment variable would still work) -- nothing else in TMS
+# depends on it, so the rest of the app runs fine either way.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env")
+except ImportError:
+    pass
 INSTANCE_DIR = BASE_DIR / "instance"
 INSTANCE_DIR.mkdir(exist_ok=True)
 EXPORTS_DIR = INSTANCE_DIR / "exports"
@@ -72,3 +85,15 @@ class Config:
     # tenant encryption key is dropped from this session and the user must
     # log in again.
     SESSION_TIMEOUT_MINUTES = 30
+
+    # AI Agents extraction (blueprints/ai_agents.py's "Run Agent" button,
+    # ai_extraction.py's actual model call) -- read from .env, never
+    # hardcoded. ANTHROPIC_API_KEY unset means "Run Agent" explains itself
+    # and declines rather than failing obscurely; manual review-item entry
+    # keeps working either way, since it never touches this. ANTHROPIC_MODEL
+    # defaults to this session's own model, but Anthropic's model lineup
+    # moves — if extraction calls fail with a model-not-found error, check
+    # https://docs.claude.com/en/docs/about-claude/models and override it
+    # in .env.
+    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+    ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")

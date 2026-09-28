@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Currency &amp; Exchange Rates{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('table_maintenance.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Table Maintenance</a>
+</nav>
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Currency &amp; Exchange Rates</h1>
+  <a href="{{ url_for('currency_admin.new_currency') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Currency</a>
+</div>
+
+<p class="text-muted small">
+  Every rate below is expressed as units of that currency per 1 US Dollar — USD is the fixed base rate (1.0) and can't be re-entered.
+  Rates are entered manually; each entry is also kept in that currency's rate history.
+  This list is shared across every tenant, not just yours.
+</p>
+
+<form method="get" class="row g-2 mb-3" style="max-width: 420px;">
+  <div class="col">
+    <input type="search" name="q" class="form-control" placeholder="Search code or name…" value="{{ q }}">
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-secondary" type="submit">Search</button>
+    {% if q %}<a href="{{ url_for('currency_admin.index') }}" class="btn btn-link">Clear</a>{% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Symbol</th>
+          <th>Rate to USD</th>
+          <th>As of</th>
+          <th>Destination for</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in currencies %}
+        <tr>
+          <td><strong>{{ c.code }}</strong></td>
+          <td>{{ c.label }}</td>
+          <td class="text-muted">{{ c.symbol or "" }}</td>
+          <td class="text-muted small">
+            {% if c.code == "USD" %}
+            1.0 <span class="badge bg-primary-subtle text-primary">Base</span>
+            {% elif c.rate_to_usd is not none %}
+            {{ "%.4f"|format(c.rate_to_usd) }}
+            {% else %}
+            <span class="fst-italic">Not yet entered</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ c.rate_as_of or "" }}</td>
+          <td class="text-muted small">
+            {% if c.code in countries_in_use %}<span class="badge bg-info-subtle text-info">In use</span>{% endif %}
+          </td>
+          <td>
+            {% if c.is_active %}
+            <span class="badge bg-success-subtle text-success">Active</span>
+            {% else %}
+            <span class="badge bg-secondary-subtle text-dark">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              {% if c.code != "USD" %}
+              <a href="{{ url_for('currency_admin.new_rate', code=c.code) }}" class="btn btn-outline-secondary" title="Enter today's rate"><i class="bi bi-cash"></i></a>
+              {% endif %}
+              <a href="{{ url_for('currency_admin.rate_history', code=c.code) }}" class="btn btn-outline-secondary" title="Rate history"><i class="bi bi-clock-history"></i></a>
+              <a href="{{ url_for('currency_admin.edit_currency', code=c.code) }}" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+              <form method="post" action="{{ url_for('currency_admin.toggle_active', code=c.code) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-secondary" type="submit" title="{{ 'Deactivate' if c.is_active else 'Activate' }}">
+                  <i class="bi bi-{{ 'eye-slash' if c.is_active else 'eye' }}"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-5">
+          {% if q %}No currencies match this search — <a href="{{ url_for('currency_admin.index') }}">clear it</a>.{% else %}No currencies yet.{% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

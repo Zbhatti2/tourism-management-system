@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}AI Agents{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">AI Agents</h1>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('ai_agents.list_review') }}" class="btn btn-outline-secondary">
+      Review Queue
+      {% if pending_total %}<span class="badge bg-danger ms-1">{{ pending_total }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('ai_agents.new_run') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Agent Run</a>
+  </div>
+</div>
+<p class="text-muted">
+  Every agent run is scoped to a specific target — a named Hotel, a bounded filter like "5-star hotels in Singapore" —
+  never an open-ended crawl. What an agent finds is queued in the Review Queue for approval before it's written
+  into the system (Room Pricing &amp; Availability updates are the one exception — see the Suppliers module).
+</p>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Scope</th>
+          <th>Agent Type</th>
+          <th>Task</th>
+          <th>Status</th>
+          <th class="text-end">Review Items</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in runs %}
+        <tr onclick="window.location='{{ url_for('ai_agents.view_run', run_id=r.run_id) }}'" style="cursor:pointer;">
+          <td>{{ r.scope_label }}</td>
+          <td class="text-muted small">{{ r.agent_type }}</td>
+          <td class="text-muted small">{{ r.task_type.replace('_', ' ') | title }}</td>
+          <td>
+            {% if r.status == "completed" %}<span class="badge bg-success-subtle text-success">Completed</span>
+            {% elif r.status == "running" %}<span class="badge bg-info-subtle text-info">Running</span>
+            {% elif r.status == "failed" %}<span class="badge bg-danger-subtle text-danger">Failed</span>
+            {% else %}<span class="badge bg-secondary-subtle text-muted">Pending</span>{% endif %}
+          </td>
+          <td class="text-end">
+            {{ r.item_count }}
+            {% if r.pending_count %}<span class="badge bg-warning-subtle text-warning-emphasis ms-1">{{ r.pending_count }} pending</span>{% endif %}
+          </td>
+          <td class="text-muted small">{{ r.created_at }}</td>
+          <td class="text-end" onclick="event.stopPropagation();">
+            {% if r.item_count == 0 and r.status != "running" %}
+            <form method="post" action="{{ url_for('ai_agents.delete_run', run_id=r.run_id) }}" class="d-inline" onsubmit="return confirm('Delete this run? It has no Review Items, so this can’t be undone.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No agent runs yet — <a href="{{ url_for('ai_agents.new_run') }}">log the first one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

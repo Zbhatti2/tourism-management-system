@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Review Queue{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">Review Queue</h1>
+  <a href="{{ url_for('ai_agents.list_runs') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Agent Runs</a>
+</div>
+
+<form method="get" class="mb-3">
+  <div class="row g-2">
+    <div class="col-auto">
+      <select class="form-select" name="status" onchange="this.form.submit()">
+        <option value="">All statuses</option>
+        <option value="pending" {{ "selected" if status == "pending" else "" }}>Pending</option>
+        <option value="needs_changes" {{ "selected" if status == "needs_changes" else "" }}>Needs Changes</option>
+        <option value="approved" {{ "selected" if status == "approved" else "" }}>Approved</option>
+        <option value="applied" {{ "selected" if status == "applied" else "" }}>Applied</option>
+        <option value="undone" {{ "selected" if status == "undone" else "" }}>Undone</option>
+        <option value="rejected" {{ "selected" if status == "rejected" else "" }}>Rejected</option>
+      </select>
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="entity_type" onchange="this.form.submit()">
+        <option value="">All types</option>
+        {% for key, label in entity_labels.items() %}
+        <option value="{{ key }}" {{ "selected" if entity_type == key else "" }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if status or entity_type %}
+    <div class="col-auto">
+      <a href="{{ url_for('ai_agents.list_review') }}" class="btn btn-link">Clear</a>
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr><th>Item</th><th>Type</th><th>Action</th><th>Run (Scope)</th><th>Status</th><th>Created</th></tr>
+      </thead>
+      <tbody>
+        {% for i in items %}
+        <tr onclick="window.location='{{ url_for('ai_agents.view_review_item', review_id=i.review_id) }}'" style="cursor:pointer;">
+          <td>{{ i.entity_label }}</td>
+          <td class="text-muted small">{{ entity_labels.get(i.entity_type, i.entity_type) }}</td>
+          <td class="text-muted small">{{ i.action_type | title }}</td>
+          <td class="text-muted small">{{ i.scope_label }}</td>
+          <td>
+            {% if i.status == "applied" %}<span class="badge bg-success-subtle text-success">Applied</span>
+            {% elif i.status == "undone" %}<span class="badge bg-secondary-subtle text-muted">Undone</span>
+            {% elif i.status == "approved" %}<span class="badge bg-success-subtle text-success">Approved</span>
+            {% elif i.status == "rejected" %}<span class="badge bg-danger-subtle text-danger">Rejected</span>
+            {% elif i.status == "needs_changes" %}<span class="badge bg-warning-subtle text-warning-emphasis">Needs Changes</span>
+            {% else %}<span class="badge bg-secondary-subtle text-muted">Pending</span>{% endif %}
+          </td>
+          <td class="text-muted small">{{ i.created_at }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-5">Nothing in the queue right now.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -28,6 +28,12 @@
 --     other tenants. The four geography ones have their own admin screen
 --     (Geography Maintenance) instead, since editing one affects every
 --     tenant, not just the editor's own.
+--   * `currencies`, `exchange_rates` and `exchange_rate_history` (Sept 2026)
+--     are GLOBAL for the same reason: an ISO 4217 currency and its
+--     USD exchange rate are facts of the world, not a tenant's opinion —
+--     see the "MODULE E -- Currencies" comment further down for the full
+--     design story (Zeb: "I need a currency rates and exchange rate table
+--     with US dollar as the base rate").
 -- ============================================================================
 
 PRAGMA foreign_keys = ON;
@@ -74,6 +80,13 @@ CREATE TABLE tenants (
     dek_wrapped     BLOB NOT NULL,           -- Fernet(system tenant-master-key).encrypt(tenant DEK) — see security/crypto.py + config.get_tenant_master_key()
     data_retention_days INTEGER DEFAULT NULL, -- days from a record's date of entry (created_at) until purge-eligible; NULL = indefinite (never auto-purge). Per-tenant: each tour operator sets its own policy.
     last_purge_at   TEXT,                    -- last time this tenant's purge check actually ran (once/day, checked at login), regardless of whether anything was purged
+    -- "Host Currency" -- the tenant's own operating currency (Zeb: "it will
+    -- be important to show prices in both the Host Currency (the Tenants
+    -- Currency) as well as the Destination Currency"). NULL until a
+    -- TenantAdmin sets it on System Management -> Host Organization; see
+    -- currencies below. FK is soft (currency_code, not currency_id) so a
+    -- currency can be relabeled without touching this column.
+    host_currency_code TEXT REFERENCES currencies(code),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -117,6 +130,10 @@ CREATE TABLE countries (
     code            TEXT UNIQUE,            -- ISO 3166-1 alpha-2, e.g. 'US'
     label           TEXT NOT NULL,          -- display name, e.g. 'United States'
     description     TEXT,
+    -- This country's own (Destination) currency -- e.g. 'PKR' for Pakistan.
+    -- Soft FK (code, not id) into currencies below, same reasoning as
+    -- tenants.host_currency_code. NULL until seed_data backfills it.
+    currency_code   TEXT REFERENCES currencies(code),
     sort_order      INTEGER DEFAULT 0,
     is_active       INTEGER NOT NULL DEFAULT 1
 );
@@ -163,6 +180,75 @@ CREATE TABLE country_phone_codes (
     is_active       INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX idx_country_phone_codes_country ON country_phone_codes(country_id);
+
+-- ============================================================================
+-- MODULE E -- Currencies & Exchange Rates (Sept 2026)
+--
+-- Zeb: "I need a currency rates and exchange rate table with US dollar as
+-- the base rate. ... When Planning Tours, it will be important to show
+-- prices in both the Host Currency (the Tenants Currency) as well as the
+-- Destination Currency. And in case of Multi-country tours, all the
+-- countries that the Tour will encounter (except for the Layovers)."
+--
+-- Design decisions (confirmed with Zeb before building):
+--   * GLOBAL, not per-tenant -- one shared rate table every tenant reads,
+--     same reasoning as the geography tables above (an exchange rate is a
+--     fact of the world, not a tenant's opinion).
+--   * Manual rate entry for now (no automated fetch) -- see the
+--     currency_admin blueprint's rate-entry screen.
+--   * "Foundation only" for this phase: the data model, country -> currency
+--     links, a tenant's Host Currency setting, and the manual rate entry/
+--     history screen. Wiring dual-currency display into the actual
+--     Package/Tour costing screens (Route Stops, Day-by-Day costing, Price
+--     Tiers) is a deliberately deferred follow-on phase.
+--   * Multi-country tours need no new schema at all --
+--     package_route_stops already has country_id + is_layover, so "every
+--     country this tour touches, excluding layovers" is just
+--     `SELECT DISTINCT country_id FROM package_route_stops WHERE package_id
+--     = ? AND is_layover = 0`.
+--   * Existing costing values (products.currency, packages.base_currency,
+--     package_components.currency, package_price_tiers.currency,
+--     supplier_rooms.price_per_night) stay stored in USD -- converting to
+--     Host/Destination currency happens at display time using the rate
+--     tables below, so no existing pricing table's semantics change.
+-- ============================================================================
+
+-- GLOBAL. ISO 4217, e.g. ('USD', 'US Dollar', '$'). Same shared shape as
+-- the tenant-scoped lookup tables below (code/label/sort_order/is_active),
+-- plus `symbol` for display.
+CREATE TABLE currencies (
+    currency_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    code            TEXT NOT NULL UNIQUE,   -- ISO 4217 alpha-3, e.g. 'USD'
+    label           TEXT NOT NULL,          -- e.g. 'US Dollar'
+    symbol          TEXT,                   -- e.g. '$' -- display only, several currencies share a symbol
+    sort_order      INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1
+);
+
+-- GLOBAL. Current-value cache -- one row per currency, always equal to the
+-- most recent row for that currency in exchange_rate_history below (the
+-- same "cached current value + append-only history" split already used by
+-- supplier_rooms/supplier_room_price_history). USD itself gets a row with
+-- rate_to_usd = 1.0 (seeded, never manually entered -- it's the base).
+CREATE TABLE exchange_rates (
+    exchange_rate_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    currency_code   TEXT NOT NULL UNIQUE REFERENCES currencies(code),
+    rate_to_usd     REAL NOT NULL,          -- units of this currency per 1 USD
+    rate_as_of      TEXT NOT NULL,          -- ISO 'YYYY-MM-DD' -- the date this rate took/takes effect
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- GLOBAL. Append-only -- every manual rate entry adds a row here, in
+-- addition to updating the exchange_rates cache row above.
+CREATE TABLE exchange_rate_history (
+    exchange_rate_history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    currency_code   TEXT NOT NULL REFERENCES currencies(code),
+    rate_to_usd     REAL NOT NULL,
+    rate_as_of      TEXT NOT NULL,          -- ISO 'YYYY-MM-DD'
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_exchange_rate_history_currency ON exchange_rate_history(currency_code);
 
 -- Tenant-scoped lookup tables below: each tenant maintains its own list via
 -- Table Maintenance. `code` uniqueness is per-tenant, not global.
@@ -2272,8 +2358,12 @@ CREATE TABLE supplier_document_locations (
     location_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
     supplier_document_id INTEGER NOT NULL REFERENCES supplier_documents(supplier_document_id),
-    location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path')),
-    path_or_url     TEXT NOT NULL
+    location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path','Stored in Database')),
+    path_or_url     TEXT,
+    file_data       BLOB,
+    file_name       TEXT,
+    mime_type       TEXT,
+    file_size       INTEGER
 );
 CREATE INDEX idx_supplier_document_locations_tenant ON supplier_document_locations(tenant_id);
 CREATE INDEX idx_supplier_document_locations_document ON supplier_document_locations(supplier_document_id);
@@ -2308,18 +2398,43 @@ CREATE INDEX idx_supplier_document_hashtags_tenant ON supplier_document_hashtags
 -- table is needed here the way Suppliers has supplier_documents -- Zeb only
 -- asked for Images/Photographs on POIs, not a general license/permit system
 -- -- so each image IS its own row.
+--
+-- Sept 2026: "Modify the Images Section on Points Of Interest form with
+-- exactly the same format as Images Section of the Supplier Type Hotels
+-- Form. Single and Bulk imports with catalog." -- widened to the same
+-- per-image fields (Image Name -- renamed from the original "caption",
+-- Author, Description, Notes, Keywords) and the same "Stored in Database"
+-- bytes-in-the-db storage Supplier Images was just converted to
+-- (file_data/file_name/mime_type/file_size). One poi_images row is still
+-- both the image AND its one location (no separate locations table, unlike
+-- Suppliers) -- see migrate_add_poi_image_gallery.py for the full story.
 CREATE TABLE poi_images (
     poi_image_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
     poi_id          INTEGER NOT NULL REFERENCES points_of_interest(poi_id),
-    location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path')),
-    path_or_url     TEXT NOT NULL,
-    caption         TEXT,
+    location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path','Stored in Database')),
+    path_or_url     TEXT,
+    image_name      TEXT,
+    authors         TEXT,
+    description     TEXT,
+    notes           TEXT,
+    file_data       BLOB,
+    file_name       TEXT,
+    mime_type       TEXT,
+    file_size       INTEGER,
     sort_order      INTEGER DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_poi_images_tenant ON poi_images(tenant_id);
 CREATE INDEX idx_poi_images_poi ON poi_images(poi_id);
+
+CREATE TABLE poi_image_keywords (
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    poi_image_id    INTEGER NOT NULL REFERENCES poi_images(poi_image_id),
+    term            TEXT NOT NULL,
+    PRIMARY KEY (poi_image_id, term)
+);
+CREATE INDEX idx_poi_image_keywords_tenant ON poi_image_keywords(tenant_id);
 
 -- poi_reference_links -- replaces the single freeform points_of_interest.
 -- links textarea with the structured, multi-row "Link #1/#2/#3 + Description"
@@ -2344,3 +2459,143 @@ CREATE TABLE poi_reference_links (
 );
 CREATE INDEX idx_poi_reference_links_tenant ON poi_reference_links(tenant_id);
 CREATE INDEX idx_poi_reference_links_poi ON poi_reference_links(poi_id);
+
+-- ============================================================================
+-- MODULE Z -- AI Agents: Agent Runs & Human Review Queue (Sept 2026)
+--
+-- Foundations for Zeb's "First Agents" plan -- narrowly-scoped AI agents
+-- that discover/update Back-Office data (Hotels first; Travel Advisories
+-- and Travel Document Requirements planned next), with mandatory Human
+-- Review & Approval on everything they touch, except high-volume/
+-- frequently-changing data (Room Pricing & Availability) which instead
+-- writes straight through to supplier_rooms/supplier_room_price_history
+-- above and relies on that append-only log for audit/oversight instead of
+-- a review gate.
+--
+-- agent_runs -- one row per narrowly-scoped agent invocation, e.g. "Hotel:
+-- Avari Lahore, discover" or "Advisories: Pakistan, refresh". Scope is
+-- captured as a human-readable label (scope_label) plus an optional
+-- structured JSON blob (scope_params) so the UI can render it back out
+-- without re-parsing free text. agent_type is a short open-ended string,
+-- not a foreign key to a lookup table -- adding the Advisories/Travel-
+-- Document agents planned next is just a new string value, no schema
+-- change required.
+--
+-- ai_review_items -- one row per candidate change a run produced: either a
+-- brand-new record (entity_id NULL) or a proposed update to an existing
+-- one. entity_type + entity_id point at the real business record once
+-- applied -- see blueprints/ai_agents.py's _APPLY_HANDLERS registry for how
+-- a given entity_type is actually written back to its real table. Deferred
+-- entity_types (address, geo-coordinates, room types & pricing, amenities,
+-- images) are meant to be added as additional registry entries later, once
+-- this first loop (core Hotel fields on the suppliers row) is proven --
+-- not a redesign.
+--
+-- ai_review_fields -- the field-level detail under one review item:
+-- current value vs. proposed value, an optional confidence score, and a
+-- source citation (URL / document reference / "accessed" date) so nothing
+-- is ever approved blind. Field-level (not just record-level) status lets
+-- a reviewer accept the fields the agent got right and reject/hold the
+-- ones it didn't, instead of an all-or-nothing gate on the whole record.
+-- ============================================================================
+CREATE TABLE agent_runs (
+    run_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    agent_type      TEXT NOT NULL,      -- 'hotel_intelligence' | 'travel_advisories' | 'travel_documents' | ... (open-ended)
+    task_type       TEXT NOT NULL CHECK (task_type IN ('discover_new','update_existing','refresh_volatile')),
+    scope_label     TEXT NOT NULL,      -- human-entered scope, e.g. "Avari Hotel, Lahore" or "5-star hotels in Singapore"
+    scope_params    TEXT,               -- JSON: structured scope filters (country/city/star rating/hotel name/etc.)
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed')),
+    summary         TEXT,               -- free-text result summary, or the error if status='failed'
+    started_at      TEXT,
+    completed_at    TEXT,
+    created_by      INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_agent_runs_tenant ON agent_runs(tenant_id);
+CREATE INDEX idx_agent_runs_status ON agent_runs(tenant_id, status);
+
+CREATE TABLE ai_review_items (
+    review_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    run_id          INTEGER NOT NULL REFERENCES agent_runs(run_id),
+    entity_type     TEXT NOT NULL,      -- 'supplier_hotel' | ... (matches an _APPLY_HANDLERS key)
+    entity_id       INTEGER,            -- NULL == this item proposes a brand-new record
+    entity_label    TEXT NOT NULL,      -- display label for the review list, e.g. "Avari Hotel, Lahore"
+    action_type     TEXT NOT NULL CHECK (action_type IN ('create','update')),
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','needs_changes','applied','undone')),
+    reviewer_notes  TEXT,
+    reviewed_by     INTEGER REFERENCES users(user_id),
+    reviewed_at     TEXT,
+    applied_at      TEXT,
+    applied_snapshot TEXT,              -- JSON: the full entity row exactly as it was immediately before
+                                         -- this item's Approve & Apply wrote to it -- NULL for action_type
+                                         -- ='create' (nothing existed before) or when never applied. This is
+                                         -- what blueprints/ai_agents.py's undo_apply() restores -- the "one
+                                         -- level" undo/history Zeb asked for ("the previous record must be
+                                         -- stored in history").
+    applied_address_snapshot TEXT,      -- JSON: this entity's primary supplier_addresses row (or JSON null,
+                                         -- meaning none existed yet) exactly as it was immediately before an
+                                         -- 'update' apply -- NULL (the column itself) when this apply never
+                                         -- touched an entity_type with its own separate address table
+                                         -- (currently only 'supplier_hotel' -- Address isn't a plain column
+                                         -- on suppliers, it lives in supplier_addresses, so it needs its own
+                                         -- snapshot alongside applied_snapshot's entity-row one; see
+                                         -- ENTITY_FIELDS["supplier_hotel"]'s "address" pseudo-field and
+                                         -- _upsert_supplier_address/undo_apply() in blueprints/ai_agents.py).
+    undone_at       TEXT,
+    undone_by       INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_ai_review_items_tenant ON ai_review_items(tenant_id);
+CREATE INDEX idx_ai_review_items_run ON ai_review_items(run_id);
+CREATE INDEX idx_ai_review_items_status ON ai_review_items(tenant_id, status);
+
+CREATE TABLE ai_review_fields (
+    field_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    review_id       INTEGER NOT NULL REFERENCES ai_review_items(review_id),
+    field_name      TEXT NOT NULL,      -- matches the target table's column name, e.g. 'supplier_name'
+    field_label     TEXT NOT NULL,      -- human label for display, e.g. "Hotel Name"
+    current_value   TEXT,               -- NULL when the parent item's action_type='create'
+    proposed_value  TEXT,
+    field_status    TEXT NOT NULL DEFAULT 'pending' CHECK (field_status IN ('pending','approved','rejected')),
+    confidence      REAL,               -- 0.0-1.0, nullable -- not every source yields one
+    source_citation TEXT,               -- e.g. "Expedia, accessed 2026-09-12" or a quoted PDF passage + filename
+    sort_order      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_ai_review_fields_tenant ON ai_review_fields(tenant_id);
+CREATE INDEX idx_ai_review_fields_review ON ai_review_fields(review_id);
+
+-- agent_run_sources -- optional URLs/documents/images Zeb wants a run
+-- pointed at, entered on the New Agent Run form ("The user should also be
+-- able to enter specific urls and sources"). Two shapes, picked per row:
+-- a URL (fetched as text by ai_extraction.fetch_source_text), or an
+-- uploaded image (bytes stored right here, same "stored in the database"
+-- convention as supplier_document_locations/poi_images -- Zeb: "Can the
+-- Agent be trained to pick relevant information from this image?", Sept
+-- 2026, sharing a hotel-booking-listing screenshot). run_agent() sends
+-- image sources to the extraction model as vision input alongside any
+-- fetched URL text -- see blueprints/ai_agents.py's module docstring and
+-- ai_extraction.extract_fields_with_model. Same dynamic multi-row editor
+-- pattern as poi_reference_links (templates/poi/form.html's addLinkRow).
+CREATE TABLE agent_run_sources (
+    source_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    run_id          INTEGER NOT NULL REFERENCES agent_runs(run_id),
+    source_type     TEXT NOT NULL DEFAULT 'url' CHECK (source_type IN ('url', 'image')),
+    url             TEXT,                    -- set when source_type='url'
+    file_data       BLOB,                    -- set when source_type='image'
+    file_name       TEXT,
+    mime_type       TEXT,
+    file_size       INTEGER,
+    note            TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (
+        (source_type = 'url' AND url IS NOT NULL AND file_data IS NULL)
+        OR (source_type = 'image' AND file_data IS NOT NULL AND url IS NULL)
+    )
+);
+CREATE INDEX idx_agent_run_sources_tenant ON agent_run_sources(tenant_id);
+CREATE INDEX idx_agent_run_sources_run ON agent_run_sources(run_id);

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}New Review Item{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">New Review Item</h1>
+<p class="text-muted mb-4">
+  Run: <strong>{{ run.scope_label }}</strong> —
+  <a href="{{ url_for('ai_agents.view_run', run_id=run.run_id) }}">back to run</a>
+</p>
+
+{% if sources %}
+<div class="alert alert-light border mb-4" style="max-width: 900px;">
+  <div class="small text-muted mb-1">This run's sources — for reference when filling in Source Citation below:</div>
+  <ul class="list-unstyled mb-0 small">
+    {% for s in sources %}
+    <li>
+      {% if s.source_type == "image" %}
+      <a href="{{ url_for('ai_agents.source_image', run_id=run.run_id, source_id=s.source_id) }}" target="_blank" rel="noopener">{{ s.file_name or ("Image source #" ~ s.source_id) }}</a>
+      {% else %}
+      <a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.url }}</a>
+      {% endif %}
+      {% if s.note %} — {{ s.note }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form method="post" class="card shadow-sm border-0" style="max-width: 900px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="mb-3">
+      <label class="form-label d-block">What kind of change is this? <span class="text-danger">*</span></label>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="radio" name="action_type" id="action_create" value="create"
+               {{ "checked" if not form_values or form_values.action_type == "create" else "" }}>
+        <label class="form-check-label" for="action_create">A brand-new {{ short_label }}</label>
+      </div>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="radio" name="action_type" id="action_update" value="update"
+               {{ "checked" if form_values and form_values.action_type == "update" else "" }}>
+        <label class="form-check-label" for="action_update">An update to an existing {{ short_label }}</label>
+      </div>
+    </div>
+
+    <div class="mb-3" id="entity_picker_wrap" style="display:none;">
+      <label class="form-label">Existing {{ short_label }} <span class="text-danger">*</span></label>
+      <select class="form-select" id="entity_id" name="entity_id">
+        <option value="">— Select —</option>
+        {% for c in choices %}
+        <option value="{{ c.choice_id }}" data-fields='{{ c.fields | tojson }}'>
+          {{ c.choice_label }}
+        </option>
+        {% endfor %}
+      </select>
+      {% if not choices %}
+      <div class="form-text text-warning-emphasis">No {{ short_label }}s are on file yet for this tenant.</div>
+      {% endif %}
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label">Display Label <span class="text-danger">*</span></label>
+      <input class="form-control" id="entity_label" name="entity_label" required maxlength="255"
+             value="{{ form_values.entity_label if form_values else '' }}"
+             placeholder="e.g. Avari Hotel, Lahore">
+      <div class="form-text">What this item is called in the Review Queue.</div>
+    </div>
+
+    <h2 class="h6 text-muted mb-2">Proposed Fields</h2>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th style="width: 14%;">Field</th>
+            <th style="width: 18%;">Current Value</th>
+            <th style="width: 24%;">Proposed Value</th>
+            <th style="width: 30%;">Source Citation</th>
+            <th style="width: 14%;">Confidence <span class="text-muted small">(0–1)</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for field_name, field_label in fields %}
+          <tr>
+            <td>{{ field_label }}</td>
+            <td><span class="text-muted small current-value" id="current__{{ field_name }}">(new record)</span></td>
+            <td><input class="form-control form-control-sm" name="proposed__{{ field_name }}"></td>
+            <td><input class="form-control form-control-sm" name="citation__{{ field_name }}" placeholder="e.g. Expedia, accessed 2026-09-12"></td>
+            <td><input class="form-control form-control-sm" type="number" min="0" max="1" step="0.05" name="confidence__{{ field_name }}"></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-text">Leave a row entirely blank to skip proposing that field.</div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('ai_agents.view_run', run_id=run.run_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Add to Review Queue</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  const createRadio = document.getElementById('action_create');
+  const updateRadio = document.getElementById('action_update');
+  const entityWrap = document.getElementById('entity_picker_wrap');
+  const entitySelect = document.getElementById('entity_id');
+  const labelInput = document.getElementById('entity_label');
+  let labelTouchedByUser = labelInput.value.trim().length > 0;
+  labelInput.addEventListener('input', () => { labelTouchedByUser = true; });
+
+  function clearCurrentValues() {
+    document.querySelectorAll('.current-value').forEach(el => { el.textContent = '(new record)'; });
+  }
+
+  function toggleMode() {
+    if (updateRadio.checked) {
+      entityWrap.style.display = '';
+      applyEntityFields();
+    } else {
+      entityWrap.style.display = 'none';
+      clearCurrentValues();
+    }
+  }
+
+  function applyEntityFields() {
+    const opt = entitySelect.options[entitySelect.selectedIndex];
+    if (!opt || !opt.value) { clearCurrentValues(); return; }
+    const data = JSON.parse(opt.getAttribute('data-fields') || '{}');
+    Object.keys(data).forEach(name => {
+      const el = document.getElementById('current__' + name);
+      if (el) el.textContent = (data[name] === null || data[name] === '') ? '—' : data[name];
+    });
+    if (!labelTouchedByUser) {
+      labelInput.value = opt.textContent.trim();
+    }
+  }
+
+  createRadio.addEventListener('change', toggleMode);
+  updateRadio.addEventListener('change', toggleMode);
+  entitySelect.addEventListener('change', applyEntityFields);
+  toggleMode();
+</script>
+{% endblock %}

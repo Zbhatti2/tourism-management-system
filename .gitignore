@@ -1,6 +1,57 @@
+# ---------------------------------------------------------------------------
+# TMS -- what goes to GitHub
+#
+# Only the application code needed to build, run and update TMS belongs in
+# this repository. Everything private or personal stays on the local PC:
+# secrets, the live database and its keys, uploads, backups, design notes,
+# Word/PDF documents, mockups and one-off data scripts.
+# ---------------------------------------------------------------------------
+
+# Secrets -- never commit
+.env
+*.key
+secret_key
+
+# Live data: database, encryption keys, uploads, exports, backups
+instance/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+Backups/
+backups/
+
+# Notes, design documents and office files (keep these on the PC only)
+General Notes/
+Organization Intelligence/
+Design Notes*/
+Forms Mockups/
+Input Data/
+Claude outputs/
+*.docx
+*.doc
+*.xlsx
+*.xls
+*.pptx
+*.pdf
+*.lnk
+*.jbf
+HOTEL_AGENT_CAPABILITIES.md
+
+# One-off data fix / populate scripts (already applied to the local database)
+fix_*.py
+populate_*.py
+
+# Python / tooling
 venv/
 **/venv/
+.venv/
+__pycache__/
 **/__pycache__/
 *.pyc
-.env
-instance/
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini

@@ -43,6 +43,11 @@ MODULES = [
     # this is a single top-level entry rather than a parent-with-children
     # group like Inventory Management above.
     {"key": "packages", "label": "Package Management", "icon": "map", "endpoint": "packages.list_packages"},
+    # Foundations for Zeb's "First Agents" plan (Sept 2026) -- Agent Runs +
+    # Human Review Queue. Single top-level entry (Review Queue is a tab on
+    # the Agent Runs page, not a separate sidebar child -- see
+    # blueprints/ai_agents.py's module docstring for the full design note).
+    {"key": "ai_agents", "label": "AI Agents", "icon": "robot", "endpoint": "ai_agents.list_runs"},
     # "Accounting / Finance" and "Tables & Utilities" below are parent nav
     # items with no page of their own, same pattern as "Organization
     # Intelligence" -- each just groups its sub-modules' blueprint keys in
@@ -103,7 +108,9 @@ def create_app():
     from blueprints.geography import geography_bp
     from blueprints.geography_admin import geography_admin_bp
     from blueprints.service_taxonomy_admin import service_taxonomy_admin_bp
+    from blueprints.currency_admin import currency_admin_bp
     from blueprints.help import help_bp
+    from blueprints.ai_agents import ai_agents_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -120,6 +127,7 @@ def create_app():
     app.register_blueprint(services_bp, url_prefix="/inventory/services")
     app.register_blueprint(products_bp, url_prefix="/inventory/products")
     app.register_blueprint(packages_bp, url_prefix="/packages")
+    app.register_blueprint(ai_agents_bp, url_prefix="/ai-agents")
     app.register_blueprint(billing_ar_bp, url_prefix="/accounting/billing-ar")
     app.register_blueprint(purchasing_ap_bp, url_prefix="/accounting/purchasing-ap")
     app.register_blueprint(accounts_gl_bp, url_prefix="/accounting/accounts-gl")
@@ -131,6 +139,7 @@ def create_app():
     app.register_blueprint(geography_bp, url_prefix="/geography")
     app.register_blueprint(geography_admin_bp, url_prefix="/geography-maintenance")
     app.register_blueprint(service_taxonomy_admin_bp, url_prefix="/service-code-maintenance")
+    app.register_blueprint(currency_admin_bp, url_prefix="/currency-maintenance")
 
     app.jinja_env.globals["modules"] = MODULES
     app.jinja_env.filters["format_phone"] = format_phone

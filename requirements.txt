@@ -8,3 +8,13 @@
 
 flask>=3.0
 cryptography>=42.0
+
+# AI Agents module only (blueprints/ai_agents.py / ai_extraction.py) --
+# fetching a run's Source URLs and calling Claude to propose field values.
+# Every other feature in TMS works without these installed; ai_extraction.py
+# imports them lazily and fails soft (a clear message on the "Run Agent"
+# button, not a broken app) if they're missing. Run
+# `pip install -r requirements.txt` after pulling this update to pick them up.
+requests>=2.31
+python-dotenv>=1.0
+anthropic>=0.40

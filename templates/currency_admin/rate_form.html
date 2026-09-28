@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Enter {{ currency.code }} Rate{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('currency_admin.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Currency &amp; Exchange Rates</a>
+</nav>
+<h1 class="h3 mb-1">Enter Exchange Rate — {{ currency.code }} ({{ currency.label }})</h1>
+<p class="text-muted small mb-4">Units of {{ currency.code }} per 1 US Dollar. Saving this adds a new entry to {{ currency.code }}'s rate history and becomes the current rate shown everywhere.</p>
+
+<div class="card shadow-sm border-0" style="max-width: 520px;">
+  <div class="card-body">
+    {% if current %}
+    <p class="text-muted small">Current rate: <strong>{{ "%.4f"|format(current.rate_to_usd) }}</strong> as of {{ current.rate_as_of }}.</p>
+    {% else %}
+    <p class="text-muted small fst-italic">No rate has been entered for {{ currency.code }} yet.</p>
+    {% endif %}
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="mb-3">
+        <label class="form-label">Rate ({{ currency.code }} per 1 USD)</label>
+        <input type="number" step="0.0001" min="0.0001" name="rate_to_usd" class="form-control" placeholder="e.g. 278.5" required autofocus>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label">Effective date</label>
+        <input type="date" name="rate_as_of" class="form-control" style="max-width: 220px;" value="{{ today }}">
+      </div>
+
+      <button type="submit" class="btn btn-primary">Save Rate</button>
+      <a href="{{ url_for('currency_admin.index') }}" class="btn btn-outline-secondary">Cancel</a>
+      <a href="{{ url_for('currency_admin.rate_history', code=currency.code) }}" class="btn btn-link">View history</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

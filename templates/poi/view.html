@@ -96,20 +96,26 @@
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h2 class="h6 mb-0">Images / Photographs</h2>
-          <a href="{{ url_for('poi.view_poi_images', poi_id=poi.poi_id) }}" class="btn btn-sm btn-outline-primary">
-            {{ poi_images | length }} image{{ 's' if poi_images | length != 1 else '' }}
+          <div class="d-flex gap-1">
+            <a href="{{ url_for('poi.view_poi_images', poi_id=poi.poi_id) }}" class="btn btn-sm btn-outline-secondary" title="View the full image catalog"><i class="bi bi-collection"></i> Catalog</a>
+            <a href="{{ url_for('poi.bulk_import_poi_images', poi_id=poi.poi_id) }}" class="btn btn-sm btn-outline-secondary" title="Bulk import images/photographs"><i class="bi bi-images"></i> Bulk Import</a>
+            <a href="{{ url_for('poi.new_poi_image', poi_id=poi.poi_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+          </div>
+        </div>
+        {% for img in poi_images[:5] %}
+        <div class="d-flex align-items-start gap-2 border-top py-2">
+          <img src="{{ url_for('poi.poi_image_thumbnail', poi_id=poi.poi_id, image_id=img.poi_image_id) }}"
+               alt="" width="40" height="40" class="rounded flex-shrink-0" style="object-fit: cover;"
+               onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22%3E%3Crect width=%2240%22 height=%2240%22 fill=%22%23e9ecef%22/%3E%3C/svg%3E';">
+          <a href="{{ url_for('poi.view_poi_image', poi_id=poi.poi_id, image_id=img.poi_image_id) }}" class="small text-decoration-none">
+            <strong>{{ img.image_name or (img.path_or_url | basename) }}</strong>
+            {% if img.authors %}<span class="text-muted"> — {{ img.authors }}</span>{% endif %}
+            <br>
+            {% if img.description %}<span class="text-muted">{{ img.description }}</span>{% endif %}
           </a>
         </div>
-        {% if poi_images %}
-        <ul class="small mb-0 ps-3">
-          {% for img in poi_images[:5] %}
-          <li>{{ img.caption or (img.path_or_url | basename) }} <span class="text-muted">({{ img.location_type }})</span></li>
-          {% endfor %}
-          {% if poi_images | length > 5 %}<li class="text-muted">…and {{ poi_images | length - 5 }} more</li>{% endif %}
-        </ul>
-        {% else %}
-        <p class="small mb-0">No images/photographs on file yet.</p>
-        {% endif %}
+        {% else %}<p class="text-muted small mb-0">No images or photographs on file. Select "+" to add one, or "Bulk Import" to add several at once.</p>{% endfor %}
+        {% if poi_images | length > 5 %}<p class="text-muted small mb-0 mt-2">…and {{ poi_images | length - 5 }} more — see the full Catalog.</p>{% endif %}
       </div>
     </div>
 

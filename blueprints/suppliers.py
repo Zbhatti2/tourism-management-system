@@ -41,10 +41,12 @@ sub-record. edit_supplier()/view_supplier() branch on is_external_resource
 to route between the generic and resource templates; the generic New/Edit
 Supplier form no longer offers the External Resource checkbox at all.
 """
+import mimetypes
 import os
 from datetime import date
+from io import BytesIO
 
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for
 
 from auth.decorators import login_required
 from db import get_db, log_action
@@ -311,6 +313,29 @@ def view_supplier(supplier_id):
            ORDER BY a.is_primary DESC, at.sort_order""",
         (supplier_id, g.tenant_id),
     ).fetchall()
+    # Supplier-level Emails/Phones (supplier_emails/supplier_phones) --
+    # these tables have existed all along and already have full CRUD (see
+    # new_supplier_email/new_supplier_phone below), but were only ever
+    # surfaced on the resource_view.html branch above (is_external_resource
+    # suppliers). An ordinary supplier had no UI path to a company-level
+    # email/phone that isn't tied to a named Contact (Zeb, Sept 2026:
+    # "There is no place to add Suppliers Phones, and emails") even though
+    # the data model already supported it -- this wires the same existing
+    # queries/routes/cards into the ordinary view too. Named
+    # supplier_emails/supplier_phones here (not emails/phones) to avoid
+    # colliding with the per-contact `phones` local the loop below reuses.
+    supplier_emails = db.execute(
+        "SELECT * FROM supplier_emails WHERE supplier_id = ? AND tenant_id = ? ORDER BY is_primary DESC, email_address",
+        (supplier_id, g.tenant_id),
+    ).fetchall()
+    supplier_phones = db.execute(
+        """SELECT p.*, pt.label AS phone_type_label
+           FROM supplier_phones p
+           LEFT JOIN phone_types pt ON pt.phone_type_id = p.phone_type_id
+           WHERE p.supplier_id = ? AND p.tenant_id = ?
+           ORDER BY p.is_primary DESC, pt.sort_order""",
+        (supplier_id, g.tenant_id),
+    ).fetchall()
     contacts = []
     for c in db.execute(
         """SELECT sc.*, sa.street AS address_street, sat.label AS address_type_label
@@ -357,7 +382,7 @@ def view_supplier(supplier_id):
         ).fetchall()
         hotel_room_total = sum(r["number_of_rooms"] for r in hotel_rooms)
 
-    documents = db.execute(
+    documents_and_images = db.execute(
         """SELECT d.*, dt.label AS document_type_label,
                   (SELECT COUNT(*) FROM supplier_document_locations l WHERE l.supplier_document_id = d.supplier_document_id) AS location_count
            FROM supplier_documents d
@@ -366,11 +391,32 @@ def view_supplier(supplier_id):
            ORDER BY d.document_name COLLATE NOCASE""",
         (supplier_id, g.tenant_id),
     ).fetchall()
+    # "Documents and Links" and "Images / Photographs" are two separate
+    # cards on this page (Zeb, Sept 2026: "Separate 'Documents and Links'
+    # AND 'Images/Photographs' into Separate Sections") even though both
+    # still live in the one supplier_documents table underneath -- an
+    # Image/Photograph is just a document row whose Document Type is
+    # 'Image / Photograph' (same convention bulk_import_images() already
+    # used to default that field). No new column/table needed to split
+    # them; this is just partitioning the one query result in Python.
+    documents = [d for d in documents_and_images if d["document_type_label"] != IMAGE_DOCUMENT_TYPE_LABEL]
+    # Images card shows only the most recent few (Zeb, Sept 2026: "display
+    # only the first three most recent images, like the POI's Form" -- the
+    # rest are one click away via "Catalog"), so re-sort by created_at
+    # DESC here rather than the document_name order documents_and_images
+    # was fetched in above (that alphabetical order is still right for the
+    # Documents and Links card, which isn't capped).
+    images = sorted(
+        (d for d in documents_and_images if d["document_type_label"] == IMAGE_DOCUMENT_TYPE_LABEL),
+        key=lambda d: (d["created_at"], d["supplier_document_id"]),
+        reverse=True,
+    )
 
     return render_template(
         "suppliers/view.html", supplier=supplier, addresses=addresses, contacts=contacts, kg_edges=kg_edges,
+        emails=supplier_emails, phones=supplier_phones,
         hotel_amenities_by_category=hotel_amenities_by_category, hotel_rooms=hotel_rooms, hotel_room_total=hotel_room_total,
-        documents=documents,
+        documents=documents, images=images,
     )
 
 
@@ -898,6 +944,24 @@ def room_price_history(supplier_id, room_id):
 
 DOCUMENT_DESCRIPTION_MAX_LENGTH = 200
 
+# The Document Type label that marks a supplier_documents row as belonging
+# to the "Images / Photographs" card rather than "Documents and Links" --
+# see view_supplier()'s split above and _image_document_type_id() below.
+IMAGE_DOCUMENT_TYPE_LABEL = "Image / Photograph"
+
+# Extensions the thumbnail route (image_thumbnail() below) will actually
+# serve from a Local Drive Path -- anything else 404s rather than being
+# streamed back as if it were an image.
+IMAGE_FILE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff", ".heic"}
+
+
+def _image_document_type_id(db):
+    row = db.execute(
+        "SELECT document_type_id FROM supplier_document_types WHERE tenant_id = ? AND label = ?",
+        (g.tenant_id, IMAGE_DOCUMENT_TYPE_LABEL),
+    ).fetchone()
+    return row["document_type_id"] if row else None
+
 
 @suppliers_bp.route("/<int:supplier_id>/documents/new", methods=["GET", "POST"])
 @login_required
@@ -1068,51 +1132,98 @@ IMAGE_FILE_TYPES = [
 @login_required
 def bulk_import_images(supplier_id):
     """Bulk-import several Images/Photographs at once (Zeb, Sept 2026: "add
-    a bulk import feature for importing images/photographs") -- one native
-    multi-select file dialog (see pick_bulk_import_files below) instead of
-    the one-at-a-time Add Document flow. Each file picked becomes its own
-    supplier_documents row (Document Type defaulted to 'Image /
-    Photograph', overridable) with one Local Drive Path location pointing
-    at that file."""
+    a bulk import feature for importing images/photographs"; later revised
+    to "create an Interim Step before commit table" requiring Image Name,
+    Author, Description, Notes and Keywords for EACH image, entered by
+    clicking the image and filling in a form/window) -- one native
+    multi-select file dialog (see pick_bulk_import_files below), then one
+    details pass per picked file (templates/suppliers/bulk_import_images.html's
+    modal) before the final Import commits anything. Each row becomes its
+    own supplier_documents row (Document Type defaulted to 'Image /
+    Photograph', overridable for the whole batch) plus its own Keywords --
+    the exact same fields/tables the one-at-a-time Add Document flow above
+    writes to, just filled in for several files in one pass instead of one
+    page each.
+
+    Zeb, Sept 2026, after Bulk-Importing 47 real images: "convert to the
+    model where images are stored in the database" -- a path/URL reference
+    is fragile (breaks if the source file moves, is renamed, or is
+    deleted; a db backup alone doesn't back up the images), so each picked
+    file's bytes are read right here, at import time, and stored directly
+    in supplier_document_locations (location_type='Stored in Database') --
+    not merely a path pointing back at wherever it happened to be on disk.
+    A file that can't be read any more by the time Import is clicked (moved/
+    deleted since it was picked, or now permission-denied) is skipped
+    rather than aborting the whole batch, and reported back by name."""
     db = get_db()
     supplier = _get_supplier(db, supplier_id)
     if request.method == "POST":
         form = request.form
         paths = form.getlist("paths")
         names = form.getlist("names")
+        authors = form.getlist("authors")
+        descriptions = form.getlist("descriptions")
+        notes_list = form.getlist("notes")
+        keywords_list = form.getlist("keywords")
         document_type_id = form.get("document_type_id") or None
-        notes = form.get("notes", "").strip() or None
         imported = 0
-        for path, name in zip(paths, names):
+        skipped = []
+        for i, path in enumerate(paths):
             path = path.strip()
-            name = name.strip()
+            name = (names[i] if i < len(names) else "").strip()
             if not path or not name:
                 continue
+            if os.path.splitext(path)[1].lower() not in IMAGE_FILE_EXTENSIONS or not os.path.isfile(path):
+                skipped.append(name or basename(path))
+                continue
+            try:
+                with open(path, "rb") as f:
+                    file_bytes = f.read()
+            except OSError:
+                skipped.append(name or basename(path))
+                continue
+            author = (authors[i] if i < len(authors) else "").strip() or None
+            description = (descriptions[i] if i < len(descriptions) else "").strip()[:DOCUMENT_DESCRIPTION_MAX_LENGTH] or None
+            row_notes = (notes_list[i] if i < len(notes_list) else "").strip() or None
             db.execute(
-                "INSERT INTO supplier_documents (tenant_id, supplier_id, document_name, document_type_id, notes) VALUES (?, ?, ?, ?, ?)",
-                (g.tenant_id, supplier_id, name, document_type_id, notes),
+                """INSERT INTO supplier_documents
+                   (tenant_id, supplier_id, document_name, document_type_id, authors, description, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (g.tenant_id, supplier_id, name, document_type_id, author, description, row_notes),
             )
             new_document_id = db.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+            mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
             db.execute(
-                "INSERT INTO supplier_document_locations (tenant_id, supplier_document_id, location_type, path_or_url) VALUES (?, ?, 'Local Drive Path', ?)",
-                (g.tenant_id, new_document_id, path),
+                """INSERT INTO supplier_document_locations
+                   (tenant_id, supplier_document_id, location_type, path_or_url, file_data, file_name, mime_type, file_size)
+                   VALUES (?, ?, 'Stored in Database', ?, ?, ?, ?, ?)""",
+                (g.tenant_id, new_document_id, path, file_bytes, basename(path), mime_type, len(file_bytes)),
             )
+            row_keywords = keywords_list[i] if i < len(keywords_list) else ""
+            for term in _split_terms(row_keywords):
+                db.execute(
+                    "INSERT OR IGNORE INTO supplier_document_keywords (tenant_id, supplier_document_id, term) VALUES (?, ?, ?)",
+                    (g.tenant_id, new_document_id, term),
+                )
             imported += 1
         db.commit()
         if imported:
             log_action("Create", "supplier_document", supplier_id, f"Bulk-imported {imported} image(s)/photograph(s) for {supplier['supplier_name']}")
-            flash(f"Imported {imported} image{'s' if imported != 1 else ''}.", "success")
+            flash(f"Imported {imported} image{'s' if imported != 1 else ''} — stored in the database.", "success")
         else:
             flash("Nothing was imported — select at least one file first.", "error")
+        if skipped:
+            flash(
+                f"Skipped {len(skipped)} file{'s' if len(skipped) != 1 else ''} that could no longer be read "
+                f"(moved, deleted, or not an image file): {', '.join(skipped)}",
+                "error",
+            )
         return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
 
-    image_type = db.execute(
-        "SELECT document_type_id FROM supplier_document_types WHERE tenant_id = ? AND label = 'Image / Photograph'",
-        (g.tenant_id,),
-    ).fetchone()
     return render_template(
         "suppliers/bulk_import_images.html", supplier=supplier, document_types=_document_types(db),
-        default_document_type_id=image_type["document_type_id"] if image_type else None,
+        default_document_type_id=_image_document_type_id(db),
+        description_max_length=DOCUMENT_DESCRIPTION_MAX_LENGTH,
     )
 
 
@@ -1122,6 +1233,169 @@ def pick_bulk_import_files(supplier_id):
     paths, error = pick_files_dialog(title="Select Images / Photographs to import", filetypes=IMAGE_FILE_TYPES)
     files = [{"path": p, "name": os.path.splitext(basename(p))[0]} for p in paths]
     return jsonify(files=files, error=error)
+
+
+# ------------------------------------------------------------- image catalog
+
+IMAGE_CATALOG_SORTS = {
+    # Applied to the OUTER "SELECT * FROM (...)" wrapper below, so these
+    # reference the inner query's flat output columns -- no "d." alias out
+    # here (that only exists inside the subquery).
+    "recent": "created_at DESC, supplier_document_id DESC",
+    "name": "document_name COLLATE NOCASE ASC",
+    "keywords": "keywords_str COLLATE NOCASE ASC, document_name COLLATE NOCASE ASC",
+}
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/catalog")
+@login_required
+def image_catalog(supplier_id):
+    """The full "Images / Photographs" Catalog for one Supplier (Zeb, Sept
+    2026: "Hyperlink to Display Entire Catalog List Page" with Thumbnail /
+    Image Name / Author / Description / Date added columns, Search, Sort,
+    and Select+Delete). Scoped to this Supplier, same as the card it's
+    linked from -- "entire catalog" here means every image on file for
+    this Supplier, not paginated/truncated."""
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    q = request.args.get("q", "").strip()
+    sort = request.args.get("sort", "recent").strip()
+    if sort not in IMAGE_CATALOG_SORTS:
+        sort = "recent"
+
+    image_type_id = _image_document_type_id(db)
+    if image_type_id is None:
+        # No 'Image / Photograph' Document Type exists for this tenant at
+        # all (shouldn't normally happen -- it's part of the default seed
+        # data), so there can be no rows to show. Render the same empty
+        # Catalog page rather than a query with no meaningful WHERE.
+        return render_template("suppliers/image_catalog.html", supplier=supplier, images=[], q=q, sort=sort)
+
+    sql = """
+        SELECT d.*,
+               (SELECT path_or_url FROM supplier_document_locations l
+                WHERE l.supplier_document_id = d.supplier_document_id ORDER BY l.location_id LIMIT 1) AS thumbnail_source,
+               (SELECT location_type FROM supplier_document_locations l
+                WHERE l.supplier_document_id = d.supplier_document_id ORDER BY l.location_id LIMIT 1) AS thumbnail_location_type,
+               (SELECT GROUP_CONCAT(term, ', ') FROM supplier_document_keywords k
+                WHERE k.supplier_document_id = d.supplier_document_id) AS keywords_str
+        FROM supplier_documents d
+        WHERE d.supplier_id = ? AND d.is_deleted = 0 AND d.tenant_id = ? AND d.document_type_id = ?
+    """
+    params = [supplier_id, g.tenant_id, image_type_id]
+    if q:
+        sql += """ AND (
+            d.document_name LIKE ? OR d.authors LIKE ? OR d.description LIKE ?
+            OR EXISTS (SELECT 1 FROM supplier_document_keywords k WHERE k.supplier_document_id = d.supplier_document_id AND k.term LIKE ?)
+        )"""
+        like = f"%{q}%"
+        params += [like, like, like, like]
+    sql = f"SELECT * FROM ({sql}) ORDER BY {IMAGE_CATALOG_SORTS[sort]}"
+    images = db.execute(sql, params).fetchall()
+
+    return render_template(
+        "suppliers/image_catalog.html", supplier=supplier, images=images, q=q, sort=sort,
+    )
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/catalog/delete", methods=["POST"])
+@login_required
+def delete_catalog_images(supplier_id):
+    """Select + Delete (single or bulk) from the Image Catalog list -- soft-
+    deletes every checked row the same way delete_supplier_document() does
+    one at a time, just for however many were checked at once."""
+    db = get_db()
+    supplier = _get_supplier(db, supplier_id)
+    document_ids = [d for d in request.form.getlist("document_ids") if d.strip()]
+    deleted = 0
+    for document_id in document_ids:
+        row = db.execute(
+            "SELECT supplier_document_id FROM supplier_documents WHERE supplier_document_id = ? AND supplier_id = ? AND tenant_id = ? AND is_deleted = 0",
+            (document_id, supplier_id, g.tenant_id),
+        ).fetchone()
+        if row is None:
+            continue
+        db.execute(
+            "UPDATE supplier_documents SET is_deleted = 1, updated_at = datetime('now') WHERE supplier_document_id = ? AND tenant_id = ?",
+            (document_id, g.tenant_id),
+        )
+        deleted += 1
+    db.commit()
+    if deleted:
+        log_action("Delete", "supplier_document", supplier_id, f"Deleted {deleted} image(s) from catalog for {supplier['supplier_name']}")
+        flash(f"Deleted {deleted} image{'s' if deleted != 1 else ''}.", "success")
+    else:
+        flash("Nothing was deleted — select at least one image first.", "error")
+    return redirect(url_for("suppliers.image_catalog", supplier_id=supplier_id))
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/thumbnail")
+@login_required
+def image_thumbnail(supplier_id, document_id):
+    """Serves (or redirects to) an image document's first Location, for the
+    Catalog/card Thumbnail column.
+
+    A 'Stored in Database' location (every image Bulk-Imported since the
+    Sept 2026 "store images in the database" change) is served straight
+    from its file_data BLOB -- no disk access, no dependence on the
+    original file still existing where it was picked. The two older
+    reference-only kinds are still honored for anything imported before
+    that change: a Local Drive Path is read straight off this machine's
+    disk (TMS runs locally, right where those files live) and streamed
+    back only if it looks like an image file; a Cloud Link is just
+    redirected to and left to the browser. No location, an inaccessible/
+    non-image local file, or a document that isn't this tenant's/
+    supplier's 404s -- the <img> tag's onerror swaps in a generic
+    placeholder icon rather than showing a broken image."""
+    db = get_db()
+    doc = db.execute(
+        "SELECT supplier_document_id FROM supplier_documents WHERE supplier_document_id = ? AND supplier_id = ? AND tenant_id = ? AND is_deleted = 0",
+        (document_id, supplier_id, g.tenant_id),
+    ).fetchone()
+    if doc is None:
+        abort(404)
+    location = db.execute(
+        "SELECT * FROM supplier_document_locations WHERE supplier_document_id = ? AND tenant_id = ? ORDER BY location_id LIMIT 1",
+        (document_id, g.tenant_id),
+    ).fetchone()
+    if location is None:
+        abort(404)
+    if location["location_type"] == "Stored in Database":
+        if not location["file_data"]:
+            abort(404)
+        return send_file(
+            BytesIO(location["file_data"]),
+            mimetype=location["mime_type"] or "application/octet-stream",
+            download_name=location["file_name"] or "image",
+        )
+    if location["location_type"] == "Cloud Link":
+        return redirect(location["path_or_url"])
+    path = location["path_or_url"]
+    if not path or os.path.splitext(path)[1].lower() not in IMAGE_FILE_EXTENSIONS or not os.path.isfile(path):
+        abort(404)
+    return send_file(path)
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/bulk-import-images/preview")
+@login_required
+def preview_bulk_import_file(supplier_id):
+    """Live thumbnail preview for the Bulk Import "Image Details" modal --
+    Zeb, Sept 2026: "to be able to add a image name/description and
+    keyword I need to see a decent sized thumbnail on the Image Details
+    Form." At the point that modal is open, the picked file isn't a
+    supplier_documents row yet (Import hasn't been clicked), so there's
+    nothing in the database yet to serve a thumbnail from -- this instead
+    reads the file directly off disk, straight from the Local Drive Path
+    the native file-picker dialog itself returned a moment earlier (see
+    pick_bulk_import_files below), the same access pick_files_dialog and
+    image_thumbnail already rely on for a locally-run app. Only serves a
+    path that looks like one of the offered image extensions and actually
+    exists as a file -- anything else 404s, same guard as image_thumbnail
+    uses for a Local Drive Path."""
+    path = request.args.get("path", "")
+    if not path or os.path.splitext(path)[1].lower() not in IMAGE_FILE_EXTENSIONS or not os.path.isfile(path):
+        abort(404)
+    return send_file(path)
 
 
 @suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/locations/new", methods=["GET", "POST"])

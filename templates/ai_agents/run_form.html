@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}New Agent Run{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">New Agent Run</h1>
+<p class="text-muted mb-4">Log a narrowly-scoped agent invocation. Keep the scope specific — a named Hotel or Point of Interest, or a bounded filter — not an open-ended request.</p>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" style="max-width: 720px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label">Agent Type <span class="text-danger">*</span></label>
+      <select class="form-select" name="agent_type" required>
+        <option value="">— Select —</option>
+        {% for key, label in agent_types %}
+        <option value="{{ key }}" {{ "selected" if (form_values and form_values.agent_type == key) else "" }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">More agent types (Travel Advisories, Travel Document Requirements) are planned next.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Task <span class="text-danger">*</span></label>
+      <select class="form-select" name="task_type" required>
+        <option value="">— Select —</option>
+        {% for key, label in task_types %}
+        <option value="{{ key }}" {{ "selected" if (form_values and form_values.task_type == key) else "" }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Scope <span class="text-danger">*</span></label>
+      <input class="form-control" name="scope_label" required maxlength="255"
+             value="{{ form_values.scope_label if form_values else '' }}"
+             placeholder='e.g. "Avari Hotel, Lahore" or "All 5-star hotels in Singapore"'>
+      <div class="form-text">This is what keeps the agent focused — be as specific as the task allows.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label d-flex justify-content-between align-items-center">
+        <span>Sources <span class="text-muted small fw-normal">(optional)</span></span>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addSourceRow()"><i class="bi bi-plus"></i> Add source</button>
+      </label>
+      <div id="source_rows"></div>
+      <p class="text-muted small mb-0" id="source_rows_empty_hint">No sources added — point this run at specific URLs, documents, or an uploaded image (e.g. a hotel's own site, a government advisory page, a booking-listing screenshot) instead of leaving it to search broadly.</p>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <a href="{{ url_for('ai_agents.list_runs') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit">Log Run</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Dynamic Source row editor -- same pattern as the POI Links editor
+  // (templates/poi/form.html's addLinkRow), extended with a per-row image
+  // upload alongside the URL/note pair: each row is EITHER a URL or an
+  // uploaded image (a hotel's own site vs. a booking-listing screenshot),
+  // never both. Rows submit as source_url/source_note/source_image
+  // triples; blank rows are dropped server-side (see
+  // blueprints/ai_agents.py's _save_run_sources/_save_one_source).
+  let sourceRowCount = 0;
+
+  function addSourceRow(url, note) {
+    sourceRowCount += 1;
+    const wrap = document.getElementById('source_rows');
+    const row = document.createElement('div');
+    row.className = 'row g-2 mb-2 align-items-start source-row border-bottom pb-2';
+
+    const numCol = document.createElement('div');
+    numCol.className = 'col-auto pt-2 text-muted small';
+    numCol.style.minWidth = '4.5rem';
+    numCol.textContent = 'Source #' + sourceRowCount;
+    row.appendChild(numCol);
+
+    const urlCol = document.createElement('div');
+    urlCol.className = 'col-md-4';
+    const urlInput = document.createElement('input');
+    urlInput.className = 'form-control';
+    urlInput.name = 'source_url';
+    urlInput.placeholder = 'https://… or a document path';
+    urlInput.value = url || '';
+    urlCol.appendChild(urlInput);
+    row.appendChild(urlCol);
+
+    const noteCol = document.createElement('div');
+    noteCol.className = 'col-md-3';
+    const noteInput = document.createElement('input');
+    noteInput.className = 'form-control';
+    noteInput.name = 'source_note';
+    noteInput.placeholder = 'Optional note';
+    noteInput.value = note || '';
+    noteCol.appendChild(noteInput);
+    row.appendChild(noteCol);
+
+    const fileCol = document.createElement('div');
+    fileCol.className = 'col-md-4';
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.className = 'form-control form-control-sm';
+    fileInput.name = 'source_image';
+    fileInput.accept = '.png,.jpg,.jpeg,.gif,.webp';
+    fileCol.appendChild(fileInput);
+    const fileHint = document.createElement('div');
+    fileHint.className = 'form-text small';
+    fileHint.textContent = '…or attach an image instead of a URL';
+    fileCol.appendChild(fileHint);
+    row.appendChild(fileCol);
+
+    const removeCol = document.createElement('div');
+    removeCol.className = 'col-auto pt-1';
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-sm btn-link text-danger py-1';
+    removeBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+    removeBtn.onclick = () => { row.remove(); updateSourceRowsEmptyHint(); };
+    removeCol.appendChild(removeBtn);
+    row.appendChild(removeCol);
+
+    wrap.appendChild(row);
+    updateSourceRowsEmptyHint();
+  }
+
+  function updateSourceRowsEmptyHint() {
+    const hint = document.getElementById('source_rows_empty_hint');
+    const rows = document.getElementById('source_rows').children.length;
+    hint.hidden = rows > 0;
+  }
+
+  {% if form_values %}
+  {% for u in form_values.getlist('source_url') %}
+  addSourceRow({{ u | tojson }}, {{ (form_values.getlist('source_note')[loop.index0] if loop.index0 < (form_values.getlist('source_note') | length) else '') | tojson }});
+  {% endfor %}
+  {% endif %}
+  updateSourceRowsEmptyHint();
+</script>
+{% endblock %}

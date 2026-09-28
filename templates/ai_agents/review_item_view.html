@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Review — {{ item.entity_label }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h4 mb-1">{{ item.entity_label }}</h1>
+    <p class="text-muted mb-0">
+      {{ entity_labels.get(item.entity_type, item.entity_type) }} — {{ item.action_type | title }} —
+      from run <a href="{{ url_for('ai_agents.view_run', run_id=item.run_id) }}">{{ item.scope_label }}</a>
+    </p>
+  </div>
+  <div class="text-end">
+    {% if item.status == "applied" %}<span class="badge bg-success-subtle text-success">Applied</span>
+    {% elif item.status == "undone" %}<span class="badge bg-secondary-subtle text-muted">Undone</span>
+    {% elif item.status == "approved" %}<span class="badge bg-success-subtle text-success">Approved</span>
+    {% elif item.status == "rejected" %}<span class="badge bg-danger-subtle text-danger">Rejected</span>
+    {% elif item.status == "needs_changes" %}<span class="badge bg-warning-subtle text-warning-emphasis">Needs Changes</span>
+    {% else %}<span class="badge bg-secondary-subtle text-muted">Pending</span>{% endif %}
+    <div><a href="{{ url_for('ai_agents.list_review') }}" class="small">Back to Review Queue</a></div>
+  </div>
+</div>
+
+{% if item.status == "applied" %}
+<div class="alert alert-success d-flex justify-content-between align-items-center">
+  <span>Applied {{ item.applied_at }}{% if item.entity_id %} — record #{{ item.entity_id }}{% endif %}.</span>
+  {% if can_undo %}
+  <form method="post" action="{{ url_for('ai_agents.undo_apply', review_id=item.review_id) }}"
+        onsubmit="return confirm('Undo this apply? The record will be reverted to how it was right before this change.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-arrow-counterclockwise"></i> Undo Apply</button>
+  </form>
+  {% endif %}
+</div>
+{% if not can_undo %}
+<div class="alert alert-warning small py-2">
+  A newer update has since been applied to this record, so this one can no longer be undone from here.
+</div>
+{% endif %}
+{% elif item.status == "undone" %}
+<div class="alert alert-secondary">
+  Undone {{ item.undone_at }} — the record was reverted to how it was before this change was applied.
+</div>
+{% elif not can_apply %}
+<div class="alert alert-warning">
+  No apply handler is registered yet for entity type "{{ item.entity_type }}" — field decisions can still be saved, but nothing can be written back automatically until one is added.
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('ai_agents.decide_review_item', review_id=item.review_id) }}" class="card shadow-sm border-0">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Current Value</th>
+            <th>Proposed Value</th>
+            <th>Source Citation</th>
+            <th>Confidence</th>
+            <th style="width: 220px;">Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in fields %}
+          <tr>
+            <td>{{ f.field_label }}</td>
+            <td class="text-muted">{{ f.current_value if f.current_value is not none else "—" }}</td>
+            <td class="fw-semibold">{{ f.proposed_value if f.proposed_value is not none else "—" }}</td>
+            <td class="text-muted small">{{ f.source_citation or "—" }}</td>
+            <td class="text-muted small">{{ "%.0f%%"|format(f.confidence * 100) if f.confidence is not none else "—" }}</td>
+            <td>
+              {% set fid = f.field_id %}
+              <div class="btn-group btn-group-sm" role="group">
+                <input type="radio" class="btn-check" name="field_status__{{ fid }}" id="approve_{{ fid }}" value="approved" {{ "checked" if f.field_status == "approved" else "" }} {{ "disabled" if item.status in ("applied", "undone") else "" }}>
+                <label class="btn btn-outline-success" for="approve_{{ fid }}">Approve</label>
+                <input type="radio" class="btn-check" name="field_status__{{ fid }}" id="pending_{{ fid }}" value="pending" {{ "checked" if f.field_status == "pending" else "" }} {{ "disabled" if item.status in ("applied", "undone") else "" }}>
+                <label class="btn btn-outline-secondary" for="pending_{{ fid }}">Hold</label>
+                <input type="radio" class="btn-check" name="field_status__{{ fid }}" id="reject_{{ fid }}" value="rejected" {{ "checked" if f.field_status == "rejected" else "" }} {{ "disabled" if item.status in ("applied", "undone") else "" }}>
+                <label class="btn btn-outline-danger" for="reject_{{ fid }}">Reject</label>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No fields were proposed for this item.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-3">
+      <label class="form-label">Reviewer Notes</label>
+      <textarea class="form-control" name="reviewer_notes" rows="2" {{ "disabled" if item.status in ("applied", "undone") else "" }}>{{ item.reviewer_notes or "" }}</textarea>
+    </div>
+  </div>
+  {% if item.status not in ("applied", "undone") %}
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <button class="btn btn-outline-danger" type="submit" name="decision" value="reject_all"
+            onclick="return confirm('Reject this entire item? All fields will be marked rejected.');">Reject All</button>
+    <button class="btn btn-outline-secondary" type="submit" name="decision" value="save">Save Decisions</button>
+    <button class="btn btn-primary" type="submit" name="decision" value="apply" {{ "disabled" if not can_apply else "" }}>
+      Approve &amp; Apply
+    </button>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}

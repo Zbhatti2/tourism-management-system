@@ -141,6 +141,21 @@ body {
   z-index: 1040;
 }
 
+/* Reserves clearance above every page's own content so its top-right
+   button row (Edit/Delete/Back, and similar) never sits underneath the
+   fixed Help chip above -- Zeb: "Help button is overlapped and does not
+   show properly. Check this for all forms." Both are right-aligned near
+   the same corner, so the fix is vertical separation: push the content
+   down far enough (3rem) to clear the Help chip's ~2.3rem footprint
+   (its .6rem top offset + its own padding/border/line-height), with a
+   bit of headroom, rather than trying to dodge it horizontally on a
+   page-by-page basis. Left/right padding (px-4, set on the same element
+   in base.html) and bottom padding are unchanged from before. */
+.app-content {
+  padding-top: 3rem;
+  padding-bottom: 1.5rem;
+}
+
 .app-help-link {
   font: inherit;
   background: #fff;

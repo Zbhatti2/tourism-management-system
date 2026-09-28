@@ -818,6 +818,152 @@ COUNTRY_CALLING_CODES = {
 }
 
 
+# ISO 4217 currency codes actually in use by the seeded COUNTRIES list
+# above (source: iban.com/currency-codes, cross-checked against ISO 4217),
+# plus USD and EUR even where a specific country isn't shown separately.
+# (code, label, symbol) -- same (code, label, ...) shape as COUNTRIES/REGIONS.
+# Safe to re-run: seed_global_lookups() below uses INSERT OR IGNORE keyed on code.
+CURRENCIES = [
+    ("AED", 'UAE Dirham', 'د.إ'), ("AFN", 'Afghan Afghani', '؋'),
+    ("ALL", 'Albanian Lek', 'L'), ("AMD", 'Armenian Dram', '֏'),
+    ("ANG", 'Netherlands Antillean Guilder', 'ƒ'),
+    ("AOA", 'Angolan Kwanza', 'Kz'), ("ARS", 'Argentine Peso', '$'),
+    ("AUD", 'Australian Dollar', '$'), ("AWG", 'Aruban Florin', 'ƒ'),
+    ("AZN", 'Azerbaijani Manat', '₼'),
+    ("BAM", 'Bosnia-Herzegovina Convertible Mark', 'KM'),
+    ("BBD", 'Barbadian Dollar', '$'), ("BDT", 'Bangladeshi Taka', '৳'),
+    ("BGN", 'Bulgarian Lev', 'лв'), ("BHD", 'Bahraini Dinar', '.د.ب'),
+    ("BIF", 'Burundian Franc', 'FBu'), ("BMD", 'Bermudian Dollar', '$'),
+    ("BND", 'Brunei Dollar', '$'), ("BOB", 'Bolivian Boliviano', 'Bs.'),
+    ("BRL", 'Brazilian Real', 'R$'), ("BSD", 'Bahamian Dollar', '$'),
+    ("BTN", 'Bhutanese Ngultrum', 'Nu.'), ("BWP", 'Botswana Pula', 'P'),
+    ("BYN", 'Belarusian Ruble', 'Br'), ("BZD", 'Belize Dollar', '$'),
+    ("CAD", 'Canadian Dollar', '$'), ("CDF", 'Congolese Franc', 'FC'),
+    ("CHF", 'Swiss Franc', 'CHF'), ("CLP", 'Chilean Peso', '$'),
+    ("CNY", 'Chinese Yuan', '¥'), ("COP", 'Colombian Peso', '$'),
+    ("CRC", 'Costa Rican Colón', '₡'), ("CUP", 'Cuban Peso', '$'),
+    ("CVE", 'Cape Verdean Escudo', '$'), ("CZK", 'Czech Koruna', 'Kč'),
+    ("DJF", 'Djiboutian Franc', 'Fdj'), ("DKK", 'Danish Krone', 'kr'),
+    ("DOP", 'Dominican Peso', 'RD$'), ("DZD", 'Algerian Dinar', 'د.ج'),
+    ("EGP", 'Egyptian Pound', '£'), ("ERN", 'Eritrean Nakfa', 'Nfk'),
+    ("ETB", 'Ethiopian Birr', 'Br'), ("EUR", 'Euro', '€'),
+    ("FJD", 'Fijian Dollar', '$'), ("FKP", 'Falkland Islands Pound', '£'),
+    ("GBP", 'British Pound', '£'), ("GEL", 'Georgian Lari', '₾'),
+    ("GHS", 'Ghanaian Cedi', '₵'), ("GIP", 'Gibraltar Pound', '£'),
+    ("GMD", 'Gambian Dalasi', 'D'), ("GNF", 'Guinean Franc', 'FG'),
+    ("GTQ", 'Guatemalan Quetzal', 'Q'), ("GYD", 'Guyanese Dollar', '$'),
+    ("HKD", 'Hong Kong Dollar', '$'), ("HNL", 'Honduran Lempira', 'L'),
+    ("HTG", 'Haitian Gourde', 'G'), ("HUF", 'Hungarian Forint', 'Ft'),
+    ("IDR", 'Indonesian Rupiah', 'Rp'), ("ILS", 'Israeli New Shekel', '₪'),
+    ("INR", 'Indian Rupee', '₹'), ("IQD", 'Iraqi Dinar', 'ع.د'),
+    ("IRR", 'Iranian Rial', '﷼'), ("ISK", 'Icelandic Króna', 'kr'),
+    ("JMD", 'Jamaican Dollar', '$'), ("JOD", 'Jordanian Dinar', 'د.ا'),
+    ("JPY", 'Japanese Yen', '¥'), ("KES", 'Kenyan Shilling', 'KSh'),
+    ("KGS", 'Kyrgystani Som', 'с'), ("KHR", 'Cambodian Riel', '៛'),
+    ("KMF", 'Comorian Franc', 'CF'), ("KPW", 'North Korean Won', '₩'),
+    ("KRW", 'South Korean Won', '₩'), ("KWD", 'Kuwaiti Dinar', 'د.ك'),
+    ("KYD", 'Cayman Islands Dollar', '$'), ("KZT", 'Kazakhstani Tenge', '₸'),
+    ("LAK", 'Lao Kip', '₭'), ("LBP", 'Lebanese Pound', 'ل.ل'),
+    ("LKR", 'Sri Lankan Rupee', '₨'), ("LRD", 'Liberian Dollar', '$'),
+    ("LSL", 'Lesotho Loti', 'L'), ("LYD", 'Libyan Dinar', 'ل.د'),
+    ("MAD", 'Moroccan Dirham', 'د.م.'), ("MDL", 'Moldovan Leu', 'L'),
+    ("MGA", 'Malagasy Ariary', 'Ar'), ("MKD", 'Macedonian Denar', 'ден'),
+    ("MMK", 'Myanmar Kyat', 'K'), ("MNT", 'Mongolian Tögrög', '₮'),
+    ("MOP", 'Macanese Pataca', 'MOP$'), ("MRU", 'Mauritanian Ouguiya', 'UM'),
+    ("MUR", 'Mauritian Rupee', '₨'), ("MVR", 'Maldivian Rufiyaa', 'Rf'),
+    ("MWK", 'Malawian Kwacha', 'MK'), ("MXN", 'Mexican Peso', '$'),
+    ("MYR", 'Malaysian Ringgit', 'RM'), ("MZN", 'Mozambican Metical', 'MT'),
+    ("NAD", 'Namibian Dollar', '$'), ("NGN", 'Nigerian Naira', '₦'),
+    ("NIO", 'Nicaraguan Córdoba', 'C$'), ("NOK", 'Norwegian Krone', 'kr'),
+    ("NPR", 'Nepalese Rupee', '₨'), ("NZD", 'New Zealand Dollar', '$'),
+    ("OMR", 'Omani Rial', '﷼'), ("PAB", 'Panamanian Balboa', 'B/.'),
+    ("PEN", 'Peruvian Sol', 'S/'), ("PGK", 'Papua New Guinean Kina', 'K'),
+    ("PHP", 'Philippine Peso', '₱'), ("PKR", 'Pakistani Rupee', '₨'),
+    ("PLN", 'Polish Złoty', 'zł'), ("PYG", 'Paraguayan Guaraní', '₲'),
+    ("QAR", 'Qatari Riyal', '﷼'), ("RON", 'Romanian Leu', 'lei'),
+    ("RSD", 'Serbian Dinar', 'дин.'), ("RUB", 'Russian Ruble', '₽'),
+    ("RWF", 'Rwandan Franc', 'FRw'), ("SAR", 'Saudi Riyal', '﷼'),
+    ("SBD", 'Solomon Islands Dollar', '$'),
+    ("SCR", 'Seychellois Rupee', '₨'), ("SDG", 'Sudanese Pound', '£'),
+    ("SEK", 'Swedish Krona', 'kr'), ("SGD", 'Singapore Dollar', '$'),
+    ("SHP", 'Saint Helena Pound', '£'),
+    ("SLE", 'Sierra Leonean Leone', 'Le'), ("SOS", 'Somali Shilling', 'Sh'),
+    ("SRD", 'Surinamese Dollar', '$'), ("SSP", 'South Sudanese Pound', '£'),
+    ("STN", 'São Tomé and Príncipe Dobra', 'Db'),
+    ("SYP", 'Syrian Pound', '£'), ("SZL", 'Swazi Lilangeni', 'L'),
+    ("THB", 'Thai Baht', '฿'), ("TJS", 'Tajikistani Somoni', 'ЅМ'),
+    ("TMT", 'Turkmenistan Manat', 'm'), ("TND", 'Tunisian Dinar', 'د.ت'),
+    ("TOP", 'Tongan Paʻanga', 'T$'), ("TRY", 'Turkish Lira', '₺'),
+    ("TTD", 'Trinidad and Tobago Dollar', '$'),
+    ("TWD", 'New Taiwan Dollar', '$'), ("TZS", 'Tanzanian Shilling', 'TSh'),
+    ("UAH", 'Ukrainian Hryvnia', '₴'), ("UGX", 'Ugandan Shilling', 'USh'),
+    ("USD", 'US Dollar', '$'), ("UYU", 'Uruguayan Peso', '$'),
+    ("UZS", 'Uzbekistani Som', "so'm"), ("VES", 'Venezuelan Bolívar', 'Bs.'),
+    ("VND", 'Vietnamese Đồng', '₫'), ("VUV", 'Vanuatu Vatu', 'VT'),
+    ("WST", 'Samoan Tālā', 'T'),
+    ("XAF", 'Central African CFA Franc', 'FCFA'),
+    ("XCD", 'East Caribbean Dollar', '$'),
+    ("XOF", 'West African CFA Franc', 'CFA'), ("XPF", 'CFP Franc', '₣'),
+    ("YER", 'Yemeni Rial', '﷼'), ("ZAR", 'South African Rand', 'R'),
+    ("ZMW", 'Zambian Kwacha', 'ZK'), ("ZWG", 'Zimbabwe Gold', 'ZiG'),
+]
+
+# Backfills each seeded country's currency_code (Destination Currency).
+# Territories that use another country's currency (Puerto Rico -> USD,
+# Vatican City -> EUR, Kiribati -> AUD, ...) point at that currency, same
+# convention as COUNTRY_REGIONS/COUNTRY_CALLING_CODES above.
+COUNTRY_CURRENCIES = {
+    "AF": "AFN", "AX": "EUR", "AL": "ALL", "DZ": "DZD", "AS": "USD",
+    "AD": "EUR", "AO": "AOA", "AI": "XCD", "AG": "XCD", "AR": "ARS",
+    "AM": "AMD", "AW": "AWG", "AU": "AUD", "AT": "EUR", "AZ": "AZN",
+    "BS": "BSD", "BH": "BHD", "BD": "BDT", "BB": "BBD", "BY": "BYN",
+    "BE": "EUR", "BZ": "BZD", "BJ": "XOF", "BM": "BMD", "BT": "BTN",
+    "BO": "BOB", "BQ": "USD", "BA": "BAM", "BW": "BWP", "BR": "BRL",
+    "BN": "BND", "BG": "BGN", "BF": "XOF", "BI": "BIF", "CV": "CVE",
+    "KH": "KHR", "CM": "XAF", "CA": "CAD", "KY": "KYD", "CF": "XAF",
+    "TD": "XAF", "CL": "CLP", "CN": "CNY", "CX": "AUD", "CC": "AUD",
+    "CO": "COP", "KM": "KMF", "CD": "CDF", "CG": "XAF", "CK": "NZD",
+    "CR": "CRC", "CI": "XOF", "HR": "EUR", "CU": "CUP", "CW": "ANG",
+    "CY": "EUR", "CZ": "CZK", "DK": "DKK", "DJ": "DJF", "DM": "XCD",
+    "DO": "DOP", "EC": "USD", "EG": "EGP", "SV": "USD", "GQ": "XAF",
+    "ER": "ERN", "EE": "EUR", "SZ": "SZL", "ET": "ETB", "FK": "FKP",
+    "FO": "DKK", "FJ": "FJD", "FI": "EUR", "FR": "EUR", "GF": "EUR",
+    "PF": "XPF", "GA": "XAF", "GM": "GMD", "GE": "GEL", "DE": "EUR",
+    "GH": "GHS", "GI": "GIP", "GR": "EUR", "GL": "DKK", "GD": "XCD",
+    "GP": "EUR", "GU": "USD", "GT": "GTQ", "GG": "GBP", "GN": "GNF",
+    "GW": "XOF", "GY": "GYD", "HT": "HTG", "VA": "EUR", "HN": "HNL",
+    "HK": "HKD", "HU": "HUF", "IS": "ISK", "IN": "INR", "ID": "IDR",
+    "IR": "IRR", "IQ": "IQD", "IE": "EUR", "IM": "GBP", "IL": "ILS",
+    "IT": "EUR", "JM": "JMD", "JP": "JPY", "JE": "GBP", "JO": "JOD",
+    "KZ": "KZT", "KE": "KES", "KI": "AUD", "KP": "KPW", "KR": "KRW",
+    "KW": "KWD", "KG": "KGS", "LA": "LAK", "LV": "EUR", "LB": "LBP",
+    "LS": "LSL", "LR": "LRD", "LY": "LYD", "LI": "CHF", "LT": "EUR",
+    "LU": "EUR", "MO": "MOP", "MK": "MKD", "MG": "MGA", "MW": "MWK",
+    "MY": "MYR", "MV": "MVR", "ML": "XOF", "MT": "EUR", "MH": "USD",
+    "MQ": "EUR", "MR": "MRU", "MU": "MUR", "YT": "EUR", "MX": "MXN",
+    "FM": "USD", "MD": "MDL", "MC": "EUR", "MN": "MNT", "ME": "EUR",
+    "MS": "XCD", "MA": "MAD", "MZ": "MZN", "MM": "MMK", "NA": "NAD",
+    "NR": "AUD", "NP": "NPR", "NL": "EUR", "NC": "XPF", "NZ": "NZD",
+    "NI": "NIO", "NE": "XOF", "NG": "NGN", "NU": "NZD", "NF": "AUD",
+    "MP": "USD", "NO": "NOK", "OM": "OMR", "PK": "PKR", "PW": "USD",
+    "PS": "ILS", "PA": "PAB", "PG": "PGK", "PY": "PYG", "PE": "PEN",
+    "PH": "PHP", "PN": "NZD", "PL": "PLN", "PT": "EUR", "PR": "USD",
+    "QA": "QAR", "RE": "EUR", "RO": "RON", "RU": "RUB", "RW": "RWF",
+    "BL": "EUR", "SH": "SHP", "KN": "XCD", "LC": "XCD", "MF": "EUR",
+    "PM": "EUR", "VC": "XCD", "WS": "WST", "SM": "EUR", "ST": "STN",
+    "SA": "SAR", "SN": "XOF", "RS": "RSD", "SC": "SCR", "SL": "SLE",
+    "SG": "SGD", "SX": "ANG", "SK": "EUR", "SI": "EUR", "SB": "SBD",
+    "SO": "SOS", "ZA": "ZAR", "SS": "SSP", "ES": "EUR", "LK": "LKR",
+    "SD": "SDG", "SR": "SRD", "SE": "SEK", "CH": "CHF", "SY": "SYP",
+    "TW": "TWD", "TJ": "TJS", "TZ": "TZS", "TH": "THB", "TL": "USD",
+    "TG": "XOF", "TK": "NZD", "TO": "TOP", "TT": "TTD", "TN": "TND",
+    "TR": "TRY", "TM": "TMT", "TC": "USD", "TV": "AUD", "UG": "UGX",
+    "UA": "UAH", "AE": "AED", "GB": "GBP", "US": "USD", "UY": "UYU",
+    "UZ": "UZS", "VU": "VUV", "VE": "VES", "VN": "VND", "VG": "USD",
+    "VI": "USD", "WF": "XPF", "EH": "MAD", "YE": "YER", "ZM": "ZMW",
+    "ZW": "ZWG",
+}
+
 def _slug(label: str) -> str:
     return label.upper().replace("&", "AND").replace("/", "_").replace(" ", "_").replace("'", "").replace(".", "").replace("-", "_").replace(",", "")[:40]
 
@@ -1997,11 +2143,11 @@ def seed_product_catalog(db, tenant_id: int):
 
 
 def seed_global_lookups(db):
-    """Seeds regions, countries, states, cities, and country_phone_codes —
-    the GLOBAL (non-tenant-scoped) lookup tables, shared by every tenant.
-    Safe to re-run for every new tenant; INSERT OR IGNORE (or an equivalent
-    manual existence check, for tables with no natural unique code) makes
-    it a no-op once already populated."""
+    """Seeds regions, countries, states, cities, country_phone_codes,
+    currencies, and exchange_rates — the GLOBAL (non-tenant-scoped) lookup
+    tables, shared by every tenant. Safe to re-run for every new tenant;
+    INSERT OR IGNORE (or an equivalent manual existence check, for tables
+    with no natural unique code) makes it a no-op once already populated."""
     for i, (code, label) in enumerate(REGIONS):
         db.execute(
             "INSERT OR IGNORE INTO regions (code, label, sort_order, is_active) VALUES (?, ?, ?, 1)",
@@ -2036,6 +2182,31 @@ def seed_global_lookups(db):
                 ")",
                 (row["country_id"], calling_code, f"{code} {calling_code}", row["country_id"], calling_code),
             )
+
+    # Currencies & exchange rates (Sept 2026) — see schema.sql's "MODULE E --
+    # Currencies & Exchange Rates" comment for the full design story.
+    for i, (code, label, symbol) in enumerate(CURRENCIES):
+        db.execute(
+            "INSERT OR IGNORE INTO currencies (code, label, symbol, sort_order, is_active) VALUES (?, ?, ?, ?, 1)",
+            (code, label, symbol, i),
+        )
+
+    # Backfill each seeded country's Destination Currency (idempotent —
+    # always safe to re-set, same convention as region_id above).
+    for code, currency_code in COUNTRY_CURRENCIES.items():
+        db.execute(
+            "UPDATE countries SET currency_code = ? WHERE code = ?",
+            (currency_code, code),
+        )
+
+    # USD is the base rate (Zeb: "a currency rates and exchange rate table
+    # with US dollar as the base rate") — seeded once, at 1.0, and never
+    # manually re-entered; every other currency's rate is entered later via
+    # the Currency & Exchange Rates admin screen (currency_admin blueprint).
+    db.execute(
+        "INSERT OR IGNORE INTO exchange_rates (currency_code, rate_to_usd, rate_as_of) "
+        "VALUES ('USD', 1.0, date('now'))"
+    )
 
     seed_service_taxonomy(db)
     seed_product_taxonomy(db)

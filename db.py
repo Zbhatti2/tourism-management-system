@@ -661,6 +661,123 @@ def init_app(app):
         migrate()
         click.echo("Done.")
 
+    @app.cli.command("migrate-add-ai-agent-foundations")
+    def migrate_add_ai_agent_foundations_command():
+        """Flask CLI: `flask --app app migrate-add-ai-agent-foundations` —
+        creates the AI Agents foundations: agent_runs (one row per
+        narrowly-scoped agent invocation), ai_review_items and
+        ai_review_fields (the Human Review Queue). Purely additive — no
+        existing table is touched. Safe to re-run. See
+        migrate_add_ai_agent_foundations.py for the full story."""
+        from migrate_add_ai_agent_foundations import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-agent-run-sources")
+    def migrate_add_agent_run_sources_command():
+        """Flask CLI: `flask --app app migrate-add-agent-run-sources` —
+        adds agent_run_sources (URLs/documents entered on the New Agent
+        Run form). Purely additive. Safe to re-run. See
+        migrate_add_agent_run_sources.py for the full story."""
+        from migrate_add_agent_run_sources import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-ai-agent-undo")
+    def migrate_add_ai_agent_undo_command():
+        """Flask CLI: `flask --app app migrate-add-ai-agent-undo` — adds
+        "Undo Apply" to the Review Queue: applied_snapshot/undone_at/
+        undone_by columns on ai_review_items, plus widening its status
+        CHECK to allow 'undone' (a table rebuild — SQLite can't alter a
+        CHECK constraint in place). Every existing row is preserved
+        unchanged. Safe to re-run. See migrate_add_ai_agent_undo.py for
+        the full story."""
+        from migrate_add_ai_agent_undo import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-ai-agent-address-field")
+    def migrate_add_ai_agent_address_field_command():
+        """Flask CLI: `flask --app app migrate-add-ai-agent-address-field` —
+        lets the AI Agents Hotel Intelligence agent propose and apply a
+        structured Address (parsed into supplier_addresses, not dumped as
+        free text into Notes): adds ai_review_items.applied_address_snapshot,
+        a plain additive column so Undo Apply can also reverse an address
+        write, alongside applied_snapshot's existing entity-row snapshot.
+        Safe to re-run. See migrate_add_ai_agent_address_field.py for the
+        full story."""
+        from migrate_add_ai_agent_address_field import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-document-blob-storage")
+    def migrate_add_document_blob_storage_command():
+        """Flask CLI: `flask --app app migrate-add-document-blob-storage` —
+        converts Supplier Images/Photographs from reference-only storage
+        (a Local Drive Path/Cloud Link string) to actually storing the
+        image bytes in the database: adds file_data/file_name/mime_type/
+        file_size columns to supplier_document_locations and widens its
+        location_type CHECK to allow 'Stored in Database' (a table
+        rebuild — SQLite can't alter a CHECK constraint in place). Every
+        existing location row is preserved unchanged. Safe to re-run. See
+        migrate_add_document_blob_storage.py for the full story."""
+        from migrate_add_document_blob_storage import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-poi-image-gallery")
+    def migrate_add_poi_image_gallery_command():
+        """Flask CLI: `flask --app app migrate-add-poi-image-gallery` —
+        brings Point of Interest Images/Photographs up to the same shape
+        as Supplier Images: renames poi_images.caption to image_name and
+        adds authors/description/notes/file_data/file_name/mime_type/
+        file_size, widens location_type's CHECK to allow 'Stored in
+        Database', makes path_or_url optional, and creates
+        poi_image_keywords (a table rebuild — SQLite can't alter a CHECK
+        constraint in place). Every existing image is preserved unchanged
+        (its caption becomes its Image Name). Safe to re-run. See
+        migrate_add_poi_image_gallery.py for the full story."""
+        from migrate_add_poi_image_gallery import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-currency-exchange-rates")
+    def migrate_add_currency_exchange_rates_command():
+        """Flask CLI: `flask --app app migrate-add-currency-exchange-rates` —
+        adds Currency Rates & Exchange Rates: the GLOBAL currencies/
+        exchange_rates/exchange_rate_history tables, countries.currency_code
+        (Destination Currency) and tenants.host_currency_code (Host
+        Currency), then seeds ~154 ISO 4217 currencies, backfills every
+        seeded country's currency_code, and seeds USD's exchange rate at
+        1.0 (the base). Every existing row is preserved unchanged. Safe to
+        re-run. See migrate_add_currency_exchange_rates.py for the full
+        story."""
+        from migrate_add_currency_exchange_rates import migrate
+
+        migrate()
+        click.echo("Done.")
+
+    @app.cli.command("migrate-add-agent-run-image-sources")
+    def migrate_add_agent_run_image_sources_command():
+        """Flask CLI: `flask --app app migrate-add-agent-run-image-sources` —
+        lets an Agent Run Source be an uploaded image (bytes stored in the
+        row, same convention as Supplier/POI Images), not just a URL, and
+        widens agent_run_sources' shape to allow it (a table rebuild —
+        SQLite can't add a CHECK constraint in place). Every existing
+        source row is preserved unchanged as source_type='url'. Safe to
+        re-run. See migrate_add_agent_run_image_sources.py for the full
+        story."""
+        from migrate_add_agent_run_image_sources import migrate
+
+        migrate()
+        click.echo("Done.")
+
     @app.cli.command("seed-tenant")
     def seed_tenant_command():
         """Flask CLI: `flask --app app seed-tenant` — creates the first

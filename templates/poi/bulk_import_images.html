@@ -14,23 +14,80 @@
     </div>
     <div id="pick_error" class="text-danger small mb-3"></div>
 
+    <div id="details_hint" class="alert alert-warning small py-2" hidden>
+      Click each row below (or its <i class="bi bi-pencil"></i> button) to enter that image's Name, Author, Description,
+      Notes and Keywords — every image needs this before Import is available.
+    </div>
+
     <div class="table-responsive" id="file_table_wrap" hidden>
       <table class="table table-sm align-middle mb-0">
         <thead>
-          <tr><th style="width: 40%;">Caption</th><th>File</th><th></th></tr>
+          <tr><th style="width: 90px;">Status</th><th>Image Name</th><th>File</th><th style="width: 90px;"></th></tr>
         </thead>
         <tbody id="file_rows"></tbody>
       </table>
     </div>
   </div>
   <div class="card-footer bg-white d-flex gap-2 justify-content-end">
-    <a href="{{ url_for('poi.view_poi_images', poi_id=poi.poi_id) }}" class="btn btn-outline-secondary">Cancel</a>
+    <a href="{{ url_for('poi.view_poi', poi_id=poi.poi_id) }}" class="btn btn-outline-secondary">Cancel</a>
     <button class="btn btn-primary" type="submit" id="submit_btn" disabled>Import</button>
   </div>
 </form>
+
+<!-- Interim per-image details step -->
+<div class="modal fade" id="imageDetailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Image Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center mb-3">
+          <img id="modal_thumbnail" alt="" class="rounded border"
+               style="max-width: 100%; max-height: 280px; object-fit: contain; background: #f8f9fa;"
+               onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22240%22 height=%22180%22%3E%3Crect width=%22240%22 height=%22180%22 fill=%22%23e9ecef%22/%3E%3Ctext x=%22120%22 y=%2294%22 font-size=%2214%22 text-anchor=%22middle%22 fill=%22%236c757d%22%3EPreview unavailable%3C/text%3E%3C/svg%3E';">
+        </div>
+        <div class="text-muted small text-break mb-3" id="modal_file_path"></div>
+        <div class="mb-3">
+          <label class="form-label">Image Name *</label>
+          <input class="form-control" id="modal_name" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Author</label>
+          <input class="form-control" id="modal_author">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description <span class="text-muted small">(max {{ description_max_length }} characters)</span></label>
+          <textarea class="form-control" id="modal_description" rows="3" maxlength="{{ description_max_length }}"></textarea>
+          <div class="form-text"><span id="modal_description_count">0</span>/{{ description_max_length }} characters</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Notes</label>
+          <textarea class="form-control" id="modal_notes" rows="2"></textarea>
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Keywords <span class="text-muted small">(comma-separated)</span></label>
+          <input class="form-control" id="modal_keywords">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="modal_save_btn" onclick="saveImageDetails()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
+  let fileCount = 0;
+  let activeRow = null;
+  let imageDetailsModal = null;
+  document.addEventListener('DOMContentLoaded', () => {
+    imageDetailsModal = new bootstrap.Modal(document.getElementById('imageDetailsModal'));
+  });
+
   function pickFiles() {
     const hint = document.getElementById('pick_hint');
     const err = document.getElementById('pick_error');
@@ -52,50 +109,122 @@
       });
   }
 
+  function hidden(name, value) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value || '';
+    return input;
+  }
+
   function addFiles(files) {
     const tbody = document.getElementById('file_rows');
     files.forEach(f => {
+      fileCount += 1;
       const tr = document.createElement('tr');
+      tr.dataset.ready = '0';
+      tr.style.cursor = 'pointer';
+      tr.title = 'Click to enter this image\'s details';
 
-      const captionTd = document.createElement('td');
-      const captionInput = document.createElement('input');
-      captionInput.className = 'form-control form-control-sm';
-      captionInput.name = 'captions';
-      captionInput.value = f.name;
-      captionTd.appendChild(captionInput);
+      const statusTd = document.createElement('td');
+      statusTd.innerHTML = '<span class="badge bg-warning-subtle text-warning-emphasis">Needs details</span>';
+
+      const nameTd = document.createElement('td');
+      nameTd.className = 'fw-semibold';
+      nameTd.textContent = f.name;
 
       const pathTd = document.createElement('td');
       pathTd.className = 'text-muted small text-break';
       pathTd.textContent = f.path;
-      const pathHidden = document.createElement('input');
-      pathHidden.type = 'hidden';
-      pathHidden.name = 'paths';
-      pathHidden.value = f.path;
-      pathTd.appendChild(pathHidden);
 
       const actionTd = document.createElement('td');
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn btn-sm btn-link py-0';
+      editBtn.innerHTML = '<i class="bi bi-pencil"></i>';
+      editBtn.onclick = (e) => { e.stopPropagation(); openImageDetails(tr); };
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'btn btn-sm btn-link text-danger py-0';
       removeBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
-      removeBtn.onclick = () => { tr.remove(); updateState(); };
+      removeBtn.onclick = (e) => { e.stopPropagation(); tr.remove(); updateState(); };
+      actionTd.appendChild(editBtn);
       actionTd.appendChild(removeBtn);
 
-      tr.appendChild(captionTd);
+      tr.appendChild(statusTd);
+      tr.appendChild(nameTd);
       tr.appendChild(pathTd);
       tr.appendChild(actionTd);
+      tr.onclick = () => openImageDetails(tr);
+
+      tr.appendChild(hidden('paths', f.path));
+      tr.appendChild(hidden('names', f.name));
+      tr.appendChild(hidden('authors', ''));
+      tr.appendChild(hidden('descriptions', ''));
+      tr.appendChild(hidden('notes', ''));
+      tr.appendChild(hidden('keywords', ''));
+
       tbody.appendChild(tr);
     });
     updateState();
   }
 
+  function rowInput(tr, name) {
+    return Array.from(tr.querySelectorAll('input[type=hidden]')).find(i => i.name === name);
+  }
+
+  function openImageDetails(tr) {
+    activeRow = tr;
+    const path = rowInput(tr, 'paths').value;
+    document.getElementById('modal_file_path').textContent = path;
+    const thumb = document.getElementById('modal_thumbnail');
+    thumb.src = "{{ url_for('poi.preview_bulk_import_poi_file', poi_id=poi.poi_id) }}?path=" + encodeURIComponent(path);
+    document.getElementById('modal_name').value = rowInput(tr, 'names').value;
+    document.getElementById('modal_author').value = rowInput(tr, 'authors').value;
+    document.getElementById('modal_description').value = rowInput(tr, 'descriptions').value;
+    document.getElementById('modal_notes').value = rowInput(tr, 'notes').value;
+    document.getElementById('modal_keywords').value = rowInput(tr, 'keywords').value;
+    document.getElementById('modal_description_count').textContent = rowInput(tr, 'descriptions').value.length;
+    imageDetailsModal.show();
+  }
+
+  function saveImageDetails() {
+    if (!activeRow) return;
+    const name = document.getElementById('modal_name').value.trim();
+    if (!name) {
+      document.getElementById('modal_name').classList.add('is-invalid');
+      return;
+    }
+    document.getElementById('modal_name').classList.remove('is-invalid');
+
+    rowInput(activeRow, 'names').value = name;
+    rowInput(activeRow, 'authors').value = document.getElementById('modal_author').value.trim();
+    rowInput(activeRow, 'descriptions').value = document.getElementById('modal_description').value;
+    rowInput(activeRow, 'notes').value = document.getElementById('modal_notes').value;
+    rowInput(activeRow, 'keywords').value = document.getElementById('modal_keywords').value.trim();
+
+    activeRow.dataset.ready = '1';
+    activeRow.children[0].innerHTML = '<span class="badge bg-success-subtle text-success">Ready</span>';
+    activeRow.children[1].textContent = name;
+
+    imageDetailsModal.hide();
+    activeRow = null;
+    updateState();
+  }
+
+  document.getElementById('modal_description') && document.getElementById('modal_description').addEventListener('input', (e) => {
+    document.getElementById('modal_description_count').textContent = e.target.value.length;
+  });
+
   function updateState() {
-    const rows = document.getElementById('file_rows').children.length;
-    document.getElementById('file_table_wrap').hidden = rows === 0;
-    document.getElementById('submit_btn').disabled = rows === 0;
-    document.getElementById('pick_hint').textContent = rows === 0
+    const rows = Array.from(document.getElementById('file_rows').children);
+    document.getElementById('file_table_wrap').hidden = rows.length === 0;
+    document.getElementById('details_hint').hidden = rows.length === 0;
+    const allReady = rows.length > 0 && rows.every(r => r.dataset.ready === '1');
+    document.getElementById('submit_btn').disabled = !allReady;
+    document.getElementById('pick_hint').textContent = rows.length === 0
       ? 'No images selected yet — you can Ctrl/Shift-click to select several at once.'
-      : `${rows} image${rows !== 1 ? 's' : ''} selected — Select Images… again to add more, or remove one below.`;
+      : `${rows.length} image${rows.length !== 1 ? 's' : ''} selected — Select Images… again to add more, or remove one below.`;
   }
 </script>
 {% endblock %}

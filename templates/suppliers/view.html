@@ -108,6 +108,52 @@
         {% else %}<p class="text-muted small mb-0">No addresses on file.</p>{% endfor %}
       </div>
     </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Emails</h2>
+          <a href="{{ url_for('suppliers.new_supplier_email', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for e in emails %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">{{ e.email_address }} {% if e.is_primary %}<span class="badge bg-primary-subtle text-primary">primary</span>{% endif %}</span>
+          <span>
+            <a href="{{ url_for('suppliers.edit_supplier_email', supplier_id=supplier.supplier_id, email_id=e.supplier_email_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('suppliers.delete_supplier_email', supplier_id=supplier.supplier_id, email_id=e.supplier_email_id) }}" class="d-inline" onsubmit="return confirm('Delete this email?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No emails on file.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Phones</h2>
+          <a href="{{ url_for('suppliers.new_supplier_phone', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+        </div>
+        {% for p in phones %}
+        <div class="d-flex justify-content-between align-items-center border-top py-2">
+          <span class="small">
+            {% if p.phone_type_label %}<span class="badge bg-light text-dark border">{{ p.phone_type_label }}</span>{% endif %}
+            {{ p | format_phone }}
+            {% if p.is_primary %}<span class="badge bg-primary-subtle text-primary">primary</span>{% endif %}
+          </span>
+          <span>
+            <a href="{{ url_for('suppliers.edit_supplier_phone', supplier_id=supplier.supplier_id, phone_id=p.supplier_phone_id) }}" class="btn btn-sm btn-link py-0"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('suppliers.delete_supplier_phone', supplier_id=supplier.supplier_id, phone_id=p.supplier_phone_id) }}" class="d-inline" onsubmit="return confirm('Delete this phone?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-link text-danger py-0" type="submit"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No phones on file.</p>{% endfor %}
+      </div>
+    </div>
   </div>
 
   <div class="col-lg-6">
@@ -162,9 +208,8 @@
     <div class="card shadow-sm border-0 mb-3">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <h2 class="h6 mb-0">Documents, Links and Images</h2>
+          <h2 class="h6 mb-0">Documents and Links</h2>
           <div class="d-flex gap-1">
-            <a href="{{ url_for('suppliers.bulk_import_images', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-secondary" title="Bulk import images/photographs"><i class="bi bi-images"></i> Bulk Import</a>
             <a href="{{ url_for('suppliers.new_supplier_document', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
           </div>
         </div>
@@ -178,7 +223,34 @@
             <span class="text-muted"><i class="bi bi-paperclip"></i> {{ d.location_count }} location{{ 's' if d.location_count != 1 else '' }}</span>
           </a>
         </div>
-        {% else %}<p class="text-muted small mb-0">No documents, links or images on file. Select "+" to add a business license, permit, rules &amp; regulations, agreement or image — or "Bulk Import" to add several images/photographs at once.</p>{% endfor %}
+        {% else %}<p class="text-muted small mb-0">No documents or links on file. Select "+" to add a business license, permit, rules &amp; regulations, or agreement.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">Images / Photographs</h2>
+          <div class="d-flex gap-1">
+            <a href="{{ url_for('suppliers.image_catalog', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-secondary" title="View the full image catalog"><i class="bi bi-collection"></i> Catalog</a>
+            <a href="{{ url_for('suppliers.bulk_import_images', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-secondary" title="Bulk import images/photographs"><i class="bi bi-images"></i> Bulk Import</a>
+            <a href="{{ url_for('suppliers.new_supplier_document', supplier_id=supplier.supplier_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+          </div>
+        </div>
+        {% for d in images[:3] %}
+        <div class="d-flex align-items-start gap-2 border-top py-2">
+          <img src="{{ url_for('suppliers.image_thumbnail', supplier_id=supplier.supplier_id, document_id=d.supplier_document_id) }}"
+               alt="" width="40" height="40" class="rounded flex-shrink-0" style="object-fit: cover;"
+               onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22%3E%3Crect width=%2240%22 height=%2240%22 fill=%22%23e9ecef%22/%3E%3C/svg%3E';">
+          <a href="{{ url_for('suppliers.view_supplier_document', supplier_id=supplier.supplier_id, document_id=d.supplier_document_id) }}" class="small text-decoration-none">
+            <strong>{{ d.document_name }}</strong>
+            {% if d.authors %}<span class="text-muted"> — {{ d.authors }}</span>{% endif %}
+            <br>
+            {% if d.description %}<span class="text-muted">{{ d.description }}</span>{% endif %}
+          </a>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No images or photographs on file. Select "+" to add one, or "Bulk Import" to add several at once.</p>{% endfor %}
+        {% if images | length > 3 %}<p class="text-muted small mb-0 mt-2">…and {{ images | length - 3 }} more — see the full Catalog.</p>{% endif %}
       </div>
     </div>
 
