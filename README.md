@@ -59,7 +59,25 @@ The container never creates an empty database on its own: upload the real
 `TMS_ALLOW_INIT=true` only to start a brand-new, empty system.) The
 database cannot be read without the key it was created with.
 
-## What goes to GitHub
+## Nightly backups
+
+`flask --app app nightly-backup` makes a consistent, integrity-checked copy
+of the whole database into `instance/backups/` (newest 14 kept) and lists it
+on System Management → Backup & Restore, where the System Admin can download
+any copy to a PC. On the VPS, cron runs `deploy/tms-nightly-backup.sh` every
+night; it also copies the backups and both key files to `/root/tms-backups`
+(kept 30 days), outside the folder Coolify manages.
+
+A backup can only be read with the `tenant_master.key` it was made with —
+keep a copy of that key somewhere safe off the server too.
+
+## Adding files and images
+
+Images (POI and supplier) and documents (supplier documents, Documents &
+Knowledge Base) are uploaded from the browser and stored in the database,
+up to 25 MB each — this works the same on your PC and on the hosted app.
+
+
 
 Only the code needed to build and update TMS. `.gitignore` keeps secrets
 (`.env`, keys), the database, uploads, backups, notes, Word/PDF documents
@@ -131,12 +149,6 @@ error page that leaks that the record exists).
 
 ## Known follow-ups (not yet done)
 
-- **Adding images/files on the hosted app.** POI images, supplier
-  documents and document locations are added with a *Browse…* button that
-  opens a file dialog **on the machine running the server** — that works
-  on your PC but not on the VPS. Existing images are stored inside the
-  database and display fine everywhere; adding new ones from a browser
-  needs an upload button (browser → server) instead.
 - A physical purge job for archived/soft-deleted contacts past their
   retention window exists but nothing schedules it beyond the
   once-a-day opportunistic check at login.

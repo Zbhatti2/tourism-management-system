@@ -8,12 +8,13 @@ tag-style child tables (content_keywords, content_hashtags) edited as a
 comma-separated field and normalized into rows on save.
 """
 import os
+from io import BytesIO
 
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for
 
 from auth.decorators import login_required
 from db import get_db, log_action
-from utils import open_local_path, pick_file_dialog
+from utils import open_local_path, pick_file_dialog, read_uploaded_file
 
 documents_bp = Blueprint("documents", __name__)
 
@@ -114,7 +115,11 @@ def view_content(content_id):
     ).fetchone()
     if item is None:
         abort(404)
-    locations = db.execute("SELECT * FROM content_locations WHERE content_id = ? ORDER BY location_id", (content_id,)).fetchall()
+    locations = db.execute(
+        "SELECT location_id, content_id, location_type, path_or_url, file_name, file_size FROM content_locations "
+        "WHERE content_id = ? AND tenant_id = ? ORDER BY location_id",
+        (content_id, g.tenant_id),
+    ).fetchall()
     domains = db.execute(
         """SELECT kd.label FROM content_knowledge_domains ckd
            JOIN knowledge_domains kd ON kd.knowledge_domain_id = ckd.knowledge_domain_id
@@ -280,6 +285,26 @@ def delete_contact_link(content_id, link_id):
     return redirect(url_for("documents.view_content", content_id=content_id))
 
 
+@documents_bp.route("/<int:content_id>/locations/<int:location_id>/file")
+@login_required
+def location_file(content_id, location_id):
+    """Opens (in the browser) or downloads a file stored in the database.
+    ?download=1 forces a download."""
+    db = get_db()
+    loc = db.execute(
+        "SELECT * FROM content_locations WHERE location_id = ? AND content_id = ? AND tenant_id = ?",
+        (location_id, content_id, g.tenant_id),
+    ).fetchone()
+    if loc is None or loc["location_type"] != "Stored in Database" or not loc["file_data"]:
+        abort(404)
+    return send_file(
+        BytesIO(loc["file_data"]),
+        mimetype=loc["mime_type"] or "application/octet-stream",
+        download_name=loc["file_name"] or "document",
+        as_attachment=bool(request.args.get("download")),
+    )
+
+
 @documents_bp.route("/<int:content_id>/locations/<int:location_id>/open")
 @login_required
 def open_location(content_id, location_id):
@@ -314,10 +339,26 @@ def new_location(content_id):
         abort(404)
     if request.method == "POST":
         form = request.form
-        db.execute(
-            "INSERT INTO content_locations (tenant_id, content_id, location_type, path_or_url) VALUES (?, ?, ?, ?)",
-            (g.tenant_id, content_id, form["location_type"], form["path_or_url"].strip()),
-        )
+        if form.get("location_type") == "Stored in Database":
+            data, file_name, mime_type, error = read_uploaded_file(request.files.get("upload_file"))
+            if error or not data:
+                flash(error or "Choose a file to upload.", "error")
+                return render_template("documents/location_form.html", item=item)
+            db.execute(
+                """INSERT INTO content_locations
+                   (tenant_id, content_id, location_type, path_or_url, file_data, file_name, mime_type, file_size)
+                   VALUES (?, ?, 'Stored in Database', ?, ?, ?, ?, ?)""",
+                (g.tenant_id, content_id, file_name, data, file_name, mime_type, len(data)),
+            )
+        else:
+            path_or_url = form.get("path_or_url", "").strip()
+            if not path_or_url:
+                flash("Enter the link.", "error")
+                return render_template("documents/location_form.html", item=item)
+            db.execute(
+                "INSERT INTO content_locations (tenant_id, content_id, location_type, path_or_url) VALUES (?, ?, ?, ?)",
+                (g.tenant_id, content_id, form["location_type"], path_or_url),
+            )
         db.commit()
         log_action("Create", "content_location", content_id, "Added location")
         return redirect(url_for("documents.view_content", content_id=content_id))

@@ -370,3 +370,40 @@ def pick_files_dialog(title="Select files", filetypes=None):
     except Exception as e:
         return [], f"Couldn't open the file browser ({e}) — add files individually instead."
     return list(paths), None
+
+
+# ---------------------------------------------------------------- uploads
+#
+# Browser uploads (Sept 2026, for the hosted app): a file chosen in the
+# user's own browser is sent with the form and stored in the database --
+# the same 'Stored in Database' model POI images and supplier documents
+# already use. This replaces the old server-side "Browse…" dialog
+# (pick_file_dialog above), which only works when the app runs on the same
+# PC as the browser.
+
+MAX_UPLOAD_FILE_BYTES = 25 * 1024 * 1024  # 25 MB per file
+
+UPLOAD_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff", ".heic"}
+
+
+def read_uploaded_file(file_storage, allowed_extensions=None):
+    """Reads one werkzeug FileStorage from request.files.
+
+    Returns (data, file_name, mime_type, error). All four are None when no
+    file was chosen at all, so callers can treat "nothing uploaded" and
+    "bad upload" differently. error is a user-facing message."""
+    import mimetypes
+
+    if file_storage is None or not file_storage.filename:
+        return None, None, None, None
+    file_name = basename(file_storage.filename)
+    ext = os.path.splitext(file_name)[1].lower()
+    if allowed_extensions and ext not in allowed_extensions:
+        return None, None, None, f"'{file_name}' isn't a supported file type ({', '.join(sorted(allowed_extensions))})."
+    data = file_storage.read(MAX_UPLOAD_FILE_BYTES + 1)
+    if len(data) > MAX_UPLOAD_FILE_BYTES:
+        return None, None, None, f"'{file_name}' is larger than {MAX_UPLOAD_FILE_BYTES // (1024 * 1024)} MB."
+    if not data:
+        return None, None, None, f"'{file_name}' is empty."
+    mime_type = file_storage.mimetype or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+    return data, file_name, mime_type, None

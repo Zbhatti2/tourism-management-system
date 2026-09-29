@@ -3,7 +3,7 @@
 {% block content %}
 <h1 class="h3 mb-1">{{ "Edit" if document_id else "Add" }} Document, Link or Image</h1>
 <p class="text-muted mb-4">{{ supplier.supplier_name }}</p>
-<form method="post" class="card shadow-sm border-0">
+<form method="post" class="card shadow-sm border-0" enctype="multipart/form-data">
   <div class="card-body">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="row g-3">
@@ -47,19 +47,16 @@
       <div class="col-12"><hr class="my-2"></div>
       <div class="col-12">
         <h2 class="h6 mb-1">Location {% if document_id %}<span class="text-muted small fw-normal">(add another copy)</span>{% endif %}</h2>
-        <p class="text-muted small">Where a copy of this document lives — a web link, a local file, or both. {% if document_id %}Existing locations, and removing one, are managed below on this document's own page after you save.{% else %}You can add more (or remove one) from the document's own page after you save.{% endif %}</p>
+        <p class="text-muted small">Where a copy of this document lives — a web link, an uploaded file, or both. {% if document_id %}Existing locations, and removing one, are managed below on this document's own page after you save.{% else %}You can add more (or remove one) from the document's own page after you save.{% endif %}</p>
       </div>
       <div class="col-md-6">
         <label class="form-label">Cloud Link <span class="text-muted small">(a web URL, e.g. https://…)</span></label>
         <input class="form-control" type="url" name="cloud_link" placeholder="https://…" value="{{ (item.cloud_link | orblank) if item else '' }}">
       </div>
       <div class="col-md-6">
-        <label class="form-label">Local Drive Path</label>
-        <div class="input-group">
-          <input class="form-control" id="local_drive_path" name="local_drive_path" placeholder="C:\path\to\file.pdf" value="{{ (item.local_drive_path | orblank) if item else '' }}">
-          <button class="btn btn-outline-secondary" type="button" id="browse_btn" onclick="browseFile()">Browse…</button>
-        </div>
-        <div id="browse_hint" class="form-text text-danger"></div>
+        <label class="form-label" for="upload_file">Upload a file <span class="text-muted small">(stored in the database)</span></label>
+        <input class="form-control" type="file" id="upload_file" name="upload_file">
+        <div class="form-text">PDF, Word, image or any other file, up to 25 MB.</div>
       </div>
     </div>
   </div>
@@ -81,19 +78,5 @@
     update();
   })();
 
-  function browseFile() {
-    var hint = document.getElementById('browse_hint');
-    hint.textContent = '';
-    fetch("{{ url_for('suppliers.browse_document_file', supplier_id=supplier.supplier_id) }}")
-      .then(r => r.json())
-      .then(data => {
-        if (data.path) {
-          document.getElementById('local_drive_path').value = data.path;
-        } else if (data.error) {
-          hint.textContent = data.error;
-        }
-      })
-      .catch(() => { hint.textContent = 'Could not reach the file browser — type or paste the path instead.'; });
-  }
 </script>
 {% endblock %}

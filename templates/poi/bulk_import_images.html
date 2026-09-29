@@ -9,7 +9,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div class="d-flex align-items-center gap-2 mb-3">
-      <button class="btn btn-outline-primary" type="button" id="pick_btn" onclick="pickFiles()"><i class="bi bi-images"></i> Select Images…</button>
+      <input type="file" id="file_picker" accept="image/*" multiple hidden>
+      <button class="btn btn-outline-primary" type="button" id="pick_btn" onclick="document.getElementById('file_picker').click()"><i class="bi bi-images"></i> Select Images…</button>
       <span class="text-muted small" id="pick_hint">No images selected yet — you can Ctrl/Shift-click to select several at once.</span>
     </div>
     <div id="pick_error" class="text-danger small mb-3"></div>
@@ -88,25 +89,26 @@
     imageDetailsModal = new bootstrap.Modal(document.getElementById('imageDetailsModal'));
   });
 
-  function pickFiles() {
-    const hint = document.getElementById('pick_hint');
-    const err = document.getElementById('pick_error');
-    err.textContent = '';
-    hint.textContent = 'Opening the file browser…';
-    fetch("{{ url_for('poi.pick_bulk_import_poi_images', poi_id=poi.poi_id) }}")
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          err.textContent = data.error;
-          hint.textContent = 'No images selected yet.';
-          return;
-        }
-        addFiles(data.files || []);
-      })
-      .catch(() => {
-        err.textContent = 'Could not reach the file browser.';
-        hint.textContent = 'No images selected yet.';
-      });
+  // Images are chosen in the browser and sent with the form (they're
+  // stored in the database) -- works on the hosted app as well as locally.
+  // Each picked File is kept here, keyed by the row it belongs to.
+  const pickedFiles = new Map();
+  let uploadSeq = 0;
+  document.getElementById('file_picker').addEventListener('change', (e) => {
+    const files = Array.from(e.target.files || []);
+    const rows = files.map(file => {
+      uploadSeq += 1;
+      const key = 'f' + uploadSeq;
+      pickedFiles.set(key, file);
+      return { path: 'upload:' + key, name: file.name.replace(/\.[^.]+$/, ''), label: file.name };
+    });
+    addFiles(rows);
+    e.target.value = '';  // lets the same file be picked again later if removed
+  });
+
+  function rowKey(tr) {
+    const p = rowInput(tr, 'paths').value;
+    return p.startsWith('upload:') ? p.slice(7) : null;
   }
 
   function hidden(name, value) {
@@ -135,7 +137,7 @@
 
       const pathTd = document.createElement('td');
       pathTd.className = 'text-muted small text-break';
-      pathTd.textContent = f.path;
+      pathTd.textContent = f.label || f.path;
 
       const actionTd = document.createElement('td');
       const editBtn = document.createElement('button');
@@ -147,7 +149,7 @@
       removeBtn.type = 'button';
       removeBtn.className = 'btn btn-sm btn-link text-danger py-0';
       removeBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
-      removeBtn.onclick = (e) => { e.stopPropagation(); tr.remove(); updateState(); };
+      removeBtn.onclick = (e) => { e.stopPropagation(); const k = rowKey(tr); if (k) pickedFiles.delete(k); tr.remove(); updateState(); };
       actionTd.appendChild(editBtn);
       actionTd.appendChild(removeBtn);
 
@@ -176,9 +178,17 @@
   function openImageDetails(tr) {
     activeRow = tr;
     const path = rowInput(tr, 'paths').value;
-    document.getElementById('modal_file_path').textContent = path;
+    const key = rowKey(tr);
+    const file = key ? pickedFiles.get(key) : null;
+    document.getElementById('modal_file_path').textContent = file ? file.name : path;
     const thumb = document.getElementById('modal_thumbnail');
-    thumb.src = "{{ url_for('poi.preview_bulk_import_poi_file', poi_id=poi.poi_id) }}?path=" + encodeURIComponent(path);
+    if (thumb.dataset.objectUrl) { URL.revokeObjectURL(thumb.dataset.objectUrl); delete thumb.dataset.objectUrl; }
+    if (file) {
+      thumb.dataset.objectUrl = URL.createObjectURL(file);
+      thumb.src = thumb.dataset.objectUrl;
+    } else {
+      thumb.removeAttribute('src');
+    }
     document.getElementById('modal_name').value = rowInput(tr, 'names').value;
     document.getElementById('modal_author').value = rowInput(tr, 'authors').value;
     document.getElementById('modal_description').value = rowInput(tr, 'descriptions').value;
@@ -214,6 +224,37 @@
 
   document.getElementById('modal_description') && document.getElementById('modal_description').addEventListener('input', (e) => {
     document.getElementById('modal_description_count').textContent = e.target.value.length;
+  });
+
+  // Send the form together with the picked files, in row order.
+  document.getElementById('bulkImportForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const data = new FormData(form);
+    Array.from(document.getElementById('file_rows').children).forEach(tr => {
+      const key = rowKey(tr);
+      if (key && pickedFiles.has(key)) {
+        data.append('upload_keys', key);
+        data.append('uploads', pickedFiles.get(key), pickedFiles.get(key).name);
+      }
+    });
+    const btn = document.getElementById('submit_btn');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    fetch(form.action || window.location.href, { method: 'POST', body: data, credentials: 'same-origin' })
+      .then(r => r.text().then(html => {
+        // Show the page the server redirected to (with its "Imported …"
+        // message) exactly as a normal form submit would.
+        history.replaceState(null, '', r.url);
+        document.open();
+        document.write(html);
+        document.close();
+      }))
+      .catch(() => {
+        btn.disabled = false;
+        btn.textContent = 'Import';
+        document.getElementById('pick_error').textContent = 'Upload failed — check your connection and try again.';
+      });
   });
 
   function updateState() {

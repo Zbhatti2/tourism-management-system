@@ -50,7 +50,8 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from auth.decorators import login_required
 from db import get_db, log_action
-from utils import basename, open_local_path, pick_file_dialog, pick_files_dialog
+from utils import (UPLOAD_IMAGE_EXTENSIONS, basename, open_local_path, pick_file_dialog, pick_files_dialog,
+                   read_uploaded_file)
 
 suppliers_bp = Blueprint("suppliers", __name__)
 
@@ -189,8 +190,20 @@ def _save_document_locations_from_form(db, form, document_id):
             "INSERT INTO supplier_document_locations (tenant_id, supplier_document_id, location_type, path_or_url) VALUES (?, ?, 'Local Drive Path', ?)",
             (g.tenant_id, document_id, local_path),
         )
-    if cloud_link or local_path:
+    # A file chosen in the browser ("Upload a file") is stored in the
+    # database, so it works on the hosted app. Returns an error message for
+    # a rejected upload (too large / empty) so the caller can flash it.
+    data, file_name, mime_type, error = read_uploaded_file(request.files.get("upload_file"))
+    if data:
+        db.execute(
+            """INSERT INTO supplier_document_locations
+               (tenant_id, supplier_document_id, location_type, path_or_url, file_data, file_name, mime_type, file_size)
+               VALUES (?, ?, 'Stored in Database', ?, ?, ?, ?, ?)""",
+            (g.tenant_id, document_id, file_name, data, file_name, mime_type, len(data)),
+        )
+    if cloud_link or local_path or data:
         db.commit()
+    return error
 
 
 def _get_supplier_document(db, supplier_id, document_id):
@@ -1007,7 +1020,9 @@ def new_supplier_document(supplier_id):
                 (g.tenant_id, document_id, term),
             )
         db.commit()
-        _save_document_locations_from_form(db, form, document_id)
+        upload_error = _save_document_locations_from_form(db, form, document_id)
+        if upload_error:
+            flash(upload_error, "error")
 
         log_action("Create", "supplier_document", document_id, f"Added document '{document_name}' to {supplier['supplier_name']}")
         flash("Document added.", "success")
@@ -1082,7 +1097,9 @@ def edit_supplier_document(supplier_id, document_id):
                 (g.tenant_id, document_id, term),
             )
         db.commit()
-        _save_document_locations_from_form(db, form, document_id)
+        upload_error = _save_document_locations_from_form(db, form, document_id)
+        if upload_error:
+            flash(upload_error, "error")
 
         log_action("Update", "supplier_document", document_id, f"Updated document '{document_name}'")
         flash("Document updated.", "success")
@@ -1168,20 +1185,33 @@ def bulk_import_images(supplier_id):
         document_type_id = form.get("document_type_id") or None
         imported = 0
         skipped = []
+        uploads = {k: f for k, f in zip(form.getlist("upload_keys"), request.files.getlist("uploads"))}
         for i, path in enumerate(paths):
             path = path.strip()
             name = (names[i] if i < len(names) else "").strip()
             if not path or not name:
                 continue
-            if os.path.splitext(path)[1].lower() not in IMAGE_FILE_EXTENSIONS or not os.path.isfile(path):
-                skipped.append(name or basename(path))
-                continue
-            try:
-                with open(path, "rb") as f:
-                    file_bytes = f.read()
-            except OSError:
-                skipped.append(name or basename(path))
-                continue
+            if path.startswith("upload:"):
+                # Chosen in the browser (templates/suppliers/bulk_import_images.html)
+                file_bytes, file_name, mime_type, upload_error = read_uploaded_file(
+                    uploads.get(path[len("upload:"):]), UPLOAD_IMAGE_EXTENSIONS
+                )
+                if upload_error or not file_bytes:
+                    skipped.append(name)
+                    continue
+                path = file_name
+            else:
+                if os.path.splitext(path)[1].lower() not in IMAGE_FILE_EXTENSIONS or not os.path.isfile(path):
+                    skipped.append(name or basename(path))
+                    continue
+                try:
+                    with open(path, "rb") as f:
+                        file_bytes = f.read()
+                except OSError:
+                    skipped.append(name or basename(path))
+                    continue
+                file_name = basename(path)
+                mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
             author = (authors[i] if i < len(authors) else "").strip() or None
             description = (descriptions[i] if i < len(descriptions) else "").strip()[:DOCUMENT_DESCRIPTION_MAX_LENGTH] or None
             row_notes = (notes_list[i] if i < len(notes_list) else "").strip() or None
@@ -1192,12 +1222,11 @@ def bulk_import_images(supplier_id):
                 (g.tenant_id, supplier_id, name, document_type_id, author, description, row_notes),
             )
             new_document_id = db.execute("SELECT last_insert_rowid() id").fetchone()["id"]
-            mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
             db.execute(
                 """INSERT INTO supplier_document_locations
                    (tenant_id, supplier_document_id, location_type, path_or_url, file_data, file_name, mime_type, file_size)
                    VALUES (?, ?, 'Stored in Database', ?, ?, ?, ?, ?)""",
-                (g.tenant_id, new_document_id, path, file_bytes, basename(path), mime_type, len(file_bytes)),
+                (g.tenant_id, new_document_id, path, file_bytes, file_name, mime_type, len(file_bytes)),
             )
             row_keywords = keywords_list[i] if i < len(keywords_list) else ""
             for term in _split_terms(row_keywords):
@@ -1406,10 +1435,26 @@ def new_document_location(supplier_id, document_id):
     item = _get_supplier_document(db, supplier_id, document_id)
     if request.method == "POST":
         form = request.form
-        db.execute(
-            "INSERT INTO supplier_document_locations (tenant_id, supplier_document_id, location_type, path_or_url) VALUES (?, ?, ?, ?)",
-            (g.tenant_id, document_id, form["location_type"], form["path_or_url"].strip()),
-        )
+        if form.get("location_type") == "Stored in Database":
+            data, file_name, mime_type, error = read_uploaded_file(request.files.get("upload_file"))
+            if error or not data:
+                flash(error or "Choose a file to upload.", "error")
+                return render_template("suppliers/document_location_form.html", supplier=supplier, item=item)
+            db.execute(
+                """INSERT INTO supplier_document_locations
+                   (tenant_id, supplier_document_id, location_type, path_or_url, file_data, file_name, mime_type, file_size)
+                   VALUES (?, ?, 'Stored in Database', ?, ?, ?, ?, ?)""",
+                (g.tenant_id, document_id, file_name, data, file_name, mime_type, len(data)),
+            )
+        else:
+            path_or_url = form.get("path_or_url", "").strip()
+            if not path_or_url:
+                flash("Enter the link.", "error")
+                return render_template("suppliers/document_location_form.html", supplier=supplier, item=item)
+            db.execute(
+                "INSERT INTO supplier_document_locations (tenant_id, supplier_document_id, location_type, path_or_url) VALUES (?, ?, ?, ?)",
+                (g.tenant_id, document_id, form["location_type"], path_or_url),
+            )
         db.commit()
         log_action("Create", "supplier_document_location", document_id, "Added location")
         return redirect(url_for("suppliers.view_supplier_document", supplier_id=supplier_id, document_id=document_id))
@@ -1429,6 +1474,29 @@ def delete_document_location(supplier_id, document_id, location_id):
     db.commit()
     log_action("Delete", "supplier_document_location", document_id, f"Deleted location #{location_id}")
     return redirect(url_for("suppliers.view_supplier_document", supplier_id=supplier_id, document_id=document_id))
+
+
+@suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/locations/<int:location_id>/file")
+@login_required
+def document_location_file(supplier_id, document_id, location_id):
+    """Opens (in the browser) or downloads a file stored in the database --
+    works the same locally and on the hosted app. ?download=1 forces a
+    download instead of opening it in a new tab."""
+    db = get_db()
+    _get_supplier(db, supplier_id)
+    _get_supplier_document(db, supplier_id, document_id)
+    loc = db.execute(
+        "SELECT * FROM supplier_document_locations WHERE location_id = ? AND supplier_document_id = ? AND tenant_id = ?",
+        (location_id, document_id, g.tenant_id),
+    ).fetchone()
+    if loc is None or loc["location_type"] != "Stored in Database" or not loc["file_data"]:
+        abort(404)
+    return send_file(
+        BytesIO(loc["file_data"]),
+        mimetype=loc["mime_type"] or "application/octet-stream",
+        download_name=loc["file_name"] or "document",
+        as_attachment=bool(request.args.get("download")),
+    )
 
 
 @suppliers_bp.route("/<int:supplier_id>/documents/<int:document_id>/locations/<int:location_id>/open")

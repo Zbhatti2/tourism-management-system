@@ -13,7 +13,7 @@
       <label class="form-label">Document path</label>
       <div class="input-group">
         <input class="form-control" id="document_path" name="document_path" placeholder="Local drive path/name" value="{{ (link.document_path | orblank) if link else '' }}">
-        <button class="btn btn-outline-secondary" type="button" onclick="browseFile()">Browse…</button>
+        {% if is_local_request() %}<button class="btn btn-outline-secondary" type="button" onclick="browseFile()">Browse…</button>{% endif %}
       </div>
       <div id="browse_hint" class="form-text text-danger"></div>
     </div>

@@ -1055,8 +1055,12 @@ CREATE TABLE content_locations (
     location_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
     content_id      INTEGER NOT NULL REFERENCES content(content_id),
-    location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path')),
-    path_or_url     TEXT NOT NULL
+    location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path','Stored in Database')),
+    path_or_url     TEXT NOT NULL,           -- the URL, the local path, or (Stored in Database) the uploaded file's name
+    file_data       BLOB,                    -- set when location_type = 'Stored in Database' (uploaded from the browser)
+    file_name       TEXT,
+    mime_type       TEXT,
+    file_size       INTEGER
 );
 CREATE INDEX idx_content_locations_tenant ON content_locations(tenant_id);
 CREATE INDEX idx_content_locations_content ON content_locations(content_id);
@@ -1668,7 +1672,7 @@ CREATE TABLE backups (
     table_count     INTEGER,
     total_rows      INTEGER,
     integrity_ok    INTEGER,                -- 1/0 — PRAGMA integrity_check result captured at backup time
-    backup_type     TEXT NOT NULL DEFAULT 'Manual' CHECK (backup_type IN ('Manual','Pre-restore safety','Restore point')),
+    backup_type     TEXT NOT NULL DEFAULT 'Manual' CHECK (backup_type IN ('Manual','Pre-restore safety','Restore point','Nightly')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     notes           TEXT
 );

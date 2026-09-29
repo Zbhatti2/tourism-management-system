@@ -98,7 +98,9 @@ def create_app():
     app.config["SESSION_COOKIE_SECURE"] = Config.SESSION_COOKIE_SECURE
     # Generous cap covering the largest legitimate upload (a profile photo,
     # capped separately at Config.MAX_UPLOAD_BYTES) plus CSV imports.
-    app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+    # Bulk image imports send many phone photos in one request (each capped
+    # at utils.MAX_UPLOAD_FILE_BYTES).
+    app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
 
     db_module.init_app(app)
     csrf.init_app(app)
@@ -168,6 +170,18 @@ def create_app():
     app.register_blueprint(tenants_admin_bp, url_prefix="/platform/tenants")
 
     app.jinja_env.globals["modules"] = MODULES
+
+    # True when the browser is on the same machine as the app (Start_TMS.bat
+    # on your PC). Used to show the old "Browse…" buttons for reference-link
+    # paths only there -- they open a file dialog on the SERVER, which is
+    # meaningless on the hosted app.
+    from flask import request as _request
+
+    def is_local_request():
+        host = (_request.host or "").split(":")[0]
+        return host in ("127.0.0.1", "localhost")
+
+    app.jinja_env.globals["is_local_request"] = is_local_request
     app.jinja_env.filters["format_phone"] = format_phone
     app.jinja_env.filters["format_date"] = format_date
     app.jinja_env.filters["format_date_abbrev"] = format_date_abbrev

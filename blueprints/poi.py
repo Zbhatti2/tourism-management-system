@@ -20,7 +20,8 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from auth.decorators import login_required
 from db import get_db, log_action
-from utils import basename, normalize_map_coordinates, open_local_path, pick_file_dialog, pick_files_dialog
+from utils import (UPLOAD_IMAGE_EXTENSIONS, basename, normalize_map_coordinates, open_local_path, pick_file_dialog,
+                   pick_files_dialog, read_uploaded_file)
 
 poi_bp = Blueprint("poi", __name__)
 
@@ -550,15 +551,23 @@ def new_poi_image(poi_id):
         description = form.get("description", "").strip()
         cloud_link = form.get("cloud_link", "").strip()
         local_drive_path = form.get("local_drive_path", "").strip()
-        error = None
-        if not image_name:
+        # A file chosen in the browser ("Upload an image") -- works on the
+        # hosted app as well as locally. local_drive_path is kept only for
+        # backwards compatibility with anything still posting a path.
+        upload_bytes, upload_name, upload_mime, upload_error = read_uploaded_file(
+            request.files.get("upload_file"), UPLOAD_IMAGE_EXTENSIONS
+        )
+        error = upload_error
+        if error:
+            pass
+        elif not image_name:
             error = "Image name is required."
         elif len(description) > IMAGE_DESCRIPTION_MAX_LENGTH:
             error = f"Description must be {IMAGE_DESCRIPTION_MAX_LENGTH} characters or fewer (currently {len(description)})."
-        elif cloud_link and local_drive_path:
-            error = "Enter a Cloud Link or a Local Drive Path, not both — one image, one location."
-        elif not cloud_link and not local_drive_path:
-            error = "Enter a Cloud Link or a Local Drive Path."
+        elif sum(bool(x) for x in (cloud_link, local_drive_path, upload_bytes)) > 1:
+            error = "Upload an image or enter a Cloud Link, not both — one image, one location."
+        elif not cloud_link and not local_drive_path and not upload_bytes:
+            error = "Upload an image or enter a Cloud Link."
         if error:
             flash(error, "error")
             return render_template("poi/image_form.html", poi=poi, item=form, image_id=None)
@@ -566,7 +575,16 @@ def new_poi_image(poi_id):
         authors = form.get("authors", "").strip() or None
         notes = form.get("notes", "").strip() or None
 
-        if local_drive_path:
+        if upload_bytes:
+            db.execute(
+                """INSERT INTO poi_images
+                   (tenant_id, poi_id, location_type, path_or_url, image_name, authors, description, notes,
+                    file_data, file_name, mime_type, file_size)
+                   VALUES (?, ?, 'Stored in Database', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (g.tenant_id, poi_id, upload_name, image_name, authors, description or None, notes,
+                 upload_bytes, upload_name, upload_mime, len(upload_bytes)),
+            )
+        elif local_drive_path:
             if os.path.splitext(local_drive_path)[1].lower() not in IMAGE_FILE_EXTENSIONS or not os.path.isfile(local_drive_path):
                 flash(f"Couldn't read that file — check the path and try again: {local_drive_path}", "error")
                 return render_template("poi/image_form.html", poi=poi, item=form, image_id=None)
@@ -735,6 +753,14 @@ def poi_image_thumbnail(poi_id, image_id):
     return send_file(path)
 
 
+def _uploads_by_key(req):
+    """Files sent by the browser-based bulk import, keyed by the row key the
+    page gave each one (hidden 'upload_keys' list, same order as 'uploads')."""
+    files = req.files.getlist("uploads")
+    keys = req.form.getlist("upload_keys")
+    return {k: f for k, f in zip(keys, files)}
+
+
 @poi_bp.route("/<int:poi_id>/images/bulk-import", methods=["GET", "POST"])
 @login_required
 def bulk_import_poi_images(poi_id):
@@ -760,31 +786,44 @@ def bulk_import_poi_images(poi_id):
         keywords_list = form.getlist("keywords")
         imported = 0
         skipped = []
+        uploads = _uploads_by_key(request)
         for i, path in enumerate(paths):
             path = path.strip()
             name = (names[i] if i < len(names) else "").strip()
             if not path or not name:
                 continue
-            if os.path.splitext(path)[1].lower() not in IMAGE_FILE_EXTENSIONS or not os.path.isfile(path):
-                skipped.append(name or basename(path))
-                continue
-            try:
-                with open(path, "rb") as f:
-                    file_bytes = f.read()
-            except OSError:
-                skipped.append(name or basename(path))
-                continue
+            if path.startswith("upload:"):
+                # Chosen in the browser (templates/poi/bulk_import_images.html)
+                file_bytes, file_name, mime_type, upload_error = read_uploaded_file(
+                    uploads.get(path[len("upload:"):]), UPLOAD_IMAGE_EXTENSIONS
+                )
+                if upload_error or not file_bytes:
+                    skipped.append(name)
+                    continue
+                source = file_name
+            else:
+                if os.path.splitext(path)[1].lower() not in IMAGE_FILE_EXTENSIONS or not os.path.isfile(path):
+                    skipped.append(name or basename(path))
+                    continue
+                try:
+                    with open(path, "rb") as f:
+                        file_bytes = f.read()
+                except OSError:
+                    skipped.append(name or basename(path))
+                    continue
+                file_name = basename(path)
+                mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+                source = path
             author = (authors[i] if i < len(authors) else "").strip() or None
             description = (descriptions[i] if i < len(descriptions) else "").strip()[:IMAGE_DESCRIPTION_MAX_LENGTH] or None
             row_notes = (notes_list[i] if i < len(notes_list) else "").strip() or None
-            mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
             db.execute(
                 """INSERT INTO poi_images
                    (tenant_id, poi_id, location_type, path_or_url, image_name, authors, description, notes,
                     file_data, file_name, mime_type, file_size)
                    VALUES (?, ?, 'Stored in Database', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (g.tenant_id, poi_id, path, name, author, description, row_notes,
-                 file_bytes, basename(path), mime_type, len(file_bytes)),
+                (g.tenant_id, poi_id, source, name, author, description, row_notes,
+                 file_bytes, file_name, mime_type, len(file_bytes)),
             )
             new_image_id = db.execute("SELECT last_insert_rowid() id").fetchone()["id"]
             row_keywords = keywords_list[i] if i < len(keywords_list) else ""

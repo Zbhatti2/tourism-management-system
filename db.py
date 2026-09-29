@@ -216,6 +216,66 @@ def _migration_tenant_website_domain(db):
     db.commit()
 
 
+def _migration_content_locations_file_storage(db):
+    """Documents & Knowledge Base: lets a content location hold the file
+    itself ('Stored in Database'), uploaded from the browser -- the same
+    model supplier documents and POI images use -- so documents can be
+    added on the hosted app, where a 'Local Drive Path' on someone's PC
+    means nothing. SQLite can't alter a CHECK constraint in place, so the
+    table is rebuilt with its rows copied across unchanged."""
+    if _column_exists(db, "content_locations", "file_data"):
+        return
+    db.executescript("""
+        CREATE TABLE content_locations_new (
+            location_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+            content_id      INTEGER NOT NULL REFERENCES content(content_id),
+            location_type   TEXT CHECK (location_type IN ('Cloud Link','Local Drive Path','Stored in Database')),
+            path_or_url     TEXT NOT NULL,
+            file_data       BLOB,
+            file_name       TEXT,
+            mime_type       TEXT,
+            file_size       INTEGER
+        );
+        INSERT INTO content_locations_new (location_id, tenant_id, content_id, location_type, path_or_url)
+            SELECT location_id, tenant_id, content_id, location_type, path_or_url FROM content_locations;
+        DROP TABLE content_locations;
+        ALTER TABLE content_locations_new RENAME TO content_locations;
+        CREATE INDEX IF NOT EXISTS idx_content_locations_tenant ON content_locations(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_content_locations_content ON content_locations(content_id);
+    """)
+    db.commit()
+
+
+def _migration_backups_nightly_type(db):
+    """Allows backups.backup_type = 'Nightly' (the scheduled backups made by
+    `flask --app app nightly-backup`). SQLite can't alter a CHECK in place,
+    so the small backups log table is rebuilt with its rows copied across."""
+    sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='backups'").fetchone()
+    if sql is None or "'Nightly'" in sql[0]:
+        return
+    db.executescript("""
+        CREATE TABLE backups_new (
+            backup_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_name       TEXT NOT NULL,
+            file_path       TEXT NOT NULL,
+            size_bytes      INTEGER NOT NULL,
+            table_count     INTEGER,
+            total_rows      INTEGER,
+            integrity_ok    INTEGER,
+            backup_type     TEXT NOT NULL DEFAULT 'Manual'
+                            CHECK (backup_type IN ('Manual','Pre-restore safety','Restore point','Nightly')),
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            notes           TEXT
+        );
+        INSERT INTO backups_new SELECT backup_id, file_name, file_path, size_bytes, table_count, total_rows,
+                                       integrity_ok, backup_type, created_at, notes FROM backups;
+        DROP TABLE backups;
+        ALTER TABLE backups_new RENAME TO backups;
+    """)
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -226,6 +286,8 @@ MIGRATIONS = [
     ("2026_09_rename_first_tenant_ma_vie_tours", _migration_rename_first_tenant_ma_vie_tours),
     ("2026_09_backfill_tenant_account_numbers", _migration_backfill_tenant_account_numbers),
     ("2026_09_tenant_website_domain", _migration_tenant_website_domain),
+    ("2026_09_content_locations_file_storage", _migration_content_locations_file_storage),
+    ("2026_09_backups_nightly_type", _migration_backups_nightly_type),
 ]
 
 
@@ -1142,3 +1204,49 @@ def init_app(app):
             click.echo(f"Wrote row counts for {len(tables)} tables to {output_file}.")
         else:
             click.echo(text)
+
+    @app.cli.command("nightly-backup")
+    @click.option("--keep", default=14, show_default=True, help="How many nightly backups to keep.")
+    def nightly_backup_command(keep):
+        """Flask CLI: `flask --app app nightly-backup` — makes a consistent
+        copy of the whole database (SQLite online backup, safe while the app
+        is running) into instance/backups/, records it in the Backup &
+        Restore log as 'Nightly', and deletes nightly backups beyond the
+        newest --keep. Run once a day by the VPS's cron job (see README,
+        "Nightly backups"). Manual and restore-point backups are never
+        touched."""
+        import os
+        from datetime import datetime
+
+        from blueprints.system_mgmt import _integrity_ok, _table_stats, _write_backup_file
+
+        db = get_db()
+        file_name = f"tms_nightly_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        file_path, size_bytes = _write_backup_file(db, file_name)
+        table_count, total_rows = _table_stats(db)
+        integrity_ok = _integrity_ok(db)
+        db.execute(
+            """INSERT INTO backups (file_name, file_path, size_bytes, table_count, total_rows, integrity_ok, backup_type)
+               VALUES (?, ?, ?, ?, ?, ?, 'Nightly')""",
+            (os.path.basename(file_path), file_path, size_bytes, table_count, total_rows, integrity_ok),
+        )
+        db.commit()
+
+        old = db.execute(
+            "SELECT backup_id, file_path FROM backups WHERE backup_type = 'Nightly' ORDER BY backup_id DESC LIMIT -1 OFFSET ?",
+            (max(keep, 1),),
+        ).fetchall()
+        for row in old:
+            try:
+                if os.path.exists(row["file_path"]):
+                    os.remove(row["file_path"])
+            except OSError:
+                pass
+            db.execute("DELETE FROM backups WHERE backup_id = ?", (row["backup_id"],))
+        db.commit()
+        log_action("Backup", "backup", None,
+                   f"Nightly backup {os.path.basename(file_path)} ({size_bytes} bytes, integrity {'ok' if integrity_ok else 'FAILED'}); "
+                   f"removed {len(old)} older nightly backup(s)", tenant_id=None)
+        click.echo(f"{datetime.now():%Y-%m-%d %H:%M:%S} backup {os.path.basename(file_path)} "
+                   f"{size_bytes} bytes integrity={'ok' if integrity_ok else 'FAILED'} removed_old={len(old)}")
+
