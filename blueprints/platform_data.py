@@ -2,12 +2,12 @@
 Module — Platform Data (SystemAdmin).
 
 Home of the platform catalog screens in the Platform Admin sidebar
-(see app.py MODULES): Transport Hubs, Points of Interest, Embassies &
+(see app.py MODULES) that aren't built yet: Points of Interest, Embassies &
 Consulates, Accommodation and Restaurants. Each starts as a "coming soon"
 page and is replaced by its real screen as it is built, in the order of
 the platform master-data plan (claude/TMS-Platform-Data-Plan.md in the
-TMS project). Geography & Distances, Currencies and Platform Lookups
-already have their own blueprints.
+TMS project). Transport Hubs, Geography & Distances, Currencies and
+Platform Lookups already have their own blueprints.
 
 PLATFORM_CATALOG below also drives the Platform Data card on the
 SystemAdmin's System Management page: one row per catalog, with a live
@@ -24,7 +24,7 @@ platform_data_bp = Blueprint("platform_data", __name__)
 PLATFORM_CATALOG = {
     "transport_hubs": {
         "title": "Transport Hubs", "icon": "airplane", "table": "transport_hubs",
-        "endpoint": "platform_data.transport_hubs",
+        "endpoint": "transport_hubs.list_hubs",
         "description": "Airports, railway stations, bus terminals and seaports — one shared list every tenant "
                        "can pick arrival and departure points from.",
     },
@@ -57,12 +57,6 @@ def _coming_soon(key):
     item = PLATFORM_CATALOG[key]
     return render_template("coming_soon.html", title=item["title"], icon=item["icon"],
                            description=item["description"])
-
-
-@platform_data_bp.route("/transport-hubs/")
-@system_admin_required
-def transport_hubs():
-    return _coming_soon("transport_hubs")
 
 
 @platform_data_bp.route("/points-of-interest/")

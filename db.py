@@ -290,6 +290,109 @@ def _migration_platform_lookups(db):
     platform_lookups.sync_platform_lookups(db)
 
 
+TRANSPORT_HUBS_DDL = """
+CREATE TABLE IF NOT EXISTS hub_types (
+    hub_type_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    code            TEXT NOT NULL UNIQUE,
+    label           TEXT NOT NULL,
+    icon            TEXT,                   -- Bootstrap icon name, e.g. 'airplane'
+    sort_order      INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS transport_hubs (
+    hub_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    hub_type_id     INTEGER NOT NULL REFERENCES hub_types(hub_type_id),
+    name            TEXT NOT NULL,
+    code            TEXT,                   -- IATA for airports (LHE); station code where one exists
+    icao_code       TEXT,                   -- airports only (OPLA)
+    region_id       INTEGER REFERENCES regions(region_id),
+    country_id      INTEGER REFERENCES countries(country_id),
+    state_id        INTEGER REFERENCES states(state_id),
+    state_province_text TEXT,
+    city_id         INTEGER REFERENCES cities(city_id),
+    city_text       TEXT,
+    latitude        REAL,
+    longitude       REAL,
+    operator        TEXT,                   -- e.g. Pakistan Railways, Daewoo Express, a port authority
+    scope           TEXT CHECK (scope IN ('International','Domestic','Regional')),
+    address         TEXT,
+    phone           TEXT,
+    website         TEXT,
+    notes           TEXT,
+    is_major        INTEGER NOT NULL DEFAULT 1,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_transport_hubs_type ON transport_hubs(hub_type_id);
+CREATE INDEX IF NOT EXISTS idx_transport_hubs_country ON transport_hubs(country_id);
+CREATE INDEX IF NOT EXISTS idx_transport_hubs_city ON transport_hubs(city_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transport_hubs_type_code ON transport_hubs(hub_type_id, code) WHERE code IS NOT NULL;
+"""
+
+HUB_TYPES = [
+    ("AIRPORT", "Airport", "airplane"),
+    ("RAILWAY_STATION", "Railway Station", "train-front"),
+    ("BUS_TERMINAL", "Bus Terminal", "bus-front"),
+    ("SEAPORT", "Seaport / Ferry Terminal", "water"),
+]
+
+
+def _migration_transport_hubs(db):
+    """Transport Hubs (Group A, shared by every tenant -- no tenant_id):
+    hub_types + transport_hubs, seeded with Airport / Railway Station /
+    Bus Terminal / Seaport. Then copies every tenant POI of type Airport
+    or Railway Station into transport_hubs (one hub per name+type, so two
+    tenants holding the same airport give one hub). The POI rows themselves
+    are left untouched -- they may carry images, links and knowledge-graph
+    edges -- so nothing is lost; retiring them is a separate decision."""
+    from utils import parse_coordinates
+
+    db.executescript(TRANSPORT_HUBS_DDL)
+    for i, (code, label, icon) in enumerate(HUB_TYPES):
+        db.execute("INSERT OR IGNORE INTO hub_types (code, label, icon, sort_order) VALUES (?, ?, ?, ?)",
+                   (code, label, icon, i))
+    type_ids = {r["code"]: r["hub_type_id"] for r in db.execute("SELECT hub_type_id, code FROM hub_types")}
+
+    pois = db.execute(
+        """SELECT p.*, pt.code AS type_code, t.tenant_name FROM points_of_interest p
+           JOIN poi_types pt ON pt.poi_type_id = p.poi_type_id
+           JOIN tenants t ON t.tenant_id = p.tenant_id
+           WHERE p.is_deleted = 0 AND pt.code IN ('AIRPORT', 'RAILWAY_STATION')
+           ORDER BY p.poi_id"""
+    ).fetchall()
+    for p in pois:
+        hub_type_id = type_ids[p["type_code"]]
+        if db.execute("SELECT 1 FROM transport_hubs WHERE hub_type_id = ? AND lower(name) = lower(?)",
+                      (hub_type_id, p["name"])).fetchone():
+            continue
+        coords = parse_coordinates(p["map_coordinates"]) if p["map_coordinates"] else None
+        # Fill state/country/region from the city when the POI only had a city.
+        state_id, country_id, region_id = p["state_id"], p["country_id"], p["region_id"]
+        if p["city_id"]:
+            geo = db.execute(
+                """SELECT s.state_id, co.country_id, co.region_id FROM cities ci
+                   JOIN states s ON s.state_id = ci.state_id JOIN countries co ON co.country_id = s.country_id
+                   WHERE ci.city_id = ?""", (p["city_id"],)).fetchone()
+            if geo:
+                state_id = state_id or geo["state_id"]
+                country_id = country_id or geo["country_id"]
+                region_id = region_id or geo["region_id"]
+        notes = "\n\n".join(x for x in (p["notes"], p["historical_significance"],
+                                         f"Copied from {p['tenant_name']}'s Points of Interest (POI #{p['poi_id']}).")
+                             if x)
+        db.execute(
+            """INSERT INTO transport_hubs (hub_type_id, name, region_id, country_id, state_id, state_province_text,
+                   city_id, city_text, latitude, longitude, scope, address, phone, website, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (hub_type_id, p["name"], region_id, country_id, state_id, p["state_province_text"],
+             p["city_id"], p["city_text"], coords[0] if coords else None, coords[1] if coords else None,
+             "International" if "international" in p["name"].lower() else None,
+             p["local_location"], p["phone"], p["website"], notes),
+        )
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -303,6 +406,7 @@ MIGRATIONS = [
     ("2026_09_content_locations_file_storage", _migration_content_locations_file_storage),
     ("2026_09_backups_nightly_type", _migration_backups_nightly_type),
     ("2026_10_platform_lookups", _migration_platform_lookups),
+    ("2026_10_transport_hubs", _migration_transport_hubs),
 ]
 
 

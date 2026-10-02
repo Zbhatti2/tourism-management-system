@@ -1,0 +1,134 @@
+{% macro val(name) -%}
+{%- if form is not none and form.get(name) is not none -%}{{ form.get(name) }}
+{%- elif hub and hub[name] is not none -%}{{ hub[name] }}
+{%- endif -%}
+{%- endmacro %}
+{% macro checked(name) -%}
+{%- if form is not none and (form.get(name) is not none or request.method == 'POST') -%}{{ 'checked' if form.get(name) else '' }}
+{%- elif hub -%}{{ 'checked' if hub[name] else '' }}
+{%- endif -%}
+{%- endmacro %}
+{% extends "base.html" %}
+{% block title %}TMS System Admin — {{ 'Edit' if hub else 'New' }} Transport Hub{% endblock %}
+{% block content %}
+{% set coords_default = ('%.6f, %.6f' % (hub.latitude, hub.longitude)) if hub and hub.latitude is not none else '' %}
+<nav class="mb-2">
+  <a href="{{ url_for('transport_hubs.view_hub', hub_id=hub.hub_id) if hub else url_for('transport_hubs.list_hubs') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ hub.name if hub else 'Transport Hubs' }}</a>
+</nav>
+<div class="mb-4">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">{{ 'Edit' if hub else 'New' }} Transport Hub</h1>
+</div>
+
+<form method="post" class="card shadow-sm border-0" style="max-width: 900px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label" for="hub_type_id">Type</label>
+        <select class="form-select" id="hub_type_id" name="hub_type_id" required>
+          <option value="">— choose —</option>
+          {% set cur_type = val('hub_type_id') | string %}
+          {% for t in hub_types %}
+          <option value="{{ t.hub_type_id }}" data-code="{{ t.code }}" {{ 'selected' if cur_type == t.hub_type_id|string else '' }}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label" for="name">Name</label>
+        <input class="form-control" id="name" name="name" value="{{ val('name') }}" required>
+      </div>
+    </div>
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <label class="form-label" for="code" id="code_label">Code</label>
+        <input class="form-control text-uppercase" id="code" name="code" value="{{ val('code') }}" maxlength="10">
+        <div class="form-text" id="code_help">Station or terminal code, if it has one.</div>
+      </div>
+      <div class="col-md-3" id="icao_wrap">
+        <label class="form-label" for="icao_code">ICAO code</label>
+        <input class="form-control text-uppercase" id="icao_code" name="icao_code" value="{{ val('icao_code') }}" maxlength="4">
+        <div class="form-text">4 letters, e.g. OPLA.</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="scope">Scope</label>
+        <select class="form-select" id="scope" name="scope">
+          <option value="">—</option>
+          {% for s in scopes %}<option {{ 'selected' if val('scope') == s else '' }}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="operator">Operator</label>
+        <input class="form-control" id="operator" name="operator" value="{{ val('operator') }}" placeholder="e.g. Pakistan Railways">
+      </div>
+    </div>
+
+    <h2 class="h6 text-muted text-uppercase mt-4">Location</h2>
+    {% with address = hub %}{% include "_geography_fields.html" %}{% endwith %}
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label" for="coordinates">Coordinates</label>
+        <input class="form-control" id="coordinates" name="coordinates" value="{{ form.get('coordinates') if form is not none and form.get('coordinates') is not none else coords_default }}" placeholder="31.519346, 74.409302">
+        <div class="form-text">Paste from Google Maps — decimal degrees or degrees/minutes/seconds.</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="address">Address</label>
+        <input class="form-control" id="address" name="address" value="{{ val('address') }}">
+      </div>
+    </div>
+
+    <h2 class="h6 text-muted text-uppercase mt-4">Contact</h2>
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label" for="phone">Phone</label>
+        <input class="form-control" id="phone" name="phone" value="{{ val('phone') }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="website">Website</label>
+        <input class="form-control" id="website" name="website" value="{{ val('website') }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="form-control" id="notes" name="notes" rows="4">{{ val('notes') }}</textarea>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" id="is_major" name="is_major" value="1" {{ checked('is_major') }}>
+      <label class="form-check-label" for="is_major">Major hub</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" {{ checked('is_active') }}>
+      <label class="form-check-label" for="is_active">Active (shown to tenants)</label>
+    </div>
+  </div>
+  <div class="card-footer bg-white">
+    <button class="btn btn-primary" type="submit">{{ 'Save' if hub else 'Add Hub' }}</button>
+    <a class="btn btn-link" href="{{ url_for('transport_hubs.view_hub', hub_id=hub.hub_id) if hub else url_for('transport_hubs.list_hubs') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/geography_picker.js') }}"></script>
+<script>
+  // Airport-only fields: the Code is an IATA code and ICAO is shown.
+  function syncTypeFields() {
+    const sel = document.getElementById('hub_type_id');
+    const code = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].dataset.code : '';
+    const isAirport = code === 'AIRPORT';
+    document.getElementById('icao_wrap').hidden = !isAirport;
+    document.getElementById('code_label').textContent = isAirport ? 'IATA code' : 'Code';
+    document.getElementById('code_help').textContent = isAirport ? '3 letters, e.g. LHE.' : 'Station or terminal code, if it has one.';
+  }
+  document.getElementById('hub_type_id').addEventListener('change', syncTypeFields);
+  syncTypeFields();
+
+  initGeographyPicker({
+    initial: {
+      region_id: {{ (val('region_id') or '') | tojson }},
+      country_id: {{ (val('country_id') or '') | tojson }},
+      state_id: {{ (val('state_id') or '') | tojson }},
+      city_id: {{ (val('city_id') or '') | tojson }}
+    }
+  });
+</script>
+{% endblock %}

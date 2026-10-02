@@ -89,7 +89,7 @@ MODULES = [
     # Management, System Management, then the data screens. Entries whose
     # screen isn't built yet point at a platform_data "coming soon" page;
     # base.html highlights them by endpoint since they share a blueprint.
-    {"key": "transport_hubs", "label": "Transport Hubs", "icon": "airplane", "endpoint": "platform_data.transport_hubs",
+    {"key": "transport_hubs", "label": "Transport Hubs", "icon": "airplane", "endpoint": "transport_hubs.list_hubs",
      "roles": ["SystemAdmin"]},
     {"key": "platform_pois", "label": "Points of Interest", "icon": "geo-alt", "endpoint": "platform_data.pois",
      "roles": ["SystemAdmin"]},
@@ -163,6 +163,7 @@ def create_app():
     from blueprints.tenants_admin import tenants_admin_bp
     from blueprints.platform_lookups import platform_lookups_bp
     from blueprints.platform_data import platform_data_bp
+    from blueprints.transport_hubs import transport_hubs_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -196,6 +197,7 @@ def create_app():
     app.register_blueprint(tenants_admin_bp, url_prefix="/platform/tenants")
     app.register_blueprint(platform_lookups_bp, url_prefix="/platform/lookups")
     app.register_blueprint(platform_data_bp, url_prefix="/platform")
+    app.register_blueprint(transport_hubs_bp, url_prefix="/platform/transport-hubs")
 
     app.jinja_env.globals["modules"] = MODULES
 
