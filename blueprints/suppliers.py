@@ -49,6 +49,7 @@ from io import BytesIO
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for
 
 from auth.decorators import login_required
+import catalog_sync
 from db import get_db, log_action
 from utils import (UPLOAD_IMAGE_EXTENSIONS, basename, open_local_path, pick_file_dialog, pick_files_dialog,
                    read_uploaded_file)
@@ -277,6 +278,8 @@ def list_suppliers():
     rows = db.execute(sql, params).fetchall()
     return render_template(
         "suppliers/list.html", suppliers=rows, q=q, is_external_resource=is_external_resource,
+        catalog_ids=catalog_sync.linked_local_ids(db, g.tenant_id, "suppliers"),
+        catalog_pending=catalog_sync.pending_count(db, g.tenant_id),
         type_id=type_id, subtype_id=subtype_id, city=city, preference=preference,
         supplier_types=_supplier_types(db), subtypes_json=_subtypes_for_type_json(db),
         city_options=_city_options(db),
@@ -430,6 +433,7 @@ def view_supplier(supplier_id):
         emails=supplier_emails, phones=supplier_phones,
         hotel_amenities_by_category=hotel_amenities_by_category, hotel_rooms=hotel_rooms, hotel_room_total=hotel_room_total,
         documents=documents, images=images,
+        catalog=catalog_sync.view_context(db, g.tenant_id, "suppliers", supplier_id),
     )
 
 

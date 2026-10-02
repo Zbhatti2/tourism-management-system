@@ -1,0 +1,106 @@
+{% macro decision(s, it, default) -%}
+<select class="form-select form-select-sm" name="d_{{ s.entity }}:{{ it.catalog.id }}">
+  <option value="link" {{ 'selected' if default == 'link' else '' }}>Link to “{{ it.match.name }}”</option>
+  <option value="add" {{ 'selected' if default == 'add' else '' }}>Add as new</option>
+  <option value="skip" {{ 'selected' if default == 'skip' else '' }}>Skip</option>
+</select>
+{%- endmacro %}
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Catalog Sync — {{ tenant.tenant_name }}{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('catalog_sync.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Catalog Sync</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">Catalog Sync — {{ tenant.tenant_name }}</h1>
+    <div class="small text-muted">
+      {% if tenant.catalog_synced_at %}Automatic since {{ tenant.catalog_synced_at[:16] }} — platform changes reach this tenant on their own.
+      {% else %}First sync not run yet. Nothing is changed until you click <strong>Sync</strong>.{% endif %}
+    </div>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('catalog_sync.run_sync', tenant_id=tenant.tenant_id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="row g-3 mb-3">
+    {% for s in sections %}
+    <div class="col-md-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <div class="fw-semibold mb-2"><i class="bi bi-{{ s.icon }} me-1"></i>{{ s.label }}</div>
+          <div class="small text-muted mb-2">{{ s.held }} of {{ s.catalog }} catalog records in this tenant{% if s.skipped %} · {{ s.skipped }} skipped{% endif %}</div>
+          <div class="d-flex flex-wrap gap-1">
+            <span class="badge bg-success-subtle text-success">{{ s.add|length }} to add</span>
+            <span class="badge bg-primary-subtle text-primary">{{ s.link|length }} to link</span>
+            <span class="badge bg-warning-subtle text-warning-emphasis">{{ s.review|length }} to review</span>
+            {% if s.updated %}<span class="badge bg-info-subtle text-info-emphasis">{{ s.updated }} to update</span>{% endif %}
+            {% if s.pending %}<span class="badge bg-secondary-subtle text-dark">{{ s.pending }} for the tenant to decide</span>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% for s in sections if s.review or s.link or s.add %}
+  <div class="card shadow-sm border-0 mb-3">
+    <div class="card-header bg-white fw-semibold"><i class="bi bi-{{ s.icon }} me-1"></i>{{ s.label }}</div>
+    <div class="card-body p-0">
+      {% if s.review or s.link %}
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead><tr><th>Catalog record</th><th>City</th><th>Tenant already has</th><th>Match</th><th style="min-width: 240px;">Decision</th></tr></thead>
+          <tbody>
+            {% for it in s.review %}
+            <tr class="table-warning-subtle">
+              <td class="small fw-semibold">{{ it.catalog.name }}</td>
+              <td class="small">{{ it.city or '' }}</td>
+              <td class="small">{{ it.match.name }}{% if it.match.city_label and it.match.city_label != it.city %} <span class="text-muted">({{ it.match.city_label }})</span>{% endif %}</td>
+              <td><span class="badge bg-warning-subtle text-warning-emphasis">{{ it.note or how_labels[it.how] }}</span></td>
+              <td>{{ decision(s, it, it.default) }}</td>
+            </tr>
+            {% endfor %}
+            {% for it in s.link %}
+            <tr>
+              <td class="small fw-semibold">{{ it.catalog.name }}</td>
+              <td class="small">{{ it.city or '' }}</td>
+              <td class="small">{{ it.match.name }}</td>
+              <td><span class="badge bg-primary-subtle text-primary">{{ how_labels[it.how] }}</span></td>
+              <td>{{ decision(s, it, 'link') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% if s.add %}
+      <details class="px-3 py-2 {{ 'border-top' if s.review or s.link else '' }}">
+        <summary class="small fw-semibold">{{ s.add|length }} record{{ 's' if s.add|length != 1 }} to add — tick any to skip</summary>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-1 mt-1 small">
+          {% for it in s.add %}
+          <div class="col"><label class="form-check mb-0">
+            <input class="form-check-input" type="checkbox" name="skip_{{ s.entity }}:{{ it.catalog.id }}" value="1">
+            <span class="form-check-label">{{ it.catalog.name }} <span class="text-muted">· {{ it.city or '—' }}</span></span>
+          </label></div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body d-flex align-items-center gap-3 flex-wrap">
+      <button class="btn btn-primary" type="submit" {{ 'disabled' if nothing else '' }}
+              onclick="return confirm('Sync the catalog into {{ tenant.tenant_name|e }} now?');"><i class="bi bi-arrow-repeat"></i> Sync</button>
+      <span class="small text-muted">
+        {% if nothing %}{{ tenant.tenant_name }} is up to date.{% else %}
+        Hotels, resorts and restaurants become Suppliers under the locked Hotel, Resort and Restaurant types, without a Primary/Secondary preference.
+        Linked records keep the tenant's own values; only their empty fields are filled.{% endif %}
+      </span>
+    </div>
+  </div>
+</form>
+{% endblock %}
