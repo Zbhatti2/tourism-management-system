@@ -103,7 +103,10 @@ CREATE TABLE tenants (
     website_domain  TEXT,
     -- When this tenant's first Catalog Sync ran (catalog_sync.py); NULL =
     -- not yet. From then on platform catalog changes reach it automatically.
-    catalog_synced_at TEXT
+    catalog_synced_at TEXT,
+    -- Optional monthly AI allowance in US dollars, set by the SystemAdmin
+    -- (ai_usage.py); NULL = no limit. Tenant agent runs stop once reached.
+    ai_monthly_limit_usd REAL
 );
 
 -- Single-row counter behind tenants.account_number (see above).
@@ -2962,3 +2965,44 @@ CREATE TABLE IF NOT EXISTS image_import_items (
 );
 CREATE INDEX IF NOT EXISTS idx_image_import_items_batch ON image_import_items(batch_id);
 CREATE INDEX IF NOT EXISTS idx_image_import_items_tenant ON image_import_items(tenant_id);
+
+-- ============================================================================
+-- AI usage metering (ai_usage.py) and the AI Image Collector (image_collector.py).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS ai_usage_log (
+    usage_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER REFERENCES tenants(tenant_id),   -- NULL = platform-level agent (platform cost)
+    user_id         INTEGER REFERENCES users(user_id),
+    feature         TEXT NOT NULL,          -- e.g. 'Image Collector', 'Agent Run'
+    ref_type        TEXT,                   -- what the call was for, e.g. 'image_agent_runs'
+    ref_id          INTEGER,
+    model           TEXT,
+    input_tokens    INTEGER NOT NULL DEFAULT 0,
+    output_tokens   INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    web_searches    INTEGER NOT NULL DEFAULT 0,
+    web_fetches     INTEGER NOT NULL DEFAULT 0,
+    cost_usd        REAL,                   -- NULL when the model's price isn't known
+    note            TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_log_tenant ON ai_usage_log(tenant_id, created_at);
+CREATE TABLE IF NOT EXISTS image_agent_runs (
+    run_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    user_id         INTEGER REFERENCES users(user_id),
+    scope_label     TEXT NOT NULL,          -- e.g. 'Avari Hotel Lahore' or 'Hotels in Lahore (8)'
+    supplier_ids    TEXT NOT NULL,          -- JSON list
+    per_supplier    INTEGER NOT NULL DEFAULT 8,
+    status          TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','done','failed')),
+    progress        TEXT,                   -- what it's doing / did, line per supplier
+    batch_id        INTEGER REFERENCES image_import_batches(batch_id),
+    images_found    INTEGER NOT NULL DEFAULT 0,
+    images_staged   INTEGER NOT NULL DEFAULT 0,
+    error           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at      TEXT,
+    finished_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_image_agent_runs_tenant ON image_agent_runs(tenant_id);

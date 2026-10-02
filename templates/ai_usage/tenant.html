@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}AI Usage{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-0">AI Usage</h1>
+    <div class="small text-muted">What your organisation's AI agents cost, call by call. These charges are billed to your organisation.</div>
+  </div>
+  <form method="get"><select class="form-select form-select-sm" name="month" onchange="this.form.submit()">
+    {% for m in months %}<option value="{{ m }}" {{ 'selected' if m == month else '' }}>{{ m }}</option>{% endfor %}</select></form>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body">
+    <div class="small text-muted">Spent in {{ month }}</div><div class="display-6">${{ '%.2f'|format(total) }}</div>
+  </div></div></div>
+  <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body">
+    <div class="small text-muted">Monthly allowance</div>
+    {% if limit is not none %}
+    <div class="display-6">${{ '%.2f'|format(limit) }}</div>
+    <div class="progress mt-2" style="height: 6px;"><div class="progress-bar {{ 'bg-danger' if spent >= limit else 'bg-warning' if spent >= limit * 0.8 else '' }}" style="width: {{ [100, (spent / limit * 100) if limit else 100]|min }}%"></div></div>
+    <div class="small text-muted mt-1">${{ '%.2f'|format(spent) }} used this month{% if spent >= limit %}: agents are paused until next month{% endif %}.</div>
+    {% else %}<div class="h4 mt-2">No limit set</div><div class="small text-muted">Set by the TMS administrator.</div>{% endif %}
+  </div></div></div>
+  <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body small">
+    {% for r in rows %}<div class="d-flex justify-content-between"><span>{{ r.feature }} <span class="text-muted">({{ r.calls }} call{{ 's' if r.calls != 1 }})</span></span><strong>${{ '%.2f'|format(r.cost_usd) }}</strong></div>
+    {% else %}<div class="text-muted">No AI use in {{ month }}.</div>{% endfor %}
+  </div></div></div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white small fw-semibold">Calls in {{ month }}</div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 small align-middle">
+      <thead><tr><th>When</th><th>Feature</th><th>For</th><th>By</th><th>Model</th><th class="text-end">Tokens in / out</th><th class="text-end">Searches</th><th class="text-end">Cost</th></tr></thead>
+      <tbody>
+        {% for c in calls %}
+        <tr><td>{{ c.created_at[:16] }}</td><td>{{ c.feature }}</td><td>{{ c.note or '' }}</td><td>{{ c.display_name or '' }}</td>
+          <td class="text-muted">{{ c.model }}</td><td class="text-end">{{ '{:,}'.format(c.input_tokens) }} / {{ '{:,}'.format(c.output_tokens) }}</td>
+          <td class="text-end">{{ c.web_searches or '' }}</td><td class="text-end">{% if c.cost_usd is not none %}${{ '%.4f'|format(c.cost_usd) }}{% else %}—{% endif %}</td></tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No calls this month.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -99,6 +99,7 @@ from io import BytesIO
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, url_for
 
 from address_parsing import parse_free_text_address
+import ai_usage
 from ai_extraction import ExtractionError, SourceFetchError, extract_fields_with_model, fetch_source_text
 from auth.decorators import login_required
 from config import Config
@@ -735,6 +736,10 @@ def run_agent(run_id):
     if not Config.ANTHROPIC_API_KEY:
         flash("No ANTHROPIC_API_KEY is configured yet — see .env.example in the App folder.", "error")
         return redirect(url_for("ai_agents.view_run", run_id=run_id))
+    over = ai_usage.check_limit(db, g.tenant_id)
+    if over:
+        flash(over, "error")
+        return redirect(url_for("ai_agents.view_run", run_id=run_id))
 
     db.execute(
         "UPDATE agent_runs SET status = 'running', started_at = datetime('now') WHERE run_id = ? AND tenant_id = ?",
@@ -775,7 +780,10 @@ def run_agent(run_id):
     short_label = ENTITY_SHORT_LABELS[entity_type]
     try:
         proposed = extract_fields_with_model(
-            short_label, run["scope_label"], field_specs, fetched, images=images_payload
+            short_label, run["scope_label"], field_specs, fetched, images=images_payload,
+            on_usage=lambda model, usage: ai_usage.record(
+                db, g.tenant_id, "Agent Run", model, usage, user_id=g.user_id, ref_type="agent_runs", ref_id=run_id,
+                note=run["scope_label"]),
         )
     except ExtractionError as e:
         db.execute(

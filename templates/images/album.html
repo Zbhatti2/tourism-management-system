@@ -8,8 +8,24 @@
     <h1 class="h3 mb-0">{{ supplier.supplier_name }}</h1>
     <div class="small text-muted">{% if supplier.type_label %}{{ supplier.type_label }} · {% endif %}{{ total }} image{{ 's' if total != 1 }}{% if images|length != total %} · {{ images|length }} shown{% endif %}</div>
   </div>
-  <a href="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add images</a>
+  <div class="d-flex gap-2 align-items-start">
+    {% if has_album %}
+    <form method="post" action="{{ url_for('images.collect_for_supplier', supplier_id=supplier.supplier_id) }}"
+          onsubmit="return confirm('Search the web for photos of {{ supplier.supplier_name|e }}? This uses your AI allowance (typically around 10 cents per hotel). Nothing is added until you curate it.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-primary" type="submit" title="AI Image Collector: finds photos on the official website and similar pages"><i class="bi bi-stars"></i> Find photos with AI</button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add images</a>
+  </div>
 </div>
+{% if last_run %}
+<div class="small text-muted mb-2">AI Image Collector last ran {{ last_run.created_at[:16] }}:
+  {% if last_run.status in ('queued', 'running') %}<a href="{{ url_for('images.agent_run', run_id=last_run.run_id) }}">still working…</a>
+  {% elif last_run.status == 'failed' %}<a href="{{ url_for('images.agent_run', run_id=last_run.run_id) }}">failed</a>
+  {% else %}{{ last_run.images_staged }} photo{{ 's' if last_run.images_staged != 1 }} found · <a href="{{ url_for('images.agent_run', run_id=last_run.run_id) }}">details</a>{% endif %}
+</div>
+{% endif %}
 
 {% for p in pending %}
 <div class="alert alert-warning small py-2">{{ p.n }} image{{ 's' if p.n != 1 }} for this {{ (supplier.type_label or 'supplier')|lower }} {{ 'are' if p.n != 1 else 'is' }} waiting to be curated.

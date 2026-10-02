@@ -280,7 +280,11 @@ def create_batch(db, tenant_id, files, source="Individual", contributor=None, de
     return batch_id
 
 
-def add_items(db, tenant_id, batch_id, files, source_urls=None):
+def add_items(db, tenant_id, batch_id, files, source_urls=None, meta=None):
+    """Stage files in a batch. meta: optional {file name: {supplier_id, title,
+    description, source_url}} from the AI Image Collector, which already
+    knows which supplier each image is for."""
+    meta = meta or {}
     batch = db.execute("SELECT * FROM image_import_batches WHERE batch_id = ?", (batch_id,)).fetchone()
     suppliers = album_suppliers(db, tenant_id)
     names = {s["supplier_id"]: s["supplier_name"] for s in suppliers}
@@ -297,7 +301,14 @@ def add_items(db, tenant_id, batch_id, files, source_urls=None):
     next_sort, counts = {}, {}
     for i, (name, data) in enumerate(sorted(files, key=lambda x: x[0].lower())):
         stem = os.path.splitext(name)[0]
-        if batch["supplier_id"]:
+        m = meta.get(name, {})
+        if m.get("supplier_id"):
+            sid, how, note, remainder = m["supplier_id"], "entity", None, ""
+            if sid not in names:
+                r = db.execute("SELECT supplier_name FROM suppliers WHERE supplier_id = ? AND tenant_id = ?",
+                               (sid, tenant_id)).fetchone()
+                names[sid] = r[0] if r else ""
+        elif batch["supplier_id"]:
             sid, how, note = batch["supplier_id"], "entity", None
             remainder = _norm(stem)
             n_ = _norm(names.get(sid, ""))
@@ -325,8 +336,12 @@ def add_items(db, tenant_id, batch_id, files, source_urls=None):
                    sort_order, include, source_url)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (tenant_id, batch_id, name, data, mime_for(name), len(data), h, make_thumb(data), sid, how, note, dup,
-             suggest_title(remainder, names.get(sid), counts[sid]), taken_date(data) or batch["default_date"],
-             next_sort[sid], include, (source_urls or {}).get(name)))
+             m.get("title") or suggest_title(remainder, names.get(sid), counts[sid]),
+             taken_date(data) or batch["default_date"], next_sort[sid], include,
+             m.get("source_url") or (source_urls or {}).get(name)))
+        if m.get("description"):
+            db.execute("UPDATE image_import_items SET description = ? WHERE item_id = last_insert_rowid()",
+                       (m["description"][:DESCRIPTION_MAX],))
 
 
 def queue_image(db, tenant_id, supplier_id, data, file_name, title=None, description=None, source_url=None,

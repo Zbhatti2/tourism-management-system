@@ -110,7 +110,7 @@ def fetch_source_text(url, max_chars=12000, timeout=20):
     return text[:max_chars]
 
 
-def extract_fields_with_model(entity_short_label, scope_label, field_specs, sources, images=None):
+def extract_fields_with_model(entity_short_label, scope_label, field_specs, sources, images=None, on_usage=None):
     """entity_short_label: e.g. "Hotel". scope_label: the Agent Run's
     scope, e.g. "Avari Hotel, Lahore". field_specs: the exact whitelist —
     a list of (field_name, field_label) — the model is constrained to;
@@ -125,7 +125,10 @@ def extract_fields_with_model(entity_short_label, scope_label, field_specs, sour
     (float 0-1 or None), source_citation (str or None) — one per field the
     model found support for in the given text/images. Raises
     ExtractionError if the API key is missing, the 'anthropic' package
-    isn't installed, the call fails, or the model returns nothing usable."""
+    isn't installed, the call fails, or the model returns nothing usable.
+
+    on_usage: optional callback(model, usage) for AI usage metering
+    (ai_usage.record), called once the API has answered."""
     if not Config.ANTHROPIC_API_KEY:
         raise ExtractionError(
             "No ANTHROPIC_API_KEY is configured — copy .env.example to .env in the App "
@@ -211,6 +214,8 @@ def extract_fields_with_model(entity_short_label, scope_label, field_specs, sour
     except Exception as e:
         raise ExtractionError(f"The extraction model call failed: {e}") from e
 
+    if on_usage is not None:  # AI usage metering (ai_usage.py) -- called before any parsing can fail
+        on_usage(Config.ANTHROPIC_MODEL, getattr(response, "usage", None))
     tool_use = next((b for b in response.content if getattr(b, "type", None) == "tool_use"), None)
     if tool_use is None:
         raise ExtractionError("The extraction model didn't return any structured output.")

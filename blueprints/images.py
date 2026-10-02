@@ -9,13 +9,19 @@ Images Catalog screens (logic in image_catalog.py) -- tenant level.
                                   Sort order, keep or not -- then Add to albums.
 * /images/supplier/<id>/album     The supplier's Images Catalog: slider and list,
                                   search, sort, edit, reorder, delete.
+* /images/collect, /images/supplier/<id>/collect, /images/agent/<run>
+                                  The AI Image Collector (image_collector.py):
+                                  start a run, watch it, then curate what it found.
 """
+import json
 from datetime import date
 from io import BytesIO
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, url_for
 
+import ai_usage
 import image_catalog as ic
+import image_collector as collector
 from auth.decorators import login_required
 from db import get_db, log_action
 
@@ -88,9 +94,15 @@ def import_images():
         if batch_id:
             return redirect(url_for("images.curate", batch_id=batch_id))
         return redirect(url_for("images.import_images"))
-    return render_template("images/import.html", batches=ic.open_batches(db, g.tenant_id),
-                           suppliers=ic.album_suppliers(db, g.tenant_id), today=date.today().isoformat(),
-                           sources=ic.SOURCES, supplier=None)
+    suppliers = ic.album_suppliers(db, g.tenant_id)
+    collector.mark_stale(db, g.tenant_id)
+    runs = db.execute("SELECT * FROM image_agent_runs WHERE tenant_id = ? ORDER BY run_id DESC LIMIT 10",
+                      (g.tenant_id,)).fetchall()
+    return render_template("images/import.html", batches=ic.open_batches(db, g.tenant_id), suppliers=suppliers,
+                           today=date.today().isoformat(), sources=ic.SOURCES, supplier=None, runs=runs,
+                           cities=sorted({s["city"] for s in suppliers if s["city"]}),
+                           types=sorted({s["type_label"] for s in suppliers}),
+                           allowance=_allowance(db))
 
 
 @images_bp.route("/supplier/<int:supplier_id>/add", methods=["GET", "POST"])
@@ -123,6 +135,81 @@ def names_csv():
         w.writerow([s["supplier_name"], s["type_label"], s["city"] or "", f"{s['supplier_name']}-Lobby.jpg"])
     data = out.getvalue().encode("utf-8-sig")
     return send_file(BytesIO(data), mimetype="text/csv", as_attachment=True, download_name="Hotel_and_Restaurant_names.csv")
+
+
+# ---- AI Image Collector ---------------------------------------------------------------------------
+
+def _allowance(db):
+    limit = ai_usage.monthly_limit(db, g.tenant_id)
+    return {"limit": limit, "spent": ai_usage.month_spend(db, g.tenant_id)}
+
+
+def _start_collector(db, supplier_ids, per_supplier, label, back):
+    try:
+        run_id = collector.start_run(db, g.tenant_id, g.user_id, supplier_ids, per_supplier=per_supplier, scope_label=label)
+    except collector.CollectorError as e:
+        flash(str(e), "error")
+        return redirect(back)
+    log_action("ImageCollector", "image_agent_runs", run_id, f"Started the AI Image Collector for {label}")
+    return redirect(url_for("images.agent_run", run_id=run_id))
+
+
+@images_bp.route("/supplier/<int:supplier_id>/collect", methods=["POST"])
+@login_required
+def collect_for_supplier(supplier_id):
+    _tenant()
+    db = get_db()
+    supplier = _supplier(db, supplier_id)
+    return _start_collector(db, [supplier_id], request.form.get("per_supplier", 8), supplier["supplier_name"],
+                            url_for("images.album", supplier_id=supplier_id))
+
+
+@images_bp.route("/collect", methods=["POST"])
+@login_required
+def collect_many():
+    """Several suppliers at once: by type and city, optionally only those
+    with no photos yet."""
+    _tenant()
+    db = get_db()
+    type_label = request.form.get("type") or ""
+    city = request.form.get("city") or ""
+    only_empty = bool(request.form.get("only_empty"))
+    try:
+        limit = max(1, min(int(request.form.get("max_suppliers") or 10), 25))
+    except ValueError:
+        limit = 10
+    type_id = ic.image_type_id(db, g.tenant_id)
+    chosen = []
+    for s in ic.album_suppliers(db, g.tenant_id):
+        if (type_label and s["type_label"] != type_label) or (city and s["city"] != city):
+            continue
+        if only_empty and db.execute("SELECT 1 FROM supplier_documents WHERE supplier_id = ? AND tenant_id = ? "
+                                     "AND is_deleted = 0 AND document_type_id = ? LIMIT 1",
+                                     (s["supplier_id"], g.tenant_id, type_id)).fetchone():
+            continue
+        chosen.append(s["supplier_id"])
+    if not chosen:
+        flash("No Hotels, Resorts or Restaurants match that choice.", "error")
+        return redirect(url_for("images.import_images"))
+    label = f"{type_label + 's' if type_label else 'Hotels, Resorts and Restaurants'}{' in ' + city if city else ''}"
+    label += f" ({min(len(chosen), limit)}{' of ' + str(len(chosen)) if len(chosen) > limit else ''})"
+    return _start_collector(db, chosen[:limit], request.form.get("per_supplier", 6), label, url_for("images.import_images"))
+
+
+@images_bp.route("/agent/<int:run_id>")
+@login_required
+def agent_run(run_id):
+    _tenant()
+    db = get_db()
+    collector.mark_stale(db, g.tenant_id)
+    run = db.execute("SELECT * FROM image_agent_runs WHERE run_id = ? AND tenant_id = ?", (run_id, g.tenant_id)).fetchone()
+    if run is None:
+        abort(404)
+    cost, calls, searches = collector.run_cost(db, run_id)
+    ids = json.loads(run["supplier_ids"])
+    supplier = _supplier(db, ids[0]) if len(ids) == 1 else None
+    return render_template("images/agent_run.html", run=run, cost=cost, calls=calls, searches=searches or 0,
+                           supplier=supplier)
 
 
 # ---- curation -------------------------------------------------------------------------------------
@@ -230,9 +317,12 @@ def album(supplier_id):
                             JOIN image_import_batches b ON b.batch_id = i.batch_id
                             WHERE i.tenant_id = ? AND i.status = 'pending' AND i.supplier_id = ? AND b.status = 'open'
                             GROUP BY b.batch_id ORDER BY b.batch_id DESC""", (g.tenant_id, supplier_id)).fetchall()
+    last_run = db.execute("SELECT * FROM image_agent_runs WHERE tenant_id = ? AND supplier_ids = ? "
+                          "ORDER BY run_id DESC LIMIT 1", (g.tenant_id, f"[{supplier_id}]")).fetchone()
     return render_template("images/album.html", supplier=supplier, images=images, total=total, q=q, sort=sort,
                            view=view, date_from=date_from or "", date_to=date_to or "", sorts=ic.SORT_LABELS,
-                           pending=pending, max_desc=ic.DESCRIPTION_MAX)
+                           pending=pending, max_desc=ic.DESCRIPTION_MAX, last_run=last_run,
+                           has_album=supplier["type_code"] in ic.ALBUM_TYPE_CODES)
 
 
 @images_bp.route("/supplier/<int:supplier_id>/album/<int:document_id>/<kind>")

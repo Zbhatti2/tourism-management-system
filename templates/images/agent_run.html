@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}AI Image Collector — {{ run.scope_label }}{% endblock %}
+{% block head %}{% if run.status in ('queued', 'running') %}<meta http-equiv="refresh" content="4">{% endif %}{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  {% if supplier %}<a href="{{ url_for('images.album', supplier_id=supplier.supplier_id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ supplier.supplier_name }} — Images Catalog</a>
+  {% else %}<a href="{{ url_for('images.import_images') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Import Images</a>{% endif %}
+</nav>
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">AI Image Collector</div>
+    <h1 class="h3 mb-0">{{ run.scope_label }}</h1>
+    <div class="small text-muted">Started {{ run.created_at[:16] }}{% if run.finished_at %} · finished {{ run.finished_at[:16] }}{% endif %}</div>
+  </div>
+  <div>
+    {% if run.status in ('queued', 'running') %}<span class="badge bg-primary-subtle text-primary fs-6"><span class="spinner-border spinner-border-sm me-1"></span>Working…</span>
+    {% elif run.status == 'done' %}<span class="badge bg-success-subtle text-success fs-6">Finished</span>
+    {% else %}<span class="badge bg-danger-subtle text-danger fs-6">Failed</span>{% endif %}
+  </div>
+</div>
+
+{% if run.status in ('queued', 'running') %}
+<div class="alert alert-light border small">Searching the web, reading pages and reviewing photos takes about a minute per {{ 'hotel' if supplier else 'hotel or restaurant' }}.
+  This page refreshes by itself; you can also leave it and come back from Import Images.</div>
+{% endif %}
+{% if run.error %}<div class="alert alert-danger small">{{ run.error }}</div>{% endif %}
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-white small fw-semibold">Progress</div>
+      <div class="card-body"><pre class="small mb-0" style="white-space: pre-wrap;">{{ run.progress or 'Starting…' }}</pre></div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="display-6">{{ run.images_staged }}</div>
+        <div class="small text-muted mb-3">photo{{ 's' if run.images_staged != 1 }} ready to curate</div>
+        {% if run.batch_id %}
+        <a class="btn btn-primary w-100" href="{{ url_for('images.curate', batch_id=run.batch_id) }}"><i class="bi bi-check2-square"></i> Curate {{ 'them' if run.images_staged != 1 else 'it' }}</a>
+        {% elif run.status == 'done' %}
+        <div class="small text-muted">Nothing new was found. Photos already in the album are skipped.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card shadow-sm border-0">
+      <div class="card-body small">
+        <div class="d-flex justify-content-between"><span class="text-muted">AI cost of this run</span><strong>${{ '%.2f'|format(cost) }}</strong></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">API calls · web searches</span><span>{{ calls }} · {{ searches }}</span></div>
+        <div class="text-muted mt-2">Charged to your organisation's AI usage. Photos keep the page they were found on; check you may use them before publishing.</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

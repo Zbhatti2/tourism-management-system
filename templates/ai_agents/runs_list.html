@@ -4,6 +4,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">AI Agents</h1>
   <div class="d-flex gap-2">
+    {% if g.role in ('TenantAdmin',) %}<a href="{{ url_for('ai_usage.tenant_usage') }}" class="btn btn-outline-secondary"><i class="bi bi-cpu"></i> AI Usage</a>{% endif %}
     <a href="{{ url_for('ai_agents.list_review') }}" class="btn btn-outline-secondary">
       Review Queue
       {% if pending_total %}<span class="badge bg-danger ms-1">{{ pending_total }}</span>{% endif %}

@@ -60,3 +60,30 @@ unticked** and **Discard upload** drop what you don't want.
 
 An **AI Agent** that collects photos from the web will feed the same
 curation step. Its photos show where they were found.
+
+## Finding photos with AI
+
+The **AI Image Collector** looks for photos of your hotels, resorts and
+restaurants on the web. There are two ways to start it:
+
+- **Find photos with AI** on a supplier's Images Catalog.
+- The **AI Image Collector** card under Import Images, to run it for
+  several at once by type and city. You can limit it to those with no
+  photos yet.
+
+For each property it:
+
+1. **Searches** for the official website and its gallery, rooms and
+   dining pages, plus the property's brand or tourism-board page.
+   Booking and review sites are avoided.
+2. **Reads** those pages and downloads the real photos, at least
+   600 × 400 pixels, that aren't already in the album.
+3. **Reviews** them, keeping photos that show the property and
+   suggesting a Title and Description for each.
+
+The photos arrive as an upload to curate, with Source *AI Agent*. Each
+shows the page it was found on. **Check you may use a photo before you
+publish it.**
+
+The run's page shows progress and what the run cost. Runs are charged to
+your organisation's AI Usage.
