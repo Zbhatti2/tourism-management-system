@@ -27,6 +27,7 @@ from utils import parse_coordinates
 transport_hubs_bp = Blueprint("transport_hubs", __name__)
 
 SCOPES = ["International", "Domestic", "Regional"]
+LIST_LIMIT = 500
 
 
 def _safe_int(value, default=None):
@@ -86,15 +87,20 @@ def list_hubs():
     elif show == "inactive":
         where.append("h.is_active = 0")
 
-    hubs = db.execute(
-        f"""SELECT h.*, ht.label AS type_label, ht.icon AS type_icon, co.label AS country_label,
-                   COALESCE(c.label, h.city_text) AS city_label
-            FROM transport_hubs h
+    from_sql = f"""FROM transport_hubs h
             JOIN hub_types ht ON ht.hub_type_id = h.hub_type_id
             LEFT JOIN countries co ON co.country_id = h.country_id
             LEFT JOIN cities c ON c.city_id = h.city_id
-            {'WHERE ' + ' AND '.join(where) if where else ''}
-            ORDER BY co.label COLLATE NOCASE, city_label COLLATE NOCASE, ht.sort_order, h.name COLLATE NOCASE""",
+            {'WHERE ' + ' AND '.join(where) if where else ''}"""
+    total = db.execute(f"SELECT COUNT(*) {from_sql}", params).fetchone()[0]
+    # Thousands of airports alone -- show the first LIST_LIMIT and ask for a
+    # narrower search rather than render one huge page.
+    hubs = db.execute(
+        f"""SELECT h.*, ht.label AS type_label, ht.icon AS type_icon, co.label AS country_label,
+                   COALESCE(c.label, h.city_text) AS city_label
+            {from_sql}
+            ORDER BY co.label COLLATE NOCASE, city_label COLLATE NOCASE, ht.sort_order, h.name COLLATE NOCASE
+            LIMIT {LIST_LIMIT}""",
         params,
     ).fetchall()
     country_options = db.execute(
@@ -104,7 +110,8 @@ def list_hubs():
     type_counts = {r["hub_type_id"]: r["n"] for r in db.execute(
         "SELECT hub_type_id, COUNT(*) n FROM transport_hubs WHERE is_active = 1 GROUP BY hub_type_id")}
     return render_template(
-        "transport_hubs/list.html", hubs=hubs, hub_types=_hub_types(db), type_counts=type_counts,
+        "transport_hubs/list.html", hubs=hubs, total=total, limit=LIST_LIMIT, hub_types=_hub_types(db),
+        type_counts=type_counts,
         country_options=country_options, q=q, hub_type_id=hub_type_id, country_id=country_id, show=show,
     )
 

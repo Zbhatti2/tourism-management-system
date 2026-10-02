@@ -57,7 +57,7 @@
   <div class="table-responsive">
     <table class="table table-hover mb-0 align-middle">
       <thead>
-        <tr><th>Name</th><th>Type</th><th>Code</th><th>City</th><th>Country</th><th>Operator</th><th>Scope</th><th>Map</th></tr>
+        <tr><th>Name</th><th>Type</th><th>Code</th><th>City</th><th>Country</th><th>Operator</th><th>Scope</th><th>Major</th><th>Map</th></tr>
       </thead>
       <tbody>
         {% for h in hubs %}
@@ -69,14 +69,18 @@
           <td class="small text-muted">{{ h.country_label or "" }}</td>
           <td class="small text-muted">{{ h.operator or "" }}</td>
           <td class="small text-muted">{{ h.scope or "" }}</td>
+          <td class="small">{% if h.is_major %}<i class="bi bi-star-fill text-warning" title="Major hub"></i>{% endif %}</td>
           <td class="small">{% if h.latitude is not none %}<i class="bi bi-geo-alt-fill text-success" title="{{ h.latitude }}, {{ h.longitude }}"></i>{% else %}<span class="text-muted">—</span>{% endif %}</td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="text-center text-muted py-5">No transport hubs match. <a href="{{ url_for('transport_hubs.new_hub') }}">Add one</a>.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-5">No transport hubs match. <a href="{{ url_for('transport_hubs.new_hub') }}">Add one</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {% if hubs %}<div class="card-footer bg-white small text-muted">{{ hubs | length }} hub{{ 's' if hubs | length != 1 else '' }}</div>{% endif %}
+  {% if hubs %}<div class="card-footer bg-white small text-muted">
+    {% if total > hubs | length %}Showing the first {{ hubs | length }} of {{ "{:,}".format(total) }} hubs — search, or pick a type or country, to narrow the list.
+    {% else %}{{ "{:,}".format(total) }} hub{{ 's' if total != 1 else '' }}{% endif %}
+  </div>{% endif %}
 </div>
 {% endblock %}

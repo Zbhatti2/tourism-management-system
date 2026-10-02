@@ -393,6 +393,86 @@ def _migration_transport_hubs(db):
     db.commit()
 
 
+def _migration_load_major_airports(db):
+    """Loads platform_seed_data/airports_ourairports.csv (every large or
+    medium airport with scheduled service and an IATA code, ~3,200, from
+    OurAirports -- public domain) into transport_hubs. Country comes from
+    the ISO code; province/state and city are matched to TMS geography by
+    code or name and otherwise kept as text. An airport already on file
+    (same IATA code, or same name when it has no code yet) only has its EMPTY fields filled in, so
+    nothing entered in TMS is overwritten. Large airports are flagged
+    Major."""
+    import csv
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent / "platform_seed_data" / "airports_ourairports.csv"
+    if not path.exists():
+        return
+    airport_type = db.execute("SELECT hub_type_id FROM hub_types WHERE code = 'AIRPORT'").fetchone()
+    if airport_type is None:
+        return
+    airport_type_id = airport_type[0]
+
+    countries = {r["code"]: (r["country_id"], r["region_id"])
+                 for r in db.execute("SELECT country_id, code, region_id FROM countries WHERE code IS NOT NULL")}
+    states_by_code, states_by_name = {}, {}
+    for r in db.execute("SELECT state_id, country_id, code, label FROM states"):
+        if r["code"]:
+            states_by_code[(r["country_id"], r["code"].upper())] = r["state_id"]
+        states_by_name[(r["country_id"], r["label"].lower())] = r["state_id"]
+    cities = {}
+    for r in db.execute("""SELECT ci.city_id, ci.state_id, s.country_id, ci.label FROM cities ci
+                           JOIN states s ON s.state_id = ci.state_id"""):
+        cities.setdefault((r["country_id"], r["label"].lower()), (r["city_id"], r["state_id"]))
+
+    source_note = "Source: OurAirports (ourairports.com, public domain), Oct 2026."
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            country_id, region_id = countries.get(row["iso_country"], (None, None))
+            state_id = state_text = city_id = city_text = None
+            if country_id:
+                sub = row["iso_region"].split("-", 1)[-1].upper()
+                state_id = (states_by_code.get((country_id, sub))
+                            or states_by_name.get((country_id, (row["region_name"] or "").lower())))
+                match = cities.get((country_id, (row["municipality"] or "").lower()))
+                if match and (state_id is None or match[1] == state_id):
+                    city_id, state_id = match[0], match[1]
+            if state_id is None:
+                state_text = row["region_name"] or None
+            if city_id is None:
+                city_text = row["municipality"] or None
+            name = row["name"]
+            values = {
+                "code": row["iata"], "icao_code": row["icao"] or None, "name": name,
+                "region_id": region_id, "country_id": country_id, "state_id": state_id,
+                "state_province_text": state_text, "city_id": city_id, "city_text": city_text,
+                "latitude": float(row["latitude"]), "longitude": float(row["longitude"]),
+                "scope": "International" if "international" in name.lower() else None,
+                "website": row["website"] or row["wikipedia"] or None,
+                "is_major": 1 if row["size"] == "large" else 0,
+            }
+            existing = db.execute(
+                "SELECT * FROM transport_hubs WHERE hub_type_id = ? "
+                "AND (code = ? OR (code IS NULL AND lower(name) = lower(?))) ORDER BY code IS NULL LIMIT 1",
+                (airport_type_id, row["iata"], name),
+            ).fetchone()
+            if existing:
+                fill = {k: v for k, v in values.items() if v is not None and existing[k] in (None, "")}
+                if "code" in fill and db.execute(
+                        "SELECT 1 FROM transport_hubs WHERE hub_type_id = ? AND code = ? AND hub_id != ?",
+                        (airport_type_id, fill["code"], existing["hub_id"])).fetchone():
+                    del fill["code"]
+                if fill:
+                    db.execute(f"UPDATE transport_hubs SET {', '.join(f'{k} = ?' for k in fill)}, "
+                               f"updated_at = datetime('now') WHERE hub_id = ?",
+                               tuple(fill.values()) + (existing["hub_id"],))
+                continue
+            values.update({"hub_type_id": airport_type_id, "notes": source_note, "is_active": 1})
+            db.execute(f"INSERT INTO transport_hubs ({', '.join(values)}) VALUES ({', '.join('?' * len(values))})",
+                       tuple(values.values()))
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -407,6 +487,7 @@ MIGRATIONS = [
     ("2026_09_backups_nightly_type", _migration_backups_nightly_type),
     ("2026_10_platform_lookups", _migration_platform_lookups),
     ("2026_10_transport_hubs", _migration_transport_hubs),
+    ("2026_10_load_major_airports", _migration_load_major_airports),
 ]
 
 

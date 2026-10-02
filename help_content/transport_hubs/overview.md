@@ -14,6 +14,18 @@ Use the type buttons along the top to show one kind of hub, and the
 search box to find a hub by name, code, city or operator. Untick
 **Active** on a hub to hide it from tenants without deleting it.
 
+The list shows up to 500 hubs at a time; search or pick a type or
+country to narrow it down.
+
+## Airports already loaded
+
+About 3,200 airports are pre-loaded from OurAirports (a free,
+public-domain airport list): every large or medium airport with
+scheduled passenger flights and an IATA code. Large airports are marked
+**Major**. Province/state and city are matched to TMS geography where
+the name matches; otherwise they're kept as text. Edit any of them like
+a hub you added yourself.
+
 ## Adding or editing a hub
 
 - **Type** decides which fields apply. For an airport, **Code** is the
