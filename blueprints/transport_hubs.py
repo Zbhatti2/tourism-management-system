@@ -18,9 +18,9 @@ MODULE PD).
 """
 import sqlite3
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 
-from auth.decorators import system_admin_required
+from auth.decorators import login_required, system_admin_required
 from db import get_db, log_action
 from utils import parse_coordinates
 
@@ -313,3 +313,73 @@ def edit_hub_type(hub_type_id):
         flash(f"'{label}' saved.", "success")
         return redirect(url_for("transport_hubs.hub_types"))
     return render_template("transport_hubs/type_form.html", row=row)
+
+
+# ---- Lookup for tenants' pickers (Packages) -----------------------------------
+
+def hub_label(row):
+    """'Allama Iqbal International Airport (LHE) — Lahore' style label."""
+    label = row["name"]
+    if row["code"]:
+        label += f" ({row['code']})"
+    place = row["city_label"] or row["country_label"]
+    if place:
+        label += f" — {place}"
+    return label
+
+
+@transport_hubs_bp.route("/lookup")
+@login_required
+def lookup():
+    """JSON search used by the hub picker (static/js/hub_picker.js) on
+    tenant screens such as Route Stops and Airline Tickets. Any signed-in
+    user may read the shared list; only active hubs are returned.
+
+    ?q=      name, IATA/ICAO/station code, or city (2+ characters)
+    ?types=  comma-separated hub type codes, e.g. AIRPORT
+    ?country_id= hubs in this country are listed first"""
+    db = get_db()
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    types = [t for t in request.args.get("types", "").upper().split(",") if t]
+    country_id = _safe_int(request.args.get("country_id"), 0)
+    where = ["h.is_active = 1",
+             "(h.name LIKE ? OR h.code = ? OR h.icao_code = ? OR COALESCE(c.label, h.city_text) LIKE ?)"]
+    params = [f"%{q}%", q.upper(), q.upper(), f"{q}%"]
+    if types:
+        where.append(f"ht.code IN ({', '.join('?' * len(types))})")
+        params += types
+    rows = db.execute(
+        f"""SELECT h.hub_id, h.name, h.code, ht.code AS type_code, ht.label AS type_label, ht.icon,
+                   COALESCE(c.label, h.city_text) AS city_label, co.label AS country_label
+            FROM transport_hubs h
+            JOIN hub_types ht ON ht.hub_type_id = h.hub_type_id
+            LEFT JOIN cities c ON c.city_id = h.city_id
+            LEFT JOIN countries co ON co.country_id = h.country_id
+            WHERE {' AND '.join(where)}
+            ORDER BY (h.code = ?) DESC, (h.country_id = ?) DESC, h.is_major DESC, h.name COLLATE NOCASE
+            LIMIT 25""",
+        params + [q.upper(), country_id],
+    ).fetchall()
+    return jsonify([
+        {"id": r["hub_id"], "label": hub_label(r), "type": r["type_label"], "icon": r["icon"],
+         "country": r["country_label"]}
+        for r in rows
+    ])
+
+
+def hub_labels(db, hub_ids):
+    """{hub_id: label} for a handful of hub ids -- to pre-fill pickers."""
+    ids = [i for i in set(hub_ids) if i]
+    if not ids:
+        return {}
+    rows = db.execute(
+        f"""SELECT h.hub_id, h.name, h.code, COALESCE(c.label, h.city_text) AS city_label, co.label AS country_label
+            FROM transport_hubs h LEFT JOIN cities c ON c.city_id = h.city_id
+            LEFT JOIN countries co ON co.country_id = h.country_id
+            WHERE h.hub_id IN ({', '.join('?' * len(ids))})""",
+        ids,
+    ).fetchall()
+    return {r["hub_id"]: hub_label(r) for r in rows}
+

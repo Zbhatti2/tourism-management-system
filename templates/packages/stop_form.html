@@ -77,6 +77,22 @@
         </div>
       </div>
     </div>
+    {# Shared Transport Hubs (airports, stations, bus terminals, seaports)
+       the group arrives and leaves through -- hubs in this stop's country
+       are suggested first. #}
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        {% with field="arrival_hub_id", label="Arrive via", hub_id=(stop.arrival_hub_id if stop else None),
+                hub_label=hub_label_for(stop.arrival_hub_id if stop else None), country_input="country_id",
+                placeholder="Airport, station or terminal…" %}{% include "_hub_picker.html" %}{% endwith %}
+      </div>
+      <div class="col-md-6">
+        {% with field="departure_hub_id", label="Depart via", hub_id=(stop.departure_hub_id if stop else None),
+                hub_label=hub_label_for(stop.departure_hub_id if stop else None), country_input="country_id",
+                placeholder="Airport, station or terminal…" %}{% include "_hub_picker.html" %}{% endwith %}
+      </div>
+      <div class="col-12 form-text mt-0">Optional. Type a name, code (e.g. LHE) or city and pick from the list.</div>
+    </div>
     <div class="mb-3">
       <label class="form-label">Border Crossing / Handoff Notes</label>
       <textarea class="form-control" name="border_crossing_notes" rows="2">{{ (stop.border_crossing_notes | orblank) if stop else "" }}</textarea>
@@ -90,6 +106,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/geography_picker.js') }}"></script>
+<script src="{{ url_for('static', filename='js/hub_picker.js') }}"></script>
 <script>
   initGeographyPicker({
     initial: {

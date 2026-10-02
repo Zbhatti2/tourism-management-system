@@ -61,12 +61,34 @@ def _get_package(db, package_id):
     return package
 
 
+def _hub_id(db, value):
+    """A submitted Transport Hub id, if it's a real hub; else None."""
+    try:
+        hub_id = int(value)
+    except (TypeError, ValueError):
+        return None
+    row = db.execute("SELECT hub_id FROM transport_hubs WHERE hub_id = ?", (hub_id,)).fetchone()
+    return row["hub_id"] if row else None
+
+
+def _ticket_hubs(db, form):
+    """(from_hub_id, to_hub_id) for an Airline Ticket line; (None, None)
+    for anything else, so un-ticking Airline Ticket clears them."""
+    if not form.get("is_airline_ticket") or form.get("day_id"):
+        return None, None
+    return _hub_id(db, form.get("from_hub_id")), _hub_id(db, form.get("to_hub_id"))
+
+
 def _route_stops(db, package_id):
     return db.execute(
-        """SELECT rs.*, c.label AS country_name, ci.label AS city_label
+        """SELECT rs.*, c.label AS country_name, ci.label AS city_label,
+                  ah.name AS arrival_hub_name, ah.code AS arrival_hub_code,
+                  dh.name AS departure_hub_name, dh.code AS departure_hub_code
            FROM package_route_stops rs
            LEFT JOIN countries c ON c.country_id = rs.country_id
            LEFT JOIN cities ci ON ci.city_id = rs.city_id
+           LEFT JOIN transport_hubs ah ON ah.hub_id = rs.arrival_hub_id
+           LEFT JOIN transport_hubs dh ON dh.hub_id = rs.departure_hub_id
            WHERE rs.package_id = ? AND rs.tenant_id = ?
            ORDER BY rs.sequence_number""",
         (package_id, g.tenant_id),
@@ -194,8 +216,12 @@ def _components(db, package_id):
                   p.product_code, p.product_name,
                   sup.supplier_name,
                   rs.sequence_number AS stop_sequence,
-                  d.day_number, d.title AS day_title
+                  d.day_number, d.title AS day_title,
+                  fh.code AS from_hub_code, fh.name AS from_hub_name,
+                  th.code AS to_hub_code, th.name AS to_hub_name
            FROM package_components pc
+           LEFT JOIN transport_hubs fh ON fh.hub_id = pc.from_hub_id
+           LEFT JOIN transport_hubs th ON th.hub_id = pc.to_hub_id
            LEFT JOIN services s ON s.service_id = pc.service_id
            LEFT JOIN products p ON p.product_id = pc.product_id
            LEFT JOIN suppliers sup ON sup.supplier_id = pc.supplier_id
@@ -777,8 +803,9 @@ def new_route_stop(package_id):
         db.execute(
             """INSERT INTO package_route_stops (tenant_id, package_id, sequence_number, region_id, country_id,
                                                   state_id, state_province_text, city_id, city_text, nights,
-                                                  is_layover, layover_hours, is_checkpoint, border_crossing_notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                                  is_layover, layover_hours, is_checkpoint, border_crossing_notes,
+                                                  arrival_hub_id, departure_hub_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 g.tenant_id, package_id, sequence_number, form.get("region_id") or None,
                 form.get("country_id") or None, form.get("state_id") or None,
@@ -786,6 +813,7 @@ def new_route_stop(package_id):
                 form.get("city_text", "").strip() or None,
                 nights, is_layover, layover_hours, is_checkpoint,
                 form.get("border_crossing_notes", "").strip() or None,
+                _hub_id(db, form.get("arrival_hub_id")), _hub_id(db, form.get("departure_hub_id")),
             ),
         )
         db.commit()
@@ -816,7 +844,7 @@ def edit_route_stop(package_id, stop_id):
             """UPDATE package_route_stops SET sequence_number=?, region_id=?, country_id=?, state_id=?,
                                                 state_province_text=?, city_id=?, city_text=?,
                                                 nights=?, is_layover=?, layover_hours=?, is_checkpoint=?,
-                                                border_crossing_notes=?
+                                                border_crossing_notes=?, arrival_hub_id=?, departure_hub_id=?
                WHERE stop_id=? AND tenant_id=?""",
             (
                 form.get("sequence_number") or stop["sequence_number"], form.get("region_id") or None,
@@ -825,6 +853,7 @@ def edit_route_stop(package_id, stop_id):
                 form.get("city_text", "").strip() or None,
                 nights, is_layover, layover_hours, is_checkpoint,
                 form.get("border_crossing_notes", "").strip() or None,
+                _hub_id(db, form.get("arrival_hub_id")), _hub_id(db, form.get("departure_hub_id")),
                 stop_id, g.tenant_id,
             ),
         )
@@ -1162,8 +1191,8 @@ def new_component(package_id):
             """INSERT INTO package_components (tenant_id, package_id, route_stop_id, day_id, is_accommodation,
                                                  is_airline_ticket, repeat_for_checkpoint, component_type, service_id,
                                                  product_id, supplier_id, description, quantity, unit, unit_cost,
-                                                 unit_price, currency, notes, sequence_number)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                                 unit_price, currency, notes, sequence_number, from_hub_id, to_hub_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 g.tenant_id, package_id, form.get("route_stop_id") or None, form.get("day_id") or None,
                 1 if form.get("is_accommodation") else 0, 1 if form.get("is_airline_ticket") else 0,
@@ -1171,6 +1200,7 @@ def new_component(package_id):
                 component_type, service_id, product_id, form.get("supplier_id") or None, description,
                 quantity, form.get("unit", "").strip() or None, unit_cost, unit_price,
                 form.get("currency", "").strip() or None, form.get("notes", "").strip() or None, sequence_number,
+                *_ticket_hubs(db, form),
             ),
         )
         db.commit()
@@ -1287,7 +1317,7 @@ def edit_component(package_id, component_id):
                                               is_airline_ticket=?,
                                               repeat_for_checkpoint=?, component_type=?, service_id=?, product_id=?,
                                               supplier_id=?, description=?, quantity=?, unit=?, unit_cost=?,
-                                              unit_price=?, currency=?, notes=?,
+                                              unit_price=?, currency=?, notes=?, from_hub_id=?, to_hub_id=?,
                                               updated_at=datetime('now')
                WHERE component_id=? AND tenant_id=?""",
             (
@@ -1298,6 +1328,7 @@ def edit_component(package_id, component_id):
                 quantity, form.get("unit", "").strip() or None, unit_cost, unit_price,
                 form.get("currency", "").strip() or None,
                 form.get("notes", "").strip() or None,
+                *_ticket_hubs(db, form),
                 component_id, g.tenant_id,
             ),
         )

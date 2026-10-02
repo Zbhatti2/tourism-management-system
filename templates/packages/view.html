@@ -134,7 +134,14 @@
           <tr>
             <td>{{ s.sequence_number }}</td>
             <td>{{ s.country_name or "—" }}</td>
-            <td>{{ s.city_label or s.city_text or "—" }}</td>
+            <td>{{ s.city_label or s.city_text or "—" }}
+              {% if s.arrival_hub_name or s.departure_hub_name %}
+              <div class="small text-muted">
+                {% if s.arrival_hub_name %}<span title="Arrive via {{ s.arrival_hub_name }}"><i class="bi bi-box-arrow-in-right"></i> {{ s.arrival_hub_code or s.arrival_hub_name }}</span>{% endif %}
+                {% if s.departure_hub_name %}<span class="ms-2" title="Depart via {{ s.departure_hub_name }}"><i class="bi bi-box-arrow-right"></i> {{ s.departure_hub_code or s.departure_hub_name }}</span>{% endif %}
+              </div>
+              {% endif %}
+            </td>
             <td>
               {% if s.is_layover %}
               <span class="badge bg-warning-subtle text-warning-emphasis">Layover{% if s.layover_hours is not none %}, ~{{ s.layover_hours }} hrs{% endif %}</span>

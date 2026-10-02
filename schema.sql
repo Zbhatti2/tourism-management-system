@@ -2073,6 +2073,8 @@ CREATE TABLE package_route_stops (
     layover_hours   NUMERIC,                -- approximate connection time; only meaningful when is_layover = 1
     is_checkpoint   INTEGER NOT NULL DEFAULT 0,  -- a stop where accommodations need to be arranged for the group -- a planning flag, independent of is_layover (see stop_form.html)
     border_crossing_notes TEXT,             -- handoff point from one country's DMC to the next
+    arrival_hub_id  INTEGER REFERENCES transport_hubs(hub_id),    -- shared Transport Hub the group arrives through (Oct 2026)
+    departure_hub_id INTEGER REFERENCES transport_hubs(hub_id),   -- ...and leaves through
     UNIQUE (package_id, sequence_number)
 );
 CREATE INDEX idx_package_stops_package ON package_route_stops(package_id);
@@ -2134,6 +2136,8 @@ CREATE TABLE package_components (
     currency        TEXT,
     notes           TEXT,
     sequence_number INTEGER NOT NULL DEFAULT 1,
+    from_hub_id     INTEGER REFERENCES transport_hubs(hub_id),  -- Airline Ticket: departure airport (Oct 2026)
+    to_hub_id       INTEGER REFERENCES transport_hubs(hub_id),  -- Airline Ticket: arrival airport
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -2176,10 +2180,10 @@ CREATE INDEX idx_package_price_tiers_tenant ON package_price_tiers(tenant_id);
 CREATE TABLE knowledge_graph_edges (
     edge_id         INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
-    subject_type    TEXT NOT NULL CHECK (subject_type IN ('Supplier','PointOfInterest','City','Organization','Contact')),
+    subject_type    TEXT NOT NULL CHECK (subject_type IN ('Supplier','PointOfInterest','City','Organization','Contact','TransportHub')),
     subject_id      INTEGER NOT NULL,
     relationship    TEXT NOT NULL,           -- freeform label, e.g. 'located_in', 'near', 'served_by', 'operates_tours_to', 'nearest_airport'
-    object_type     TEXT NOT NULL CHECK (object_type IN ('Supplier','PointOfInterest','City','Organization','Contact')),
+    object_type     TEXT NOT NULL CHECK (object_type IN ('Supplier','PointOfInterest','City','Organization','Contact','TransportHub')),
     object_id       INTEGER NOT NULL,
     notes           TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),

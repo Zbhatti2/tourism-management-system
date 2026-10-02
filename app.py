@@ -201,6 +201,15 @@ def create_app():
 
     app.jinja_env.globals["modules"] = MODULES
 
+    # Label for a Transport Hub id, to pre-fill hub pickers on edit forms.
+    def hub_label_for(hub_id):
+        if not hub_id:
+            return ""
+        from blueprints.transport_hubs import hub_labels
+        return hub_labels(db_module.get_db(), [hub_id]).get(hub_id, "")
+
+    app.jinja_env.globals["hub_label_for"] = hub_label_for
+
     # True when the browser is on the same machine as the app (Start_TMS.bat
     # on your PC). Used to show the old "Browse…" buttons for reference-link
     # paths only there -- they open a file dialog on the SERVER, which is
