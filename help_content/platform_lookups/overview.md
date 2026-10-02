@@ -31,3 +31,13 @@ alongside it, but they can't edit, deactivate, merge or delete it.
 
 New tenants created from Tenant Management get the locked entries
 automatically.
+
+## Transport Hubs tab
+
+This tab holds the **Hub Types** (Airport, Railway Station, Bus
+Terminal, Seaport / Ferry Terminal). Transport Hubs is one shared list
+that every tenant reads, so nothing is copied into tenants and these
+aren't locked codes, just the options for a hub's Type. Add a type at
+the bottom of the tab, or use the pencil to rename, re-order or
+deactivate one. The number in the Hubs column opens the list of hubs of
+that type.

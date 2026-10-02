@@ -262,7 +262,8 @@ def delete_hub(hub_id):
 @transport_hubs_bp.route("/types", methods=["GET", "POST"])
 @system_admin_required
 def hub_types():
-    """List of hub types, with an inline "add" form."""
+    """POST: add a hub type (the form is on Platform Lookups' Transport Hubs
+    tab). GET: sends you to that tab."""
     db = get_db()
     if request.method == "POST":
         label = request.form.get("label", "").strip()
@@ -283,12 +284,17 @@ def hub_types():
                 flash(f"'{label}' added.", "success")
             except sqlite3.IntegrityError:
                 flash(f"A hub type with code {code} already exists.", "error")
-        return redirect(url_for("transport_hubs.hub_types"))
-    rows = db.execute(
+        return redirect(url_for("platform_lookups.index", table="hub_types"))
+    # The list itself lives on Platform Lookups, under its "Transport Hubs" tab.
+    return redirect(url_for("platform_lookups.index", table="hub_types"))
+
+
+def hub_type_rows(db):
+    """Hub types with how many hubs use each -- for the Platform Lookups tab."""
+    return db.execute(
         """SELECT ht.*, (SELECT COUNT(*) FROM transport_hubs h WHERE h.hub_type_id = ht.hub_type_id) AS hub_count
            FROM hub_types ht ORDER BY ht.sort_order, ht.label"""
     ).fetchall()
-    return render_template("transport_hubs/types.html", types=rows)
 
 
 @transport_hubs_bp.route("/types/<int:hub_type_id>/edit", methods=["GET", "POST"])
@@ -311,7 +317,7 @@ def edit_hub_type(hub_type_id):
         db.commit()
         log_action("Update", "hub_types", hub_type_id, f"Updated hub type '{label}'")
         flash(f"'{label}' saved.", "success")
-        return redirect(url_for("transport_hubs.hub_types"))
+        return redirect(url_for("platform_lookups.index", table="hub_types"))
     return render_template("transport_hubs/type_form.html", row=row)
 
 
