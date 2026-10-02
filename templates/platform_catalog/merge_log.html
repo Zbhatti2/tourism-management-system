@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — {{ spec.label }} merge log{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ list_url }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ spec.label }}</a></nav>
+<div class="mb-3">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">Merge log — {{ spec.label }}</h1>
+</div>
+<p class="text-muted small">Every merge, newest first. Undo puts both records and every moved link back as they were.</p>
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle">
+      <thead><tr><th>#</th><th>When</th><th>Kept</th><th>Merged away</th><th>Links moved</th><th>By</th><th></th></tr></thead>
+      <tbody>
+        {% for m in logs %}
+        <tr class="{{ 'text-muted' if m.undone_at else '' }}">
+          <td class="small">{{ m.merge_id }}</td>
+          <td class="small text-nowrap">{{ m.merged_at }}</td>
+          <td>{% if not m.undone_at %}<a href="{{ view_url(entity, m.kept_id) }}">{{ m.kept_name }}</a>{% else %}{{ m.kept_name }}{% endif %}</td>
+          <td>{{ m.removed_name }}</td>
+          <td class="small">{{ m.links }}</td>
+          <td class="small text-muted">{{ m.username or "" }}</td>
+          <td class="text-end">
+            {% if m.undone_at %}<span class="small text-muted">Undone {{ m.undone_at }}</span>
+            {% else %}
+            <form method="post" action="{{ url_for('platform_catalog.undo', entity=entity, merge_id=m.merge_id) }}" onsubmit="return confirm('Undo this merge?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-arrow-counterclockwise"></i> Undo</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No merges yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

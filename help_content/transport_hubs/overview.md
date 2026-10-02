@@ -39,5 +39,7 @@ a hub you added yourself.
 
 ## Hub types
 
-**Hub Types** (top right) lists the kinds of hub. Adding one (Metro
-Station, Heliport) is all it takes to start listing hubs of that kind.
+The kinds of hub are kept in **Platform Lookups**, on its **Transport
+Hubs** tab (the **Hub Types** button, top right, takes you there).
+Adding one (Metro Station, Heliport) is all it takes to start listing
+hubs of that kind.

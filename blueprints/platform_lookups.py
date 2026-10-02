@@ -79,9 +79,15 @@ def index():
             "rows": [{"row": r, "tenants": tenant_count_locked(db, key, r["code"])} for r in rows],
         })
     tenant_total = db.execute("SELECT COUNT(*) FROM tenants WHERE is_platform = 0").fetchone()[0]
-    active = request.args.get("table") if request.args.get("table") in LOCKABLE_TABLES else TABLE_ORDER[0]
+    # Shared (not copied-per-tenant) option lists, shown as extra tabs.
+    hub_types = None
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='hub_types'").fetchone():
+        from blueprints.transport_hubs import hub_type_rows
+        hub_types = hub_type_rows(db)
+    valid_tabs = set(LOCKABLE_TABLES) | ({"hub_types"} if hub_types is not None else set())
+    active = request.args.get("table") if request.args.get("table") in valid_tabs else TABLE_ORDER[0]
     return render_template("platform_lookups/index.html", sections=sections, tenant_total=tenant_total,
-                           active=active)
+                           active=active, hub_types=hub_types)
 
 
 def _form_values(form, cfg, creating):

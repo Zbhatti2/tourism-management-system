@@ -23,3 +23,6 @@ anthropic>=0.40
 # Dockerfile and entrypoint.sh). Not used by Start_TMS.bat, which runs
 # Flask's own dev server; harmless to have installed locally too.
 gunicorn>=21.2
+
+# Data Import wizard (blueprints/platform_import.py): reading and writing .xlsx templates.
+openpyxl>=3.1

@@ -1,19 +1,17 @@
 """
 Module — Platform Data (SystemAdmin).
 
-Home of the platform catalog screens in the Platform Admin sidebar
-(see app.py MODULES) that aren't built yet: Points of Interest, Embassies &
-Consulates, Accommodation and Restaurants. Each starts as a "coming soon"
-page and is replaced by its real screen as it is built, in the order of
-the platform master-data plan (claude/TMS-Platform-Data-Plan.md in the
-TMS project). Transport Hubs, Geography & Distances, Currencies and
+Sidebar targets for the platform catalogs (see app.py MODULES): Points of
+Interest, Embassies & Consulates, Accommodation and Restaurants. They
+started as "coming soon" pages and now redirect to the generic catalog
+screens (blueprints/platform_catalog.py). Transport Hubs, Geography & Distances, Currencies and
 Platform Lookups already have their own blueprints.
 
 PLATFORM_CATALOG below also drives the Platform Data card on the
 SystemAdmin's System Management page: one row per catalog, with a live
 record count once its table exists.
 """
-from flask import Blueprint, render_template
+from flask import Blueprint, redirect, render_template, url_for
 
 from auth.decorators import system_admin_required
 
@@ -62,22 +60,22 @@ def _coming_soon(key):
 @platform_data_bp.route("/points-of-interest/")
 @system_admin_required
 def pois():
-    return _coming_soon("pois")
+    return redirect(url_for("platform_catalog.list_records", entity="pois"))
 
 
 @platform_data_bp.route("/embassies/")
 @system_admin_required
 def embassies():
-    return _coming_soon("embassies")
+    return redirect(url_for("platform_catalog.list_records", entity="embassies"))
 
 
 @platform_data_bp.route("/accommodation/")
 @system_admin_required
 def accommodation():
-    return _coming_soon("accommodation")
+    return redirect(url_for("platform_catalog.list_records", entity="accommodation"))
 
 
 @platform_data_bp.route("/restaurants/")
 @system_admin_required
 def restaurants():
-    return _coming_soon("restaurants")
+    return redirect(url_for("platform_catalog.list_records", entity="restaurants"))

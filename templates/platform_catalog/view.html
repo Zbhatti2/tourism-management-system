@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — {{ row.name }}{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('platform_catalog.list_records', entity=entity) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ spec.label }}</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <div class="small text-muted"><i class="bi bi-{{ spec.icon }}"></i> {{ spec.singular }}{% if not row.is_active %} · <span class="badge bg-secondary-subtle text-dark">Inactive</span>{% endif %}</div>
+    <h1 class="h3 mb-0">{{ row.name }}</h1>
+    {% if alt_names %}<div class="small text-muted">Also known as: {{ alt_names | join(', ') }}</div>{% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('platform_catalog.edit_record', entity=entity, rid=row[spec.pk]) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    <form method="post" action="{{ url_for('platform_catalog.delete_record', entity=entity, rid=row[spec.pk]) }}"
+          onsubmit="return confirm({{ ('Delete ' ~ row.name ~ '? To hide it but keep it, edit it and untick Active instead.') | tojson }});">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-trash"></i> Delete</button>
+    </form>
+  </div>
+</div>
+{% set lookup = {'poi_type_id': row.poi_type_label if 'poi_type_label' in row.keys() else none, 'represented_country_id': row.represented_label if 'represented_label' in row.keys() else none} %}
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body">
+      <h2 class="h6 text-muted text-uppercase">Details</h2>
+      <dl class="row mb-0 small">
+        {% for col, label, kind, opts in fields if col not in ('name','address','latitude','longitude','phone','email','website','alt_names','notes','source','checked_on') %}
+        {% set v = lookup[col] if col in lookup else row[col] %}
+        {% if v is not none and v != '' %}
+        <dt class="col-sm-4">{{ label }}</dt>
+        <dd class="col-sm-8">{% if kind == 'yn' %}{{ 'Yes' if v else 'No' }}{% elif kind == 'url' %}<a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a>{% elif kind == 'money' %}{{ "{:,.0f}".format(v) }}{% elif col == 'star_rating' %}{{ '★' * v }}{% else %}<span style="white-space: pre-line;">{{ v }}</span>{% endif %}</dd>
+        {% endif %}
+        {% endfor %}
+      </dl>
+    </div></div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body">
+      <h2 class="h6 text-muted text-uppercase">Location &amp; contact</h2>
+      <dl class="row mb-0 small">
+        <dt class="col-sm-4">City</dt><dd class="col-sm-8">{{ row.city_label or "—" }}</dd>
+        <dt class="col-sm-4">Province</dt><dd class="col-sm-8">{{ row.state_label or "—" }}</dd>
+        <dt class="col-sm-4">Country</dt><dd class="col-sm-8">{{ row.country_label or "—" }}</dd>
+        <dt class="col-sm-4">Address</dt><dd class="col-sm-8">{{ row.address or "—" }}</dd>
+        <dt class="col-sm-4">Coordinates</dt><dd class="col-sm-8">{% if row.latitude is not none %}{{ "%.6f"|format(row.latitude) }}, {{ "%.6f"|format(row.longitude) }} <a href="https://www.google.com/maps?q={{ row.latitude }},{{ row.longitude }}" target="_blank" rel="noopener"><i class="bi bi-map"></i> Map</a>{% else %}—{% endif %}</dd>
+        <dt class="col-sm-4">Phone</dt><dd class="col-sm-8">{{ row.phone or "—" }}</dd>
+        <dt class="col-sm-4">Email</dt><dd class="col-sm-8">{{ row.email or "—" }}</dd>
+        <dt class="col-sm-4">Website</dt><dd class="col-sm-8">{% if row.website %}<a href="{{ row.website }}" target="_blank" rel="noopener">{{ row.website }}</a>{% else %}—{% endif %}</dd>
+        <dt class="col-sm-4">Source</dt><dd class="col-sm-8">{{ row.source or "—" }}</dd>
+        <dt class="col-sm-4">Checked on</dt><dd class="col-sm-8">{{ row.checked_on or "—" }}</dd>
+      </dl>
+    </div></div>
+  </div>
+  {% if row.notes %}
+  <div class="col-12"><div class="card shadow-sm border-0"><div class="card-body">
+    <h2 class="h6 text-muted text-uppercase">Notes</h2>
+    <div class="small" style="white-space: pre-line;">{{ row.notes }}</div>
+  </div></div></div>
+  {% endif %}
+</div>
+{% endblock %}

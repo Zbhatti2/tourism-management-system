@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — {{ spec.label }} duplicates{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ list_url }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ spec.label }}</a></nav>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">Possible duplicates — {{ spec.label }}</h1>
+  </div>
+  <a href="{{ url_for('platform_catalog.merge_log', entity=entity) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history"></i> Merge log</a>
+</div>
+<p class="text-muted small">Pairs in the same city whose names are the same once tidied, sound alike (Ahmad / Ahmed) or are very similar, plus records of the same type within 150 m of each other. Open a pair to compare and merge it, or leave it if they really are different places.</p>
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Record A</th><th>Record B</th><th>City</th><th>Why</th><th></th></tr></thead>
+      <tbody>
+        {% for a, b, how in pairs %}
+        <tr>
+          <td><a href="{{ view_url(entity, a.id) }}">{{ a.name }}</a></td>
+          <td><a href="{{ view_url(entity, b.id) }}">{{ b.name }}</a></td>
+          <td class="small text-muted">{{ a.city_label or "" }}{% if b.city_label and b.city_label != a.city_label %} / {{ b.city_label }}{% endif %}</td>
+          <td><span class="badge {{ 'bg-danger-subtle text-danger' if how == 'same' else 'bg-warning-subtle text-warning-emphasis' }}">{{ reasons[how] }}</span></td>
+          <td class="text-end"><a href="{{ url_for('platform_catalog.merge_records', entity=entity, a=a.id, b=b.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-intersect"></i> Compare &amp; merge</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-5">No likely duplicates found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if pairs %}<div class="card-footer bg-white small text-muted">{{ pairs | length }} pair{{ 's' if pairs | length != 1 else '' }}</div>{% endif %}
+</div>
+{% endblock %}

@@ -634,6 +634,39 @@ def _migration_geography_distances(db):
     db.commit()
 
 
+def _migration_platform_catalogs(db):
+    """Platform catalogs + import/merge support (Oct 2026), all GLOBAL:
+    platform_pois, platform_accommodation, platform_restaurants, embassies
+    (defined in platform_catalog.py), the merge log, and the import wizard's
+    staging tables. Also: alternate names / source / checked-on for
+    transport_hubs, altitude and alternate names for cities, an upper drive
+    time and route name for city_distances, and the 15 new POI Types added
+    to the platform's locked list (pushed to every tenant)."""
+    import platform_catalog as pc
+    import platform_lookups
+    from seed_data import _slug
+
+    for spec in pc.CATALOGS.values():
+        db.executescript(pc.ddl(spec))
+    db.executescript(pc.SUPPORT_DDL)
+    for table, col, typ in (("transport_hubs", "alt_names", "TEXT"), ("transport_hubs", "source", "TEXT"),
+                            ("transport_hubs", "checked_on", "TEXT"), ("cities", "altitude_m", "INTEGER"),
+                            ("cities", "alt_names", "TEXT"), ("city_distances", "drive_minutes_max", "INTEGER"),
+                            ("city_distances", "route_name", "TEXT")):
+        if _table_exists(db, table) and not _column_exists(db, table, col):
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+    db.commit()
+
+    pid = platform_lookups.platform_tenant_id(db)
+    if pid is not None and _column_exists(db, "poi_types", "is_system"):
+        start = db.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM poi_types WHERE tenant_id = ?", (pid,)).fetchone()[0]
+        for i, label in enumerate(pc.NEW_POI_TYPES):
+            db.execute("INSERT OR IGNORE INTO poi_types (tenant_id, code, label, sort_order, is_active, is_system) "
+                       "VALUES (?, ?, ?, ?, 1, 1)", (pid, _slug(label), label, start + i))
+        db.commit()
+        platform_lookups.sync_platform_lookups(db)
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -651,6 +684,7 @@ MIGRATIONS = [
     ("2026_10_load_major_airports", _migration_load_major_airports),
     ("2026_10_package_hubs", _migration_package_hubs),
     ("2026_10_geography_distances", _migration_geography_distances),
+    ("2026_10_platform_catalogs", _migration_platform_catalogs),
 ]
 
 
