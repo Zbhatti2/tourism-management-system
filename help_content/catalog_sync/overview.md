@@ -51,6 +51,6 @@ sync from then on.
 | Name, POI Type, Year Established, location, address (Local Location), phone, website, description (Historical Significance), coordinates | Name, type and star sub-type, website, address, phone, email, and amenities for hotels |
 
 Everything else in the catalog, such as entry fee, opening hours, star
-rating, room rates, cuisine, price range, images and catalog notes, is
+rating, number of rooms, cuisine, price range, images and catalog notes, is
 shown live on the tenant's record under **From the Platform Catalog**.
 The tenant's own notes are never touched.

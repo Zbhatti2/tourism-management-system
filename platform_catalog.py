@@ -74,10 +74,8 @@ CATALOGS = {
             ("star_rating", "Star Rating", "int", {"min": 1, "max": 5}),
             ("rating_note", "Rating (as published)", "text", {}),
             ("rooms", "No. of Rooms", "int", {"min": 0}),
-            ("currency", "Currency", "text", {"maxlength": 3}),
-            ("rate_single", "Avg Rate Single / Queen", "money", {}),
-            ("rate_double", "Avg Rate Double / King", "money", {}),
-            ("rate_year", "Rate Year", "int", {}),
+            # No rates: hotel rates are tenant-level (Zeb, Oct 2026) -- each tenant
+            # keeps its own in its Supplier records.
         ] + [(col, label, "yn", {"group": "Amenities"}) for col, label in AMENITIES],
         "list": [("property_type", "Type"), ("star_rating", "Stars"), ("city_label", "City"),
                  ("country_label", "Country")],
