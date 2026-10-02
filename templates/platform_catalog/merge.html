@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Merge {{ spec.label }}{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('platform_catalog.duplicates', entity=entity) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Possible duplicates</a></nav>
+<div class="mb-3">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">Merge two {{ spec.label | lower }} records</h1>
+</div>
+<p class="text-muted small">The record on the left is kept; the one on the right is merged into it and removed. For each field, choose whose value to keep (an empty value is always filled from the other side). Notes are combined, the removed record's name becomes an alternate name, and anything linked to it moves to the kept record. You can undo this from the merge log.</p>
+<div class="mb-3 d-flex gap-2 align-items-center">
+  <span class="small text-muted">Keep:</span>
+  <a class="btn btn-sm {{ 'btn-dark' if keep == 'a' else 'btn-outline-secondary' }}" href="{{ url_for('platform_catalog.merge_records', entity=entity, a=a_id, b=b_id, keep='a') }}">{{ kept.name if keep == 'a' else removed.name }}</a>
+  <a class="btn btn-sm {{ 'btn-dark' if keep == 'b' else 'btn-outline-secondary' }}" href="{{ url_for('platform_catalog.merge_records', entity=entity, a=a_id, b=b_id, keep='b') }}">{{ kept.name if keep == 'b' else removed.name }}</a>
+</div>
+<form method="post" class="card shadow-sm border-0">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="keep" value="{{ keep }}">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr><th style="width: 18%">Field</th>
+        <th style="width: 41%">Keep: <a href="{{ view_url(entity, kept[spec.pk]) }}" target="_blank">{{ kept.name }}</a> <span class="small text-muted">#{{ kept[spec.pk] }}</span></th>
+        <th style="width: 41%">Merge away: <a href="{{ view_url(entity, removed[spec.pk]) }}" target="_blank">{{ removed.name }}</a> <span class="small text-muted">#{{ removed[spec.pk] }}</span></th></tr></thead>
+      <tbody>
+        <tr class="table-light"><td class="small fw-semibold">Location</td>
+          <td><label class="d-flex gap-2"><input type="radio" class="form-check-input" name="take_city_id" value="kept" checked> <span class="small">{{ location.kept or '—' }}</span></label></td>
+          <td>{% if location.removed and location.removed != location.kept %}<label class="d-flex gap-2"><input type="radio" class="form-check-input" name="take_city_id" value="removed"> <span class="small">{{ location.removed }}</span></label>{% else %}<span class="small text-muted">{{ location.removed or '—' }}</span>{% endif %}</td></tr>
+        {% for r in rows %}
+        <tr class="{{ '' if r.differs else 'text-muted' }}">
+          <td class="small fw-semibold">{{ r.label }}</td>
+          {% if r.differs and not r.fills and r.removed not in (none, '') %}
+          <td><label class="d-flex gap-2"><input type="radio" class="form-check-input" name="take_{{ r.col }}" value="kept" checked> <span class="small" style="white-space: pre-line;">{{ r.kept if r.kept not in (none, '') else '—' }}</span></label></td>
+          <td><label class="d-flex gap-2"><input type="radio" class="form-check-input" name="take_{{ r.col }}" value="removed"> <span class="small" style="white-space: pre-line;">{{ r.removed }}</span></label></td>
+          {% else %}
+          <td class="small" style="white-space: pre-line;">{{ r.kept if r.kept not in (none, '') else ('— (filled from the right)' if r.fills else '—') }}</td>
+          <td class="small" style="white-space: pre-line;">{{ r.removed if r.removed not in (none, '') else '—' }}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+        <tr><td class="small fw-semibold">Notes</td><td class="small text-muted" colspan="2">Both sets of notes are kept: the right-hand record's notes are added under a "merged from" heading.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2">
+    <button class="btn btn-primary" type="submit" onclick="return confirm({{ ('Merge ' ~ removed.name ~ ' into ' ~ kept.name ~ '?') | tojson }});"><i class="bi bi-intersect"></i> Merge</button>
+    <a class="btn btn-link" href="{{ url_for('platform_catalog.duplicates', entity=entity) }}">Cancel — they're different</a>
+  </div>
+</form>
+{% endblock %}

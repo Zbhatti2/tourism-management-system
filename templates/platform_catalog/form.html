@@ -1,0 +1,88 @@
+{% macro val(name) -%}
+{%- if form is not none and form.get(name) is not none -%}{{ form.get(name) }}
+{%- elif row and row[name] is not none -%}{{ row[name] }}
+{%- endif -%}
+{%- endmacro %}
+{% extends "base.html" %}
+{% block title %}TMS System Admin — {{ 'Edit' if row else 'New' }} {{ spec.singular }}{% endblock %}
+{% block content %}
+{% set coords_default = ('%.6f, %.6f' % (row.latitude, row.longitude)) if row and row.latitude is not none else '' %}
+<nav class="mb-2"><a href="{{ url_for('platform_catalog.view_record', entity=entity, rid=row[spec.pk]) if row else url_for('platform_catalog.list_records', entity=entity) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ row.name if row else spec.label }}</a></nav>
+<div class="mb-4">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">{{ 'Edit' if row else 'New' }} {{ spec.singular }}</h1>
+</div>
+<form method="post" class="card shadow-sm border-0" style="max-width: 960px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <div class="row g-3">
+      {% for col, label, kind, opts in fields if col not in ('address','latitude','longitude','phone','email','website','alt_names','notes','source','checked_on') and opts.get('group') != 'Amenities' %}
+      <div class="{{ 'col-12' if kind == 'textarea' or col == 'name' else 'col-md-4' }}">
+        <label class="form-label" for="{{ col }}">{{ label }}{% if opts.required %} <span class="text-danger">*</span>{% endif %}</label>
+        {% if kind == 'textarea' %}
+        <textarea class="form-control" id="{{ col }}" name="{{ col }}" rows="3">{{ val(col) }}</textarea>
+        {% elif kind == 'select' %}
+        <select class="form-select" id="{{ col }}" name="{{ col }}"><option value="">—</option>{% for o in opts.options %}<option {{ 'selected' if val(col) == o else '' }}>{{ o }}</option>{% endfor %}</select>
+        {% elif kind == 'poi_type' %}
+        <select class="form-select" id="{{ col }}" name="{{ col }}"><option value="">—</option>{% for o in poi_types %}<option value="{{ o.id }}" {{ 'selected' if val(col) == o.id|string else '' }}>{{ o.label }}</option>{% endfor %}</select>
+        {% elif kind == 'country' %}
+        <select class="form-select" id="{{ col }}" name="{{ col }}"><option value="">—</option>{% for o in countries %}<option value="{{ o.id }}" {{ 'selected' if val(col) == o.id|string else '' }}>{{ o.label }}</option>{% endfor %}</select>
+        {% else %}
+        <input class="form-control" id="{{ col }}" name="{{ col }}" value="{{ val(col) }}" {% if kind in ('int','real','money') %}inputmode="decimal"{% endif %} {% if kind == 'date' %}type="date"{% endif %}>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% set amenities = [] %}{% for f in fields %}{% if f[3].get('group') == 'Amenities' %}{% set _ = amenities.append(f) %}{% endif %}{% endfor %}
+    {% if amenities %}
+    <h2 class="h6 text-muted text-uppercase mt-4">Amenities</h2>
+    <div class="row g-2">
+      {% for col, label, kind, opts in amenities %}
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-0" for="{{ col }}">{{ label }}</label>
+        {% set cur = (form.get(col) if form is not none and form.get(col) is not none else ({1:'Y',0:'N'}.get(row[col]) if row else '')) %}
+        <select class="form-select form-select-sm" id="{{ col }}" name="{{ col }}"><option value="">Not known</option><option value="Y" {{ 'selected' if cur == 'Y' else '' }}>Yes</option><option value="N" {{ 'selected' if cur == 'N' else '' }}>No</option></select>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <h2 class="h6 text-muted text-uppercase mt-4">Location</h2>
+    {% with address = row %}{% include "_geography_fields.html" %}{% endwith %}
+    <div class="row g-3 mb-1">
+      <div class="col-md-6"><label class="form-label" for="address">Address / Landmark</label><input class="form-control" id="address" name="address" value="{{ val('address') }}"></div>
+      <div class="col-md-6"><label class="form-label" for="coordinates">Coordinates</label>
+        <input class="form-control" id="coordinates" name="coordinates" value="{{ form.get('coordinates') if form is not none and form.get('coordinates') is not none else coords_default }}" placeholder="31.558000, 74.350700">
+        <div class="form-text">Paste from Google Maps (decimal or degrees/minutes/seconds).</div></div>
+    </div>
+    <h2 class="h6 text-muted text-uppercase mt-4">Contact</h2>
+    <div class="row g-3">
+      <div class="col-md-4"><label class="form-label" for="phone">Phone</label><input class="form-control" id="phone" name="phone" value="{{ val('phone') }}"></div>
+      <div class="col-md-4"><label class="form-label" for="email">Email</label><input class="form-control" id="email" name="email" value="{{ val('email') }}"></div>
+      <div class="col-md-4"><label class="form-label" for="website">Website</label><input class="form-control" id="website" name="website" value="{{ val('website') }}"></div>
+    </div>
+    <h2 class="h6 text-muted text-uppercase mt-4">Notes &amp; source</h2>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label" for="alt_names">Alternate names</label><textarea class="form-control" id="alt_names" name="alt_names" rows="3" placeholder="Other spellings, one per line">{{ val('alt_names') }}</textarea>
+        <div class="form-text">Imports that use one of these spellings match this record.</div></div>
+      <div class="col-md-6"><label class="form-label" for="notes">Notes</label><textarea class="form-control" id="notes" name="notes" rows="3">{{ val('notes') }}</textarea></div>
+      <div class="col-md-8"><label class="form-label" for="source">Source</label><input class="form-control" id="source" name="source" value="{{ val('source') }}"></div>
+      <div class="col-md-4"><label class="form-label" for="checked_on">Checked on</label><input class="form-control" type="date" id="checked_on" name="checked_on" value="{{ val('checked_on') }}"></div>
+    </div>
+    {% set active = (form.get('is_active') if form is not none else (row.is_active if row else 1)) %}
+    <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" {{ 'checked' if active else '' }}><label class="form-check-label" for="is_active">Active (offered to tenants)</label></div>
+  </div>
+  <div class="card-footer bg-white">
+    <button class="btn btn-primary" type="submit">{{ 'Save' if row else 'Add' }}</button>
+    <a class="btn btn-link" href="{{ url_for('platform_catalog.view_record', entity=entity, rid=row[spec.pk]) if row else url_for('platform_catalog.list_records', entity=entity) }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/geography_picker.js') }}"></script>
+<script>
+  initGeographyPicker({ initial: {
+    region_id: {{ (val('region_id') or '') | tojson }}, country_id: {{ (val('country_id') or '') | tojson }},
+    state_id: {{ (val('state_id') or '') | tojson }}, city_id: {{ (val('city_id') or '') | tojson }} } });
+</script>
+{% endblock %}

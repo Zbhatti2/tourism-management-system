@@ -89,22 +89,25 @@ MODULES = [
     # Management, System Management, then the data screens. Entries whose
     # screen isn't built yet point at a platform_data "coming soon" page;
     # base.html highlights them by endpoint since they share a blueprint.
-    {"key": "transport_hubs", "label": "Transport Hubs", "icon": "airplane", "endpoint": "transport_hubs.list_hubs",
+    {"key": "transport_hubs", "entity": "hubs", "label": "Transport Hubs", "icon": "airplane", "endpoint": "transport_hubs.list_hubs",
      "roles": ["SystemAdmin"]},
-    {"key": "platform_pois", "label": "Points of Interest", "icon": "geo-alt", "endpoint": "platform_data.pois",
+    {"key": "platform_pois", "entity": "pois", "label": "Points of Interest", "icon": "geo-alt", "endpoint": "platform_data.pois",
      "roles": ["SystemAdmin"]},
     {"key": "geography_admin", "label": "Geography & Distances", "icon": "globe-americas", "endpoint": "geography_admin.index",
      "roles": ["SystemAdmin"]},
-    {"key": "embassies", "label": "Embassies & Consulates", "icon": "flag", "endpoint": "platform_data.embassies",
+    {"key": "embassies", "entity": "embassies", "label": "Embassies & Consulates", "icon": "flag", "endpoint": "platform_data.embassies",
      "roles": ["SystemAdmin"]},
-    {"key": "accommodation", "label": "Accommodation", "icon": "building", "endpoint": "platform_data.accommodation",
+    {"key": "accommodation", "entity": "accommodation", "label": "Accommodation", "icon": "building", "endpoint": "platform_data.accommodation",
      "roles": ["SystemAdmin"]},
-    {"key": "restaurants", "label": "Restaurants", "icon": "cup-hot", "endpoint": "platform_data.restaurants",
+    {"key": "restaurants", "entity": "restaurants", "label": "Restaurants", "icon": "cup-hot", "endpoint": "platform_data.restaurants",
      "roles": ["SystemAdmin"]},
     {"key": "currency_admin", "label": "Currencies", "icon": "currency-exchange", "endpoint": "currency_admin.index",
      "roles": ["SystemAdmin"]},
     # Locked lookup codes every tenant shares (platform_lookups.py).
     {"key": "platform_lookups", "label": "Platform Lookups", "icon": "tags", "endpoint": "platform_lookups.index",
+     "roles": ["SystemAdmin"]},
+    # Entity-based Excel/CSV import into the platform catalogs (platform_import.py).
+    {"key": "platform_import", "label": "Data Import", "icon": "upload", "endpoint": "platform_import.index",
      "roles": ["SystemAdmin"]},
 ]
 
@@ -164,6 +167,8 @@ def create_app():
     from blueprints.platform_lookups import platform_lookups_bp
     from blueprints.platform_data import platform_data_bp
     from blueprints.transport_hubs import transport_hubs_bp
+    from blueprints.platform_catalog import platform_catalog_bp
+    from blueprints.platform_import import platform_import_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -198,6 +203,8 @@ def create_app():
     app.register_blueprint(platform_lookups_bp, url_prefix="/platform/lookups")
     app.register_blueprint(platform_data_bp, url_prefix="/platform")
     app.register_blueprint(transport_hubs_bp, url_prefix="/platform/transport-hubs")
+    app.register_blueprint(platform_catalog_bp, url_prefix="/platform/catalog")
+    app.register_blueprint(platform_import_bp, url_prefix="/platform/import")
 
     app.jinja_env.globals["modules"] = MODULES
 

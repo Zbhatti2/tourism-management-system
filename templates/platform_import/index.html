@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Data Import{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">Data Import</h1>
+</div>
+<p class="text-muted small">Load platform data from Excel or CSV, one entity at a time. Every file is checked first: you see each row as <strong>New</strong>, <strong>Update</strong>, <strong>Possible duplicate</strong> or <strong>Problem</strong> and decide the duplicates before anything is saved. Updates only fill empty fields, and notes are added, never replaced. Load <strong>Cities</strong> first: the other templates refer to cities by name.</p>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="list-group list-group-flush">
+        {% for c in cards %}
+        <a href="{{ url_for('platform_import.index', entity=c.key) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-start {{ 'active' if selected == c.key else '' }}">
+          <div class="me-3">
+            <div class="fw-semibold">{{ c.order }}. {{ c.label }}</div>
+            <div class="small {{ '' if selected == c.key else 'text-muted' }}">{{ c.purpose }}</div>
+          </div>
+          <span class="badge {{ 'bg-light text-dark' if selected == c.key else 'bg-secondary-subtle text-dark' }} text-nowrap">{{ "{:,}".format(c.count) }} on file</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    {% if selected %}
+    {% set spec = entities[selected] %}
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h5">{{ spec.label }}</h2>
+        <p class="small text-muted mb-2"><strong>Matching:</strong> {{ spec.match }}</p>
+        <a href="{{ url_for('platform_import.template', entity=selected) }}" class="btn btn-outline-secondary btn-sm mb-3"><i class="bi bi-file-earmark-spreadsheet"></i> Download blank template</a>
+        <form method="post" action="{{ url_for('platform_import.upload') }}" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="entity" value="{{ selected }}">
+          <div class="mb-3">
+            <label class="form-label" for="file">Filled template (.xlsx or .csv)</label>
+            <input class="form-control" type="file" id="file" name="file" accept=".xlsx,.xlsm,.csv" required>
+          </div>
+          {% if selected not in ('cities', 'distances') %}
+          <div class="mb-3">
+            <div class="form-label">Mode</div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="mode" id="mode_normal" value="normal" checked>
+              <label class="form-check-label" for="mode_normal"><strong>Normal</strong>: add new records and fill empty fields of existing ones</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="mode" id="mode_notes" value="notes">
+              <label class="form-check-label" for="mode_notes"><strong>Notes only</strong>: only the name, Country, City and Notes columns are read; the notes are added to matching records. Never creates records.</label></div>
+          </div>
+          {% endif %}
+          {% if selected != 'distances' %}
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="create_places" id="create_places" value="1" {{ 'checked' if selected == 'cities' else '' }}>
+            <label class="form-check-label" for="create_places">Add missing provinces and cities to TMS geography</label>
+            <div class="form-text">Off: a row in a city TMS doesn't know is listed as a problem. You can change this on the preview.</div>
+          </div>
+          {% endif %}
+          <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i> Check file</button>
+          <div class="form-text">Nothing is saved at this step.</div>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm border-0"><div class="card-body text-muted small">Choose what you're importing on the left.</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<h2 class="h6 text-muted text-uppercase mt-4">Recent files</h2>
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead><tr><th>#</th><th>File</th><th>What</th><th>Mode</th><th>Rows</th><th>Status</th><th>When</th><th>By</th></tr></thead>
+      <tbody>
+        {% for r in runs %}
+        <tr onclick="window.location='{{ url_for('platform_import.run', run_id=r.run_id) }}'" style="cursor:pointer;">
+          <td class="small">{{ r.run_id }}</td>
+          <td class="small">{{ r.file_name }}</td>
+          <td class="small">{{ entities[r.entity].label }}</td>
+          <td class="small">{{ 'Notes only' if r.mode == 'notes' else 'Normal' }}</td>
+          <td class="small">{{ r.row_count }}</td>
+          <td>{% if r.status == 'imported' %}<span class="badge bg-success-subtle text-success">Imported</span>{% elif r.status == 'discarded' %}<span class="badge bg-secondary-subtle text-dark">Discarded</span>{% else %}<span class="badge bg-warning-subtle text-warning-emphasis">Awaiting review</span>{% endif %}</td>
+          <td class="small text-muted text-nowrap">{{ r.imported_at or r.created_at }}</td>
+          <td class="small text-muted">{{ r.username or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No files yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

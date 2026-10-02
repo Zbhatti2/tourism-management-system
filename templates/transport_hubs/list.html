@@ -7,6 +7,9 @@
     <h1 class="h3 mb-0">Transport Hubs</h1>
   </div>
   <div class="d-flex gap-2">
+    <a href="{{ url_for('platform_import.index', entity='hubs') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-upload"></i> Import</a>
+    <a href="{{ url_for('platform_catalog.duplicates', entity='hubs') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-intersect"></i> Find duplicates</a>
+    <a href="{{ url_for('platform_catalog.merge_log', entity='hubs') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history"></i> Merge log</a>
     <a href="{{ url_for('platform_lookups.index', table='hub_types') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-list-ul"></i> Hub Types</a>
     <a href="{{ url_for('transport_hubs.new_hub') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> New Hub</a>
   </div>

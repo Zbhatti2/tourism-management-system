@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Import #{{ run.run_id }}{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('platform_import.index', entity=run.entity) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Data Import</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">{{ spec.label }} — {{ run.file_name }}</h1>
+    <div class="small text-muted">{{ 'Notes only' if run.mode == 'notes' else 'Normal' }} import · {{ all_count }} row{{ 's' if all_count != 1 else '' }} ·
+      {% if run.status == 'imported' %}<span class="text-success fw-semibold">imported {{ run.imported_at }}</span>{% elif run.status == 'discarded' %}discarded{% else %}<span class="fw-semibold">not saved yet</span>{% endif %}</div>
+  </div>
+  {% if run.status == 'previewed' %}
+  <form method="post" action="{{ url_for('platform_import.discard', run_id=run.run_id) }}" onsubmit="return confirm('Discard this preview?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-outline-secondary btn-sm" type="submit">Discard</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if result_counts %}
+<div class="alert alert-success small py-2">Result: {% for k, v in result_counts.items() if v %}<strong>{{ v }}</strong> {{ k }}{{ ', ' if not loop.last }}{% endfor %}.</div>
+{% endif %}
+
+<ul class="nav nav-pills small mb-3">
+  <li class="nav-item"><a class="nav-link {{ 'active' if show == 'all' else '' }}" href="{{ url_for('platform_import.run', run_id=run.run_id) }}">All <span class="badge bg-secondary-subtle text-dark">{{ all_count }}</span></a></li>
+  {% for k, label in labels.items() %}
+  <li class="nav-item"><a class="nav-link {{ 'active' if show == k else '' }}" href="{{ url_for('platform_import.run', run_id=run.run_id, show=k) }}">{{ label }} <span class="badge {{ {'new':'bg-success-subtle text-success','update':'bg-primary-subtle text-primary','duplicate':'bg-warning-subtle text-warning-emphasis','problem':'bg-danger-subtle text-danger'}[k] }}">{{ counts[k] }}</span></a></li>
+  {% endfor %}
+</ul>
+
+{% if run.status == 'previewed' and run.entity != 'distances' %}
+<form method="post" action="{{ url_for('platform_import.recheck', run_id=run.run_id) }}" class="d-flex align-items-center gap-2 mb-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="create_places" id="create_places" value="1" {{ 'checked' if options.create_places else '' }}>
+    <label class="form-check-label small" for="create_places">Add missing provinces and cities to TMS geography</label></div>
+  <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> Check again</button>
+</form>
+{% endif %}
+
+<form method="post" action="{{ url_for('platform_import.do_import', run_id=run.run_id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card shadow-sm border-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead><tr><th>Row</th><th>{{ 'Cities' if run.entity == 'distances' else 'Name' }}</th>{% if run.entity != 'distances' %}<th>City</th>{% endif %}<th>Status</th><th>Details</th><th style="min-width: 180px;">{{ 'Result' if run.status == 'imported' else 'Decision' }}</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td class="small text-muted">{{ r.row_num }}</td>
+            <td class="small fw-semibold">{{ r.name }}</td>
+            {% if run.entity != 'distances' %}<td class="small">{{ r.city }}</td>{% endif %}
+            <td><span class="badge {{ {'new':'bg-success-subtle text-success','update':'bg-primary-subtle text-primary','duplicate':'bg-warning-subtle text-warning-emphasis','problem':'bg-danger-subtle text-danger'}[r.status] }}">{{ labels[r.status] }}</span></td>
+            <td class="small">
+              {{ r.message or '' }}
+              {% if r.status == 'update' and r.match_url %}<a href="{{ r.match_url }}" target="_blank">{{ r.match_label or 'existing record' }}</a>{% if run.mode == 'notes' %}: notes will be added{% else %}: empty fields will be filled{% endif %}{% endif %}
+              {% if r.status == 'duplicate' and r.match_url %}<a href="{{ r.match_url }}" target="_blank" class="ms-1"><i class="bi bi-box-arrow-up-right"></i> view</a>{% endif %}
+            </td>
+            <td class="small">
+              {% if run.status == 'imported' %}{{ r.result or '' }}
+              {% elif r.status == 'duplicate' %}
+              <select class="form-select form-select-sm" name="decision_{{ r.row_num }}">
+                <option value="merge" {{ 'selected' if r.decision == 'merge' else '' }}>{{ 'Add notes to it' if run.mode == 'notes' else 'Merge into it' }}</option>
+                {% if run.mode != 'notes' %}<option value="new" {{ 'selected' if r.decision == 'new' else '' }}>Keep as new</option>{% endif %}
+                <option value="skip" {{ 'selected' if r.decision == 'skip' else '' }}>Skip</option>
+              </select>
+              {% elif r.status == 'problem' %}<span class="text-muted">Not imported</span>
+              {% elif r.status == 'new' %}<span class="text-muted">Add</span>
+              {% else %}<span class="text-muted">{{ 'Add notes' if run.mode == 'notes' else 'Fill empty fields' }}</span>{% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No rows in this view.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if run.status == 'previewed' %}
+    <div class="card-footer bg-white d-flex align-items-center gap-3">
+      <button class="btn btn-primary" type="submit" onclick="return confirm('Import now? Rows marked Problem are left out.');"><i class="bi bi-check2-circle"></i> Import</button>
+      <span class="small text-muted">{{ counts['new'] }} new · {{ counts['update'] }} update{{ 's' if counts['update'] != 1 }} · {{ counts['duplicate'] }} to decide · {{ counts['problem'] }} problem{{ 's' if counts['problem'] != 1 }} (left out){% if show != 'all' %} · decisions on rows not shown keep their current setting{% endif %}</span>
+    </div>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}

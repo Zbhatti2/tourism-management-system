@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — {{ spec.label }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">{{ spec.label }}</h1>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('platform_import.index', entity=entity) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-upload"></i> Import</a>
+    <a href="{{ url_for('platform_catalog.duplicates', entity=entity) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-intersect"></i> Find duplicates</a>
+    <a href="{{ url_for('platform_catalog.merge_log', entity=entity) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history"></i> Merge log</a>
+    <a href="{{ url_for('platform_catalog.new_record', entity=entity) }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> New {{ spec.singular }}</a>
+  </div>
+</div>
+<p class="text-muted small">Shared platform catalog: tenants adopt records from here into their own lists. Only TMS maintains it.</p>
+
+<form method="get" class="mb-3">
+  <div class="row g-2">
+    <div class="col-auto flex-grow-1" style="min-width: 220px;">
+      <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search name, other spellings or notes…">
+    </div>
+    {% if types %}
+    <div class="col-auto">
+      <select class="form-select" name="type">
+        <option value="">All types</option>
+        {% for v, l in types %}<option value="{{ v }}" {{ 'selected' if type_value == v else '' }}>{{ l }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="col-auto">
+      <select class="form-select" name="country_id">
+        <option value="">All countries</option>
+        {% for c in countries %}<option value="{{ c.id }}" {{ 'selected' if country_id == c.id|string else '' }}>{{ c.label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="city">
+        <option value="">All cities</option>
+        {% for c in cities %}<option {{ 'selected' if city == c.label else '' }}>{{ c.label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="show">
+        <option value="active" {{ 'selected' if show == 'active' else '' }}>Active</option>
+        <option value="inactive" {{ 'selected' if show == 'inactive' else '' }}>Inactive</option>
+        <option value="all" {{ 'selected' if show == 'all' else '' }}>All</option>
+      </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-outline-secondary" type="submit">Search</button></div>
+    {% if q or country_id or city or type_value or show != 'active' %}<div class="col-auto"><a class="btn btn-link" href="{{ url_for('platform_catalog.list_records', entity=entity) }}">Clear</a></div>{% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Name</th>{% for col, label in spec.list %}<th>{{ label }}</th>{% endfor %}<th>Map</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr onclick="window.location='{{ url_for('platform_catalog.view_record', entity=entity, rid=r[spec.pk]) }}'" style="cursor:pointer;" class="{{ 'text-muted' if not r.is_active else '' }}">
+          <td><strong>{{ r.name }}</strong>{% if not r.is_active %} <span class="badge bg-secondary-subtle text-dark">Inactive</span>{% endif %}
+            {% if r.alt_names %}<div class="small text-muted">also: {{ r.alt_names.split('\n') | join(', ') }}</div>{% endif %}</td>
+          {% for col, label in spec.list %}
+          <td class="small">{% if col == 'star_rating' and r[col] %}{{ '★' * r[col] }}{% else %}{{ r[col] if r[col] is not none else '' }}{% endif %}</td>
+          {% endfor %}
+          <td class="small">{% if r.latitude is not none %}<i class="bi bi-geo-alt-fill text-success" title="{{ r.latitude }}, {{ r.longitude }}"></i>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ spec.list | length + 2 }}" class="text-center text-muted py-5">Nothing here yet. <a href="{{ url_for('platform_catalog.new_record', entity=entity) }}">Add one</a> or <a href="{{ url_for('platform_import.index', entity=entity) }}">import a file</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if rows %}<div class="card-footer bg-white small text-muted">
+    {% if total > rows | length %}Showing the first {{ rows | length }} of {{ "{:,}".format(total) }} — search or filter to narrow the list.{% else %}{{ "{:,}".format(total) }} record{{ 's' if total != 1 else '' }}{% endif %}
+  </div>{% endif %}
+</div>
+{% endblock %}

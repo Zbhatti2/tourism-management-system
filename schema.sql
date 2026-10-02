@@ -187,7 +187,9 @@ CREATE TABLE cities (
     is_active       INTEGER NOT NULL DEFAULT 1,
     latitude        REAL,                   -- city centre, decimal degrees (Oct 2026)
     longitude       REAL,
-    timezone        TEXT                    -- IANA name, e.g. 'Asia/Karachi'
+    timezone        TEXT,                   -- IANA name, e.g. 'Asia/Karachi'
+    altitude_m      INTEGER,
+    alt_names       TEXT                    -- other spellings, one per line (matched on import)
 );
 CREATE INDEX idx_cities_state ON cities(state_id);
 CREATE UNIQUE INDEX idx_cities_state_label ON cities(state_id, label);
@@ -2670,6 +2672,9 @@ CREATE TABLE IF NOT EXISTS transport_hubs (
     notes           TEXT,
     is_major        INTEGER NOT NULL DEFAULT 1,
     is_active       INTEGER NOT NULL DEFAULT 1,
+    alt_names       TEXT,
+    source          TEXT,
+    checked_on      TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -2687,7 +2692,9 @@ CREATE TABLE IF NOT EXISTS city_distances (
     city_a_id       INTEGER NOT NULL REFERENCES cities(city_id),
     city_b_id       INTEGER NOT NULL REFERENCES cities(city_id),
     road_km         REAL,
-    drive_minutes   INTEGER,                -- typical driving time
+    drive_minutes   INTEGER,                -- typical driving time (lower end of a range)
+    drive_minutes_max INTEGER,              -- upper end of a range, e.g. 150 for "2-2.5 hr"
+    route_name      TEXT,                   -- e.g. M-2, KKH, N-5
     rail_available  TEXT CHECK (rail_available IN ('Yes','No')),
     source          TEXT,                   -- where the figures came from
     verified_on     TEXT,                   -- date last checked (YYYY-MM-DD)
@@ -2698,3 +2705,181 @@ CREATE TABLE IF NOT EXISTS city_distances (
     UNIQUE (city_a_id, city_b_id)
 );
 CREATE INDEX IF NOT EXISTS idx_city_distances_b ON city_distances(city_b_id);
+
+-- MODULE PD -- Platform catalogs, merge log and import staging (Oct 2026). GLOBAL.
+-- Generated from platform_catalog.py (CATALOGS / SUPPORT_DDL); keep in step with it.
+CREATE TABLE IF NOT EXISTS platform_pois (
+    poi_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    alt_names       TEXT,                   -- other spellings / former names, one per line (matched on import)
+    region_id       INTEGER REFERENCES regions(region_id),
+    country_id      INTEGER REFERENCES countries(country_id),
+    state_id        INTEGER REFERENCES states(state_id),
+    state_province_text TEXT,
+    city_id         INTEGER REFERENCES cities(city_id),
+    city_text       TEXT,
+    address         TEXT,
+    latitude        REAL,
+    longitude       REAL,
+    phone           TEXT,
+    email           TEXT,
+    website         TEXT,
+    notes           TEXT,                   -- appended to, never overwritten, by imports
+    source          TEXT,
+    checked_on      TEXT,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    poi_type_id      INTEGER REFERENCES poi_types(poi_type_id),
+    significance     TEXT,
+    year_founded     TEXT,
+    description      TEXT,
+    entry_fee        TEXT,
+    opening_hours    TEXT,
+    image_url        TEXT,
+    video_url        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_platform_pois_city ON platform_pois(city_id);
+CREATE INDEX IF NOT EXISTS idx_platform_pois_country ON platform_pois(country_id);
+CREATE TABLE IF NOT EXISTS platform_accommodation (
+    accommodation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    alt_names       TEXT,                   -- other spellings / former names, one per line (matched on import)
+    region_id       INTEGER REFERENCES regions(region_id),
+    country_id      INTEGER REFERENCES countries(country_id),
+    state_id        INTEGER REFERENCES states(state_id),
+    state_province_text TEXT,
+    city_id         INTEGER REFERENCES cities(city_id),
+    city_text       TEXT,
+    address         TEXT,
+    latitude        REAL,
+    longitude       REAL,
+    phone           TEXT,
+    email           TEXT,
+    website         TEXT,
+    notes           TEXT,                   -- appended to, never overwritten, by imports
+    source          TEXT,
+    checked_on      TEXT,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    property_type    TEXT,
+    star_rating      INTEGER,
+    rating_note      TEXT,
+    rooms            INTEGER,
+    currency         TEXT,
+    rate_single      REAL,
+    rate_double      REAL,
+    rate_year        INTEGER,
+    amen_dining      INTEGER,
+    amen_pool        INTEGER,
+    amen_gym         INTEGER,
+    amen_room_service INTEGER,
+    amen_parking     INTEGER,
+    amen_internet    INTEGER,
+    amen_business_center INTEGER,
+    amen_pets        INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_platform_accommodation_city ON platform_accommodation(city_id);
+CREATE INDEX IF NOT EXISTS idx_platform_accommodation_country ON platform_accommodation(country_id);
+CREATE TABLE IF NOT EXISTS platform_restaurants (
+    restaurant_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    alt_names       TEXT,                   -- other spellings / former names, one per line (matched on import)
+    region_id       INTEGER REFERENCES regions(region_id),
+    country_id      INTEGER REFERENCES countries(country_id),
+    state_id        INTEGER REFERENCES states(state_id),
+    state_province_text TEXT,
+    city_id         INTEGER REFERENCES cities(city_id),
+    city_text       TEXT,
+    address         TEXT,
+    latitude        REAL,
+    longitude       REAL,
+    phone           TEXT,
+    email           TEXT,
+    website         TEXT,
+    notes           TEXT,                   -- appended to, never overwritten, by imports
+    source          TEXT,
+    checked_on      TEXT,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    rating           REAL,
+    class            TEXT,
+    cuisine          TEXT,
+    currency         TEXT,
+    price_from       REAL,
+    price_to         REAL,
+    group_suitable   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_platform_restaurants_city ON platform_restaurants(city_id);
+CREATE INDEX IF NOT EXISTS idx_platform_restaurants_country ON platform_restaurants(country_id);
+CREATE TABLE IF NOT EXISTS embassies (
+    embassy_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    alt_names       TEXT,                   -- other spellings / former names, one per line (matched on import)
+    region_id       INTEGER REFERENCES regions(region_id),
+    country_id      INTEGER REFERENCES countries(country_id),
+    state_id        INTEGER REFERENCES states(state_id),
+    state_province_text TEXT,
+    city_id         INTEGER REFERENCES cities(city_id),
+    city_text       TEXT,
+    address         TEXT,
+    latitude        REAL,
+    longitude       REAL,
+    phone           TEXT,
+    email           TEXT,
+    website         TEXT,
+    notes           TEXT,                   -- appended to, never overwritten, by imports
+    source          TEXT,
+    checked_on      TEXT,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    represented_country_id INTEGER REFERENCES countries(country_id),
+    mission_type     TEXT,
+    landmark         TEXT,
+    visa_phone       TEXT,
+    fax              TEXT,
+    other_source     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_embassies_city ON embassies(city_id);
+CREATE INDEX IF NOT EXISTS idx_embassies_country ON embassies(country_id);
+CREATE TABLE IF NOT EXISTS platform_merge_log (
+    merge_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity          TEXT NOT NULL,          -- key in platform_catalog.MERGEABLE, or 'cities'
+    kept_id         INTEGER NOT NULL,
+    removed_id      INTEGER NOT NULL,
+    kept_before     TEXT NOT NULL,          -- JSON snapshot of the kept row before the merge
+    removed_row     TEXT NOT NULL,          -- JSON snapshot of the merged-away row
+    repointed       TEXT,                   -- JSON list of [table, column, rowid] links moved to the kept row
+    merged_by       INTEGER REFERENCES users(user_id),
+    merged_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    undone_at       TEXT,
+    undone_by       INTEGER REFERENCES users(user_id)
+);
+CREATE TABLE IF NOT EXISTS platform_import_runs (
+    run_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity          TEXT NOT NULL,
+    mode            TEXT NOT NULL DEFAULT 'normal' CHECK (mode IN ('normal','notes')),
+    file_name       TEXT,
+    options         TEXT,                   -- JSON
+    status          TEXT NOT NULL DEFAULT 'previewed' CHECK (status IN ('previewed','imported','discarded')),
+    summary         TEXT,                   -- JSON counts after import
+    created_by      INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    imported_at     TEXT
+);
+CREATE TABLE IF NOT EXISTS platform_import_rows (
+    run_id          INTEGER NOT NULL REFERENCES platform_import_runs(run_id),
+    row_num         INTEGER NOT NULL,       -- spreadsheet row number
+    data            TEXT NOT NULL,          -- JSON: cleaned values keyed by template column
+    status          TEXT NOT NULL,          -- new / update / duplicate / problem
+    match_id        INTEGER,                -- existing record (or earlier row, see match_row) it matches
+    match_row       INTEGER,                -- earlier row in the same file it duplicates
+    match_label     TEXT,
+    message         TEXT,
+    decision        TEXT,                   -- for duplicates: merge / new / skip
+    result          TEXT,                   -- after import: created / updated / skipped / failed
+    PRIMARY KEY (run_id, row_num)
+);
