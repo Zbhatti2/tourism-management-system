@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — AI Usage{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">AI Usage</h1>
+    <div class="small text-muted">AI spend per tenant (billable to them) and by platform agents (a platform cost), at list prices.</div>
+  </div>
+  <form method="get"><select class="form-select form-select-sm" name="month" onchange="this.form.submit()">
+    {% for m in months %}<option value="{{ m }}" {{ 'selected' if m == month else '' }}>{{ m }}</option>{% endfor %}</select></form>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle">
+      <thead><tr><th>Tenant</th><th class="text-end">Calls</th><th class="text-end">Tokens in / out</th><th class="text-end">Web searches</th>
+        <th class="text-end">Cost in {{ month }}</th><th style="width: 260px;">Monthly allowance</th></tr></thead>
+      <tbody>
+        {% for row in tenants %}
+        {% set u = row.u %}
+        <tr>
+          <td class="fw-semibold">{{ row.t.tenant_name }} <span class="small text-muted fw-normal">{{ row.t.account_number }}</span></td>
+          <td class="text-end small">{{ u.calls if u else 0 }}</td>
+          <td class="text-end small">{% if u %}{{ '{:,}'.format(u.input_tokens or 0) }} / {{ '{:,}'.format(u.output_tokens or 0) }}{% else %}—{% endif %}</td>
+          <td class="text-end small">{{ u.web_searches if u else 0 }}</td>
+          <td class="text-end fw-semibold">${{ '%.2f'|format(u.cost_usd if u else 0) }}</td>
+          <td>
+            <form method="post" action="{{ url_for('platform_ai_usage.set_limit', tenant_id=row.t.tenant_id) }}" class="d-flex gap-1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="month" value="{{ month }}">
+              <div class="input-group input-group-sm"><span class="input-group-text">$</span>
+                <input class="form-control" name="limit" value="{{ '%.2f'|format(row.t.ai_monthly_limit_usd) if row.t.ai_monthly_limit_usd is not none else '' }}" placeholder="No limit"></div>
+              <button class="btn btn-sm btn-outline-secondary" type="submit">Set</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        <tr class="table-light">
+          <td class="fw-semibold">Platform agents <span class="small text-muted fw-normal">(platform cost)</span></td>
+          <td class="text-end small">{{ platform.calls if platform else 0 }}</td>
+          <td class="text-end small">{% if platform %}{{ '{:,}'.format(platform.input_tokens or 0) }} / {{ '{:,}'.format(platform.output_tokens or 0) }}{% else %}—{% endif %}</td>
+          <td class="text-end small">{{ platform.web_searches if platform else 0 }}</td>
+          <td class="text-end fw-semibold">${{ '%.2f'|format(platform.cost_usd if platform else 0) }}</td><td></td>
+        </tr>
+      </tbody>
+      <tfoot><tr><th colspan="4">Total</th><th class="text-end">${{ '%.2f'|format(total) }}</th><th></th></tr></tfoot>
+    </table>
+  </div>
+</div>
+<p class="small text-muted mt-2">Costs use Anthropic's list prices (ai_usage.py) and include web searches at $10 per 1,000. A tenant whose allowance is used up can't start new agent runs until the next month.</p>
+{% endblock %}

@@ -125,8 +125,8 @@ ENTITIES = {
     },
     "accommodation": {
         "label": "Accommodation", "order": 5, "name_col": "Property Name",
-        "purpose": "Hotels, resorts and guest houses for the platform Accommodation catalog. Rates are indicative "
-                   "only; each tenant keeps its own contracted rates.",
+        "purpose": "Hotels, resorts and guest houses for the platform Accommodation catalog. No rates: each "
+                   "tenant keeps its own (rate columns in older files are ignored).",
         "match": "Property Name + City (other spellings included), or the same type within 150 m. An existing "
                  "property only has its empty fields filled.",
         "cols": [("Property Name", True, "", "name"),
@@ -134,14 +134,9 @@ ENTITIES = {
                  ("Star Rating", False, "5, 4, 3, 2 or 1: official or class rating", "star_rating"),
                  ("Rating (as published)", False, "e.g. 4-star heritage, Boutique / 3-star class", "rating_note")] + GEO_COLS +
                 [("Address / Landmark", False, "", "address")] + COORD_COLS + [PHONE, EMAIL, WEB] +
-                [("No. of Rooms", False, "Whole number", "rooms"),
-                 ("Currency", False, "PKR, USD, CNY, …", "currency"),
-                 ("Avg Rate Single / Queen", False, "Number only, per night", "rate_single"),
-                 ("Avg Rate Double / King", False, "Number only, per night", "rate_double"),
-                 ("Rate Year", False, "Year the rates apply to", "rate_year")] +
+                [("No. of Rooms", False, "Whole number", "rooms")] +
                 [(label, False, "Y or N", col) for col, label in AMENITIES] + TAIL,
-        "lists": dict({"Property Type": PROPERTY_TYPES, "Star Rating": [5, 4, 3, 2, 1],
-                       "Currency": ["PKR", "USD", "CNY", "EUR", "GBP", "AED"]},
+        "lists": dict({"Property Type": PROPERTY_TYPES, "Star Rating": [5, 4, 3, 2, 1]},
                       **{label: ["Y", "N"] for _c, label in AMENITIES}),
     },
     "restaurants": {
@@ -181,8 +176,8 @@ ENTITIES = {
     },
 }
 ORDERED = sorted(ENTITIES, key=lambda k: ENTITIES[k]["order"])
-INT_COLS = {"star_rating", "rooms", "rate_year", "altitude_m"}
-REAL_COLS = {"latitude", "longitude", "rating", "rate_single", "rate_double", "price_from", "price_to", "road_km"}
+INT_COLS = {"star_rating", "rooms", "altitude_m"}
+REAL_COLS = {"latitude", "longitude", "rating", "price_from", "price_to", "road_km"}
 YN_COLS = {"is_major", "group_suitable"} | {c for c, _l in AMENITIES}
 
 

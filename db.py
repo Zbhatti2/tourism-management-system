@@ -696,6 +696,32 @@ def _migration_image_catalog(db):
     db.commit()
 
 
+def _migration_ai_metering_image_collector(db):
+    """AI usage metering (ai_usage.py: every Claude API call logged against
+    its tenant, with cost; tenants.ai_monthly_limit_usd = optional monthly
+    allowance) and the AI Image Collector's runs (image_collector.py)."""
+    import ai_usage
+    import image_collector
+    db.executescript(ai_usage.DDL)
+    db.executescript(image_collector.DDL)
+    if not _column_exists(db, "tenants", "ai_monthly_limit_usd"):
+        db.execute("ALTER TABLE tenants ADD COLUMN ai_monthly_limit_usd REAL")
+    db.commit()
+
+
+def _migration_drop_platform_hotel_rates(db):
+    """Hotel rates are tenant-level (Zeb, Oct 2026): the platform
+    Accommodation catalog no longer holds rates. Drops its currency /
+    rate_single / rate_double / rate_year columns; tenants keep their own
+    rates in their Supplier records."""
+    if not _table_exists(db, "platform_accommodation"):
+        return
+    for col in ("rate_single", "rate_double", "rate_year", "currency"):
+        if _column_exists(db, "platform_accommodation", col):
+            db.execute(f"ALTER TABLE platform_accommodation DROP COLUMN {col}")
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -716,6 +742,8 @@ MIGRATIONS = [
     ("2026_10_platform_catalogs", _migration_platform_catalogs),
     ("2026_10_catalog_sync", _migration_catalog_sync),
     ("2026_10_image_catalog", _migration_image_catalog),
+    ("2026_10_ai_metering_image_collector", _migration_ai_metering_image_collector),
+    ("2026_10_drop_platform_hotel_rates", _migration_drop_platform_hotel_rates),
 ]
 
 

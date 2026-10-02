@@ -30,7 +30,7 @@ For each field, choose:
 
 Each record that came from the catalog has a **From the Platform
 Catalog** section. Open it to see the catalog's extra details, such as
-entry fees, opening hours, star ratings, room rates, cuisine and
+entry fees, opening hours, star ratings, cuisine and
 images. These details always show the latest catalog information.
 Your own notes, contacts, rooms, prices and documents are yours alone
 and are never changed by the catalog.

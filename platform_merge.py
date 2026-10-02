@@ -208,8 +208,11 @@ def undo_merge(db, merge_id, user_id=None):
     t, pk = spec["table"], spec["pk"]
     if db.execute(f"SELECT 1 FROM {t} WHERE {pk} = ?", (log["removed_id"],)).fetchone():
         raise ValueError("The merged-away record's id is in use again; it can't be restored automatically.")
-    kept_before = json.loads(log["kept_before"])
-    removed_row = json.loads(log["removed_row"])
+    # Snapshots only restore columns the table still has (a column may have
+    # been dropped since, e.g. the Accommodation rate columns in Oct 2026).
+    live = {r[1] for r in db.execute(f"PRAGMA table_info({t})")}
+    kept_before = {k: v for k, v in json.loads(log["kept_before"]).items() if k in live}
+    removed_row = {k: v for k, v in json.loads(log["removed_row"]).items() if k in live}
     cols = [c for c in kept_before if c != pk]
     db.execute(f"UPDATE {t} SET {', '.join(f'{c} = ?' for c in cols)} WHERE {pk} = ?",
                tuple(kept_before[c] for c in cols) + (log["kept_id"],))
