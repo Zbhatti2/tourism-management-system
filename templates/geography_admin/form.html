@@ -2,7 +2,7 @@
 {% block title %}{{ "Edit" if entry else "New" }} {{ cfg.label }} Entry{% endblock %}
 {% block content %}
 <h1 class="h4 mb-1">{{ "Edit" if entry else "New" }} {{ cfg.label }} Entry</h1>
-<p class="text-muted small mb-4">Shared across every tenant — see the note on the Geography Maintenance page.</p>
+<p class="text-muted small mb-4">Shared across every tenant — see the note on the Geography &amp; Distances page.</p>
 <form method="post" class="card shadow-sm border-0" style="max-width: 560px;">
   <div class="card-body">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

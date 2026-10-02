@@ -82,6 +82,27 @@ MODULES = [
     {"key": "tenants_admin", "label": "Tenant Management", "icon": "diagram-3", "endpoint": "tenants_admin.list_tenants",
      "roles": ["SystemAdmin"]},
     {"key": "system_mgmt", "label": "System Management", "icon": "gear", "endpoint": "system_mgmt.index"},
+    # Platform Admin menu (SystemAdmin only) -- the shared platform data
+    # every tenant draws on; see claude/TMS-Platform-Data-Plan.md. Listed
+    # after System Management so a tenant's sidebar is unchanged (these are
+    # all hidden from tenants) while the SystemAdmin's reads Tenant
+    # Management, System Management, then the data screens. Entries whose
+    # screen isn't built yet point at a platform_data "coming soon" page;
+    # base.html highlights them by endpoint since they share a blueprint.
+    {"key": "transport_hubs", "label": "Transport Hubs", "icon": "airplane", "endpoint": "platform_data.transport_hubs",
+     "roles": ["SystemAdmin"]},
+    {"key": "platform_pois", "label": "Points of Interest", "icon": "geo-alt", "endpoint": "platform_data.pois",
+     "roles": ["SystemAdmin"]},
+    {"key": "geography_admin", "label": "Geography & Distances", "icon": "globe-americas", "endpoint": "geography_admin.index",
+     "roles": ["SystemAdmin"]},
+    {"key": "embassies", "label": "Embassies & Consulates", "icon": "flag", "endpoint": "platform_data.embassies",
+     "roles": ["SystemAdmin"]},
+    {"key": "accommodation", "label": "Accommodation", "icon": "building", "endpoint": "platform_data.accommodation",
+     "roles": ["SystemAdmin"]},
+    {"key": "restaurants", "label": "Restaurants", "icon": "cup-hot", "endpoint": "platform_data.restaurants",
+     "roles": ["SystemAdmin"]},
+    {"key": "currency_admin", "label": "Currencies", "icon": "currency-exchange", "endpoint": "currency_admin.index",
+     "roles": ["SystemAdmin"]},
     # Locked lookup codes every tenant shares (platform_lookups.py).
     {"key": "platform_lookups", "label": "Platform Lookups", "icon": "tags", "endpoint": "platform_lookups.index",
      "roles": ["SystemAdmin"]},
@@ -141,6 +162,7 @@ def create_app():
     from blueprints.users import users_bp
     from blueprints.tenants_admin import tenants_admin_bp
     from blueprints.platform_lookups import platform_lookups_bp
+    from blueprints.platform_data import platform_data_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -173,6 +195,7 @@ def create_app():
     app.register_blueprint(users_bp, url_prefix="/users")
     app.register_blueprint(tenants_admin_bp, url_prefix="/platform/tenants")
     app.register_blueprint(platform_lookups_bp, url_prefix="/platform/lookups")
+    app.register_blueprint(platform_data_bp, url_prefix="/platform")
 
     app.jinja_env.globals["modules"] = MODULES
 

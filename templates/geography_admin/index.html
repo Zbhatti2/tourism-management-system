@@ -1,14 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Geography Maintenance{% endblock %}
+{% block title %}Geography &amp; Distances{% endblock %}
 {% block content %}
-<nav class="mb-2">
-  <a href="{{ url_for('table_maintenance.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Table Maintenance</a>
-</nav>
-<h1 class="h3 mb-2">Geography Maintenance</h1>
+<div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+<h1 class="h3 mb-2">Geography &amp; Distances</h1>
 <p class="text-muted mb-4">
   Add, edit, deactivate, or delete entries in the Region / Country / Province / City hierarchy used by every address
-  form. <strong>These four tables are shared across every tenant</strong> — unlike the tenant-owned lists under Table
-  Maintenance, a change here (a relabel, a merge, a delete) is visible to, and affects, every tenant, not just yours.
+  form. <strong>These four tables are shared across every tenant</strong> — a change here (a relabel, a merge, a delete)
+  is visible to, and affects, every tenant. City coordinates and distances between cities will be added here next.
 </p>
 
 <div class="row g-3">

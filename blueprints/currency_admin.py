@@ -37,13 +37,18 @@ history" split `supplier_rooms`/`supplier_room_price_history` already
 uses ("Zeb: Pricing will change over time so I need to track history").
 USD itself is exempt — it's the fixed 1.0 base rate seeded once by
 seed_data.seed_global_lookups(), never manually re-entered.
+
+Since Oct 2026 this screen is SystemAdmin-only ("Currencies" in the
+Platform Admin sidebar): currencies and exchange rates are shared platform
+data (Group A of the platform master-data plan). Tenants still choose
+their own Host Currency on System Management.
 """
 import sqlite3
 from datetime import date
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
-from auth.decorators import tenant_admin_required
+from auth.decorators import system_admin_required
 from db import get_db, log_action
 
 currency_admin_bp = Blueprint("currency_admin", __name__)
@@ -72,7 +77,7 @@ def _get_currency(db, code):
 
 
 @currency_admin_bp.route("/")
-@tenant_admin_required
+@system_admin_required
 def index():
     db = get_db()
     q = request.args.get("q", "").strip()
@@ -95,7 +100,7 @@ def index():
 
 
 @currency_admin_bp.route("/new", methods=["GET", "POST"])
-@tenant_admin_required
+@system_admin_required
 def new_currency():
     db = get_db()
     if request.method == "POST":
@@ -127,7 +132,7 @@ def new_currency():
 
 
 @currency_admin_bp.route("/<code>/edit", methods=["GET", "POST"])
-@tenant_admin_required
+@system_admin_required
 def edit_currency(code):
     db = get_db()
     currency = _get_currency(db, code)
@@ -152,7 +157,7 @@ def edit_currency(code):
 
 
 @currency_admin_bp.route("/<code>/toggle-active", methods=["POST"])
-@tenant_admin_required
+@system_admin_required
 def toggle_active(code):
     db = get_db()
     currency = _get_currency(db, code)
@@ -165,7 +170,7 @@ def toggle_active(code):
 
 
 @currency_admin_bp.route("/<code>/rate", methods=["GET", "POST"])
-@tenant_admin_required
+@system_admin_required
 def new_rate(code):
     db = get_db()
     currency = _get_currency(db, code)
@@ -205,7 +210,7 @@ def new_rate(code):
 
 
 @currency_admin_bp.route("/<code>/history")
-@tenant_admin_required
+@system_admin_required
 def rate_history(code):
     db = get_db()
     currency = _get_currency(db, code)
