@@ -85,8 +85,7 @@
       and suggests a Title and Description for each. They arrive here as an upload to curate; nothing is added to an album until you do.
       Runs are charged to your organisation's AI usage, typically around 10 cents per hotel or restaurant.
       {% if allowance.limit is not none %}This month: ${{ '%.2f'|format(allowance.spent) }} of your ${{ '%.2f'|format(allowance.limit) }} allowance used.{% endif %}</p>
-    <form method="post" action="{{ url_for('images.collect_many') }}" class="row g-2 align-items-end"
-          onsubmit="return confirm('Start the AI Image Collector? It uses your AI allowance.');">
+    <form method="post" action="{{ url_for('images.collect_many') }}" class="row g-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="col-sm-3"><label class="form-label small text-muted mb-0">Type</label>
         <select class="form-select form-select-sm" name="type"><option value="">Hotels, Resorts &amp; Restaurants</option>
@@ -100,7 +99,10 @@
         <input class="form-control form-control-sm" type="number" name="per_supplier" value="6" min="1" max="20"></div>
       <div class="col-sm-2"><div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="only_empty" id="only_empty" value="1" checked>
         <label class="form-check-label small" for="only_empty">Only those with no photos yet</label></div></div>
-      <div class="col-12"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-stars"></i> Find photos with AI</button></div>
+      <div class="col-12 d-flex align-items-center gap-2">
+        <input class="form-check-input mt-0" type="checkbox" id="ai_ok" required>
+        <label class="form-check-label small" for="ai_ok">I understand this uses our AI allowance</label>
+        <button class="btn btn-outline-primary btn-sm ms-2" type="submit"><i class="bi bi-stars"></i> Find photos with AI</button></div>
     </form>
     {% if runs %}
     <table class="table table-sm small mt-3 mb-0 align-middle">
