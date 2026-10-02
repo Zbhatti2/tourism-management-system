@@ -16,7 +16,7 @@
 <p class="text-muted small mb-3">
   These codes are shared by every tenant and <strong>locked</strong> in each tenant's Table Maintenance, so platform data
   (Accommodation, Restaurants, Points of Interest) always has a matching entry to land in when a tenant adopts it.
-  Changes here are applied to all {{ tenant_total }} tenant{{ 's' if tenant_total != 1 else '' }} immediately.
+  Changes here are applied to every tenant ({{ tenant_total }}) immediately.
   Codes can't be changed once created. Removing an entry never deletes anything in a tenant — their copy just becomes an ordinary, editable entry.
 </p>
 
@@ -28,6 +28,13 @@
     </button>
   </li>
   {% endfor %}
+  {% if hub_types is not none %}
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {{ 'active' if active == 'hub_types' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-hub_types" type="button" role="tab">
+      Transport Hubs <span class="badge bg-secondary-subtle text-dark">{{ hub_types | length }}</span>
+    </button>
+  </li>
+  {% endif %}
 </ul>
 
 <div class="tab-content">
@@ -79,5 +86,46 @@
     </div>
   </div>
   {% endfor %}
+  {% if hub_types is not none %}
+  <div class="tab-pane fade {{ 'show active' if active == 'hub_types' else '' }}" id="tab-hub_types" role="tabpanel">
+    <div class="card shadow-sm border-0 border-top-0 rounded-top-0">
+      <div class="card-body pb-2">
+        <p class="text-muted small mb-0">
+          <strong>Hub Types</strong> — the kinds of <a href="{{ url_for('transport_hubs.list_hubs') }}">Transport Hub</a>.
+          Transport Hubs is one shared list every tenant reads (nothing is copied into tenants), so these aren't locked codes — just the options for a hub's Type.
+          Adding one (e.g. Metro Station, Heliport) is all it takes to start listing hubs of that kind.
+        </p>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead><tr><th>Code</th><th>Label</th><th>Icon</th><th>Sort</th><th>Hubs</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for t in hub_types %}
+            <tr>
+              <td class="text-muted small text-nowrap">{{ t.code }}</td>
+              <td><i class="bi bi-{{ t.icon or 'geo' }} text-muted me-1"></i><strong>{{ t.label }}</strong></td>
+              <td class="small text-muted">{{ t.icon or "" }}</td>
+              <td class="small text-muted">{{ t.sort_order }}</td>
+              <td class="small"><a href="{{ url_for('transport_hubs.list_hubs', hub_type_id=t.hub_type_id, show='all') }}">{{ "{:,}".format(t.hub_count) }}</a></td>
+              <td>{% if t.is_active %}<span class="badge bg-success-subtle text-success">Active</span>{% else %}<span class="badge bg-secondary-subtle text-dark">Inactive</span>{% endif %}</td>
+              <td class="text-end"><a href="{{ url_for('transport_hubs.edit_hub_type', hub_type_id=t.hub_type_id) }}" class="btn btn-outline-secondary btn-sm" title="Edit"><i class="bi bi-pencil"></i></a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <form method="post" action="{{ url_for('transport_hubs.hub_types') }}" class="card-body border-top">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-2 align-items-center">
+          <div class="col-auto small fw-semibold">Add a hub type</div>
+          <div class="col-md-4"><input class="form-control form-control-sm" name="label" placeholder="Label, e.g. Metro Station" required></div>
+          <div class="col-md-3"><input class="form-control form-control-sm" name="icon" placeholder="Icon, e.g. train-lightrail-front"></div>
+          <div class="col-auto"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-plus-lg"></i> Add</button></div>
+        </div>
+        <div class="form-text">Icon names come from Bootstrap Icons (icons.getbootstrap.com).</div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
