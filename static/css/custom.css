@@ -297,3 +297,7 @@ body {
     border-bottom: 1px solid #dee2e6;
   }
 }
+
+/* <details> used as an inline confirm (no browser dialog): hide the disclosure marker. */
+summary.list-unstyled { list-style: none; }
+summary.list-unstyled::-webkit-details-marker { display: none; }

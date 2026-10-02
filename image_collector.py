@@ -74,6 +74,23 @@ class CollectorError(Exception):
     pass
 
 
+def explain_api_error(e):
+    """A plain-language message for API errors that stop the whole run
+    (None for anything else, which only affects one supplier)."""
+    text = str(e)
+    status = getattr(e, "status_code", None)
+    if status == 401 or "authentication_error" in text or "x-api-key" in text:
+        return ("The Anthropic API key on the server was rejected (invalid API key). Check ANTHROPIC_API_KEY in "
+                "the server settings (Coolify > Environment Variables), then restart the app.")
+    if status == 403 or "permission_error" in text:
+        return "The Anthropic API key isn't allowed to use this model or the web search tool (permission error)."
+    if status == 400 and "credit balance" in text.lower():
+        return "The Anthropic account behind the API key is out of credit. Add credit in the Anthropic Console."
+    if status == 404 or "not_found_error" in text:
+        return f"The AI model wasn't found ({text[:160]}). Check ANTHROPIC_MODEL / ANTHROPIC_VISION_MODEL."
+    return None
+
+
 # ---- seams (replaced in tests) ------------------------------------------------------------------
 
 def http_get(url, timeout=15, max_bytes=3 * 1024 * 1024):
@@ -408,7 +425,7 @@ def run_collection(db, run_id):
         sups = suppliers_for(db, tenant_id, json.loads(run["supplier_ids"]))
         single = sups[0]["supplier_id"] if len(sups) == 1 else None
         batch_id = None
-        staged = 0
+        staged = failures = 0
         for s in sups:
             current["name"] = s["supplier_name"]
             over = ai_usage.check_limit(db, tenant_id)
@@ -419,8 +436,12 @@ def run_collection(db, run_id):
             try:
                 files = collect_for_supplier(db, client, tenant_id, s, run["per_supplier"], meter,
                                              lambda t: log("   " + t))
-            except Exception as e:  # one supplier failing doesn't stop the others
-                log(f"   failed: {e}")
+            except Exception as e:
+                fatal = explain_api_error(e)
+                if fatal:  # a bad key or empty account fails every supplier: stop and say why
+                    raise CollectorError(fatal) from e
+                log(f"   failed: {e}")  # one supplier failing doesn't stop the others
+                failures += 1
                 continue
             if not files:
                 continue
@@ -433,12 +454,19 @@ def run_collection(db, run_id):
             staged += len(files)
             db.execute("UPDATE image_agent_runs SET images_staged = ? WHERE run_id = ?", (staged, run_id))
             db.commit()
+        if failures and failures == len(sups):
+            raise CollectorError("Every supplier in this run failed; see Progress for the reasons.")
         log(f"Done: {staged} photo(s) ready to curate." if staged else "Done: no new photos found.")
         db.execute("UPDATE image_agent_runs SET status = 'done', finished_at = datetime('now') WHERE run_id = ?", (run_id,))
         db.commit()
     except Exception as e:
+        msg = explain_api_error(e) or f"{e}"
+        try:
+            log(f"Stopped: {msg}")
+        except Exception:
+            pass
         db.execute("UPDATE image_agent_runs SET status = 'failed', error = ?, finished_at = datetime('now') WHERE run_id = ?",
-                   (f"{e}"[:1000] or traceback.format_exc()[-1000:], run_id))
+                   (msg[:1000] or traceback.format_exc()[-1000:], run_id))
         db.commit()
 
 

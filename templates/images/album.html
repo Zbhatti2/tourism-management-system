@@ -10,11 +10,16 @@
   </div>
   <div class="d-flex gap-2 align-items-start">
     {% if has_album %}
-    <form method="post" action="{{ url_for('images.collect_for_supplier', supplier_id=supplier.supplier_id) }}"
-          onsubmit="return confirm('Search the web for photos of {{ supplier.supplier_name|e }}? This uses your AI allowance (typically around 10 cents per hotel). Nothing is added until you curate it.');">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-outline-primary" type="submit" title="AI Image Collector: finds photos on the official website and similar pages"><i class="bi bi-stars"></i> Find photos with AI</button>
-    </form>
+    <details class="position-relative">
+      <summary class="btn btn-outline-primary list-unstyled" title="AI Image Collector: finds photos on the official website and similar pages"><i class="bi bi-stars"></i> Find photos with AI</summary>
+      <div class="card shadow position-absolute end-0 mt-1 p-3 small" style="width: 300px; z-index: 10;">
+        <p class="mb-2">Search the web for photos of <strong>{{ supplier.supplier_name }}</strong>? This uses your organisation's AI allowance (typically around 10 cents per hotel). Nothing is added until you curate it.</p>
+        <form method="post" action="{{ url_for('images.collect_for_supplier', supplier_id=supplier.supplier_id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-stars"></i> Start</button>
+        </form>
+      </div>
+    </details>
     {% endif %}
     <a href="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add images</a>
   </div>
