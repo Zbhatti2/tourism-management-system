@@ -45,6 +45,7 @@
           <th>Label</th>
           {% if cfg.parent %}<th>{{ cfg.parent.nav_label }}</th>{% endif %}
           {% if cfg.has_description %}<th>Description</th>{% endif %}
+          {% if cfg.has_geo %}<th>Coordinates</th><th>Time zone</th>{% endif %}
           <th>Sort</th>
           <th>Status</th>
           <th>Used by</th>
@@ -58,6 +59,10 @@
           <td><strong>{{ item.row.label }}</strong></td>
           {% if cfg.parent %}<td class="text-muted small">{{ item.row.parent_label or "" }}</td>{% endif %}
           {% if cfg.has_description %}<td class="text-muted small">{{ item.row.description or "" }}</td>{% endif %}
+          {% if cfg.has_geo %}
+          <td class="small text-nowrap">{% if item.row.latitude is not none %}<a href="https://www.google.com/maps?q={{ item.row.latitude }},{{ item.row.longitude }}" target="_blank" rel="noopener">{{ "%.4f"|format(item.row.latitude) }}, {{ "%.4f"|format(item.row.longitude) }}</a>{% else %}<span class="badge bg-warning-subtle text-warning-emphasis">Missing</span>{% endif %}</td>
+          <td class="small text-muted">{{ item.row.timezone or "" }}</td>
+          {% endif %}
           <td class="text-muted small">{{ item.row.sort_order }}</td>
           <td>
             {% if item.row.is_active %}
@@ -91,7 +96,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="{{ 5 + (1 if cfg.has_code else 0) + (1 if cfg.parent else 0) + (1 if cfg.has_description else 0) }}" class="text-center text-muted py-5">
+        <tr><td colspan="{{ 5 + (1 if cfg.has_code else 0) + (1 if cfg.parent else 0) + (1 if cfg.has_description else 0) + (2 if cfg.has_geo else 0) }}" class="text-center text-muted py-5">
           {% if q or parent_filter %}
           No entries match this filter — <a href="{{ url_for('geography_admin.manage', table_key=table_key) }}">clear it</a>.
           {% else %}

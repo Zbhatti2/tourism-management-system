@@ -6,7 +6,7 @@
 <p class="text-muted mb-4">
   Add, edit, deactivate, or delete entries in the Region / Country / Province / City hierarchy used by every address
   form. <strong>These four tables are shared across every tenant</strong> — a change here (a relabel, a merge, a delete)
-  is visible to, and affects, every tenant. City coordinates and distances between cities will be added here next.
+  is visible to, and affects, every tenant.
 </p>
 
 <div class="row g-3">
@@ -28,6 +28,34 @@
     </a>
   </div>
   {% endfor %}
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-md-6">
+    <a href="{{ url_for('geography_admin.distances') }}" class="text-decoration-none">
+      <div class="card shadow-sm border-0 h-100 table-maint-card">
+        <div class="card-body">
+          <h2 class="h6 mb-1 text-dark"><i class="bi bi-signpost-2 me-2 text-muted"></i>Distances between Cities</h2>
+          <p class="text-muted small mb-2">Road distance, drive time and rail link for a pair of cities. The straight-line distance is worked out from the coordinates.</p>
+          <p class="text-muted small mb-0">{{ distance_count }} pair{{ '' if distance_count == 1 else 's' }} on file</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6">
+    <a href="{{ url_for('geography_admin.manage', table_key='cities') }}" class="text-decoration-none">
+      <div class="card shadow-sm border-0 h-100 table-maint-card">
+        <div class="card-body">
+          <h2 class="h6 mb-1 text-dark"><i class="bi bi-geo me-2 text-muted"></i>City coordinates &amp; time zones</h2>
+          <p class="text-muted small mb-2">Used for maps, distances and "nearest airport".</p>
+          <p class="small mb-0">
+            <span class="{{ 'text-success' if geo.with_coords == geo.total else 'text-warning-emphasis' }}">{{ geo.with_coords or 0 }} of {{ geo.total }} cities have coordinates</span>
+            &middot; <span class="text-muted">{{ geo.with_tz or 0 }} have a time zone</span>
+          </p>
+        </div>
+      </div>
+    </a>
+  </div>
 </div>
 
 <style>

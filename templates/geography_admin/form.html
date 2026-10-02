@@ -34,6 +34,24 @@
       <textarea class="form-control" name="description" rows="3">{{ (entry.description | orblank) if entry else '' }}</textarea>
     </div>
     {% endif %}
+    {% if cfg.has_geo %}
+    {% set coords_default = ('%.6f, %.6f' % (entry.latitude, entry.longitude)) if entry and entry.latitude is not none else '' %}
+    <div class="row g-2 mb-3">
+      <div class="col-md-7">
+        <label class="form-label">Coordinates</label>
+        <input class="form-control" name="coordinates" value="{{ request.form.get('coordinates', coords_default) if request.method == 'POST' else coords_default }}" placeholder="31.558, 74.3507">
+        <div class="form-text">City centre — paste from Google Maps (decimal or degrees/minutes/seconds).</div>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Time zone</label>
+        <input class="form-control" name="timezone" list="tz_options" value="{{ request.form.get('timezone', '') if request.method == 'POST' else ((entry.timezone or '') if entry else '') }}" placeholder="Asia/Karachi">
+        <datalist id="tz_options">
+          {% for tz in ['Asia/Karachi','Asia/Kolkata','Asia/Dubai','Asia/Riyadh','Asia/Qatar','Asia/Kuala_Lumpur','Asia/Singapore','Europe/Istanbul','Europe/London','America/New_York','America/Toronto'] %}<option value="{{ tz }}">{% endfor %}
+        </datalist>
+        <div class="form-text">IANA name, e.g. Asia/Karachi.</div>
+      </div>
+    </div>
+    {% endif %}
     <div class="mb-3">
       <label class="form-label">Sort order</label>
       <input type="number" class="form-control" name="sort_order" value="{{ (entry.sort_order | orblank) if entry else 0 }}" style="max-width: 140px;">

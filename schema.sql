@@ -184,7 +184,10 @@ CREATE TABLE cities (
     state_id        INTEGER NOT NULL REFERENCES states(state_id),
     label           TEXT NOT NULL,          -- e.g. 'Lahore'
     sort_order      INTEGER DEFAULT 0,
-    is_active       INTEGER NOT NULL DEFAULT 1
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    latitude        REAL,                   -- city centre, decimal degrees (Oct 2026)
+    longitude       REAL,
+    timezone        TEXT                    -- IANA name, e.g. 'Asia/Karachi'
 );
 CREATE INDEX idx_cities_state ON cities(state_id);
 CREATE UNIQUE INDEX idx_cities_state_label ON cities(state_id, label);
@@ -2674,3 +2677,24 @@ CREATE INDEX IF NOT EXISTS idx_transport_hubs_type ON transport_hubs(hub_type_id
 CREATE INDEX IF NOT EXISTS idx_transport_hubs_country ON transport_hubs(country_id);
 CREATE INDEX IF NOT EXISTS idx_transport_hubs_city ON transport_hubs(city_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_transport_hubs_type_code ON transport_hubs(hub_type_id, code) WHERE code IS NOT NULL;
+
+-- MODULE PD -- Platform Data: distances between cities (Oct 2026). GLOBAL,
+-- maintained by the SystemAdmin on Geography & Distances. Kept identical to
+-- db.py's CITY_DISTANCES_DDL. Straight-line distance is calculated from
+-- cities.latitude/longitude, never stored.
+CREATE TABLE IF NOT EXISTS city_distances (
+    distance_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    city_a_id       INTEGER NOT NULL REFERENCES cities(city_id),
+    city_b_id       INTEGER NOT NULL REFERENCES cities(city_id),
+    road_km         REAL,
+    drive_minutes   INTEGER,                -- typical driving time
+    rail_available  TEXT CHECK (rail_available IN ('Yes','No')),
+    source          TEXT,                   -- where the figures came from
+    verified_on     TEXT,                   -- date last checked (YYYY-MM-DD)
+    notes           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (city_a_id < city_b_id),          -- one row per pair, stored in id order
+    UNIQUE (city_a_id, city_b_id)
+);
+CREATE INDEX IF NOT EXISTS idx_city_distances_b ON city_distances(city_b_id);
