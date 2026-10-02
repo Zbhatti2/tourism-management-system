@@ -1,0 +1,11 @@
+{# One Transport Hub type-ahead (static/js/hub_picker.js). Expects:
+   field (form field name), label, hub_id, hub_label, and optionally
+   types ('AIRPORT'), country_input (id of a country select), help, placeholder. #}
+<label class="form-label" for="{{ field }}_text">{{ label }}</label>
+<div class="hub-picker position-relative" data-url="{{ url_for('transport_hubs.lookup') }}"
+     data-types="{{ types or '' }}" data-country-input="{{ country_input or '' }}">
+  <input type="text" class="form-control hub-picker-text" id="{{ field }}_text" autocomplete="off"
+         value="{{ hub_label or '' }}" placeholder="{{ placeholder or 'Type a name, code or city…' }}">
+  <input type="hidden" name="{{ field }}" class="hub-picker-id" value="{{ hub_id or '' }}">
+</div>
+{% if help %}<div class="form-text">{{ help }}</div>{% endif %}

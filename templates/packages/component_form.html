@@ -168,6 +168,18 @@
         <div class="form-text">Shows this line in its own "Airline Tickets" section on the package page, instead of Entire Tour Services.</div>
       </div>
     </div>
+    <div class="row g-2 mb-3" id="ticket_hubs">
+      <div class="col-md-6">
+        {% set from_id = (form_values.get('from_hub_id') if form_values else (component.from_hub_id if component else None)) %}
+        {% with field="from_hub_id", label="From airport", hub_id=from_id, hub_label=hub_label_for(from_id | int if from_id else None),
+                types="AIRPORT", placeholder="e.g. LHE or Lahore" %}{% include "_hub_picker.html" %}{% endwith %}
+      </div>
+      <div class="col-md-6">
+        {% set to_id = (form_values.get('to_hub_id') if form_values else (component.to_hub_id if component else None)) %}
+        {% with field="to_hub_id", label="To airport", hub_id=to_id, hub_label=hub_label_for(to_id | int if to_id else None),
+                types="AIRPORT", placeholder="e.g. DXB or Dubai" %}{% include "_hub_picker.html" %}{% endwith %}
+      </div>
+    </div>
     {% endif %}
     {% endif %}
 
@@ -232,6 +244,18 @@
 </form>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/hub_picker.js') }}"></script>
+<script>
+  // From/To airports only apply to an Airline Ticket line.
+  (function () {
+    var check = document.getElementById("is_airline_ticket_check");
+    var hubs = document.getElementById("ticket_hubs");
+    if (!check || !hubs) return;
+    function sync() { hubs.classList.toggle("d-none", !check.checked); }
+    check.addEventListener("change", sync);
+    sync();
+  })();
+</script>
 <script>
   (function () {
     var typeSelect = document.getElementById("component_type");

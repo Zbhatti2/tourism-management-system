@@ -13,7 +13,7 @@ migrate_add_knowledge_graph_edges.py for the table's creation on an
 existing live database.
 """
 
-ENTITY_TYPES = ("Supplier", "PointOfInterest", "City", "Organization", "Contact")
+ENTITY_TYPES = ("Supplier", "PointOfInterest", "City", "Organization", "Contact", "TransportHub")
 
 # entity_type -> (table, id_column, label expression)
 _ENTITY_LABEL_QUERIES = {
@@ -22,6 +22,9 @@ _ENTITY_LABEL_QUERIES = {
     "City": ("SELECT label FROM cities WHERE city_id = ?", None),
     "Organization": ("SELECT organization_name AS label FROM organizations WHERE organization_id = ?", None),
     "Contact": ("SELECT full_name AS label FROM contacts WHERE contact_id = ?", None),
+    # Shared platform table (no tenant_id) -- airports, stations, etc.
+    "TransportHub": ("SELECT name || COALESCE(' (' || code || ')', '') AS label FROM transport_hubs WHERE hub_id = ?",
+                     None),
 }
 
 # entity_type -> (blueprint.endpoint, url_for kwarg name) for a clickable
@@ -33,6 +36,7 @@ _ENTITY_VIEW_ROUTES = {
     "Organization": ("organizations.view_organization", "org_id"),
     "Contact": ("contacts.view_contact", "contact_id"),
     "City": (None, None),
+    "TransportHub": (None, None),  # its detail page is SystemAdmin-only
 }
 
 

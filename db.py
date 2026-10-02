@@ -473,6 +473,100 @@ def _migration_load_major_airports(db):
     db.commit()
 
 
+def _migration_package_hubs(db):
+    """Links Transport Hubs into Packages and retires the Airport /
+    Railway Station POIs they replace.
+
+    1. package_route_stops gains arrival_hub_id / departure_hub_id, and
+       package_components gains from_hub_id / to_hub_id (used by Airline
+       Tickets) -- all pointing at the shared transport_hubs table.
+    2. knowledge_graph_edges is rebuilt so its subject/object type CHECK
+       also allows 'TransportHub' (SQLite can't alter a CHECK in place).
+    3. Every tenant POI of type Airport or Railway Station that has a
+       matching hub (same type, same name) is retired: its knowledge-graph
+       links are moved to the hub, and the POI is soft-deleted
+       (is_deleted = 1), so its images and links stay on file. A POI still
+       used on a package Day is left alone. Those two POI Types are then
+       deactivated in every tenant that no longer has live POIs of them, so
+       nobody adds new airport/station POIs by mistake."""
+    for table, cols in (("package_route_stops", ("arrival_hub_id", "departure_hub_id")),
+                        ("package_components", ("from_hub_id", "to_hub_id"))):
+        for col in cols:
+            if not _column_exists(db, table, col):
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {col} INTEGER REFERENCES transport_hubs(hub_id)")
+    db.commit()
+
+    sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='knowledge_graph_edges'").fetchone()
+    if sql and "'TransportHub'" not in sql[0]:
+        types = "('Supplier','PointOfInterest','City','Organization','Contact','TransportHub')"
+        db.executescript(f"""
+            CREATE TABLE knowledge_graph_edges_new (
+                edge_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+                subject_type    TEXT NOT NULL CHECK (subject_type IN {types}),
+                subject_id      INTEGER NOT NULL,
+                relationship    TEXT NOT NULL,
+                object_type     TEXT NOT NULL CHECK (object_type IN {types}),
+                object_id       INTEGER NOT NULL,
+                notes           TEXT,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (tenant_id, subject_type, subject_id, relationship, object_type, object_id)
+            );
+            INSERT INTO knowledge_graph_edges_new SELECT edge_id, tenant_id, subject_type, subject_id, relationship,
+                   object_type, object_id, notes, created_at, updated_at FROM knowledge_graph_edges;
+            DROP TABLE knowledge_graph_edges;
+            ALTER TABLE knowledge_graph_edges_new RENAME TO knowledge_graph_edges;
+            CREATE INDEX IF NOT EXISTS idx_kg_edges_tenant ON knowledge_graph_edges(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_kg_edges_subject ON knowledge_graph_edges(tenant_id, subject_type, subject_id);
+            CREATE INDEX IF NOT EXISTS idx_kg_edges_object ON knowledge_graph_edges(tenant_id, object_type, object_id);
+        """)
+
+    if not _table_exists(db, "transport_hubs"):
+        return
+    pois = db.execute(
+        """SELECT p.poi_id, p.tenant_id, p.name, pt.code AS type_code FROM points_of_interest p
+           JOIN poi_types pt ON pt.poi_type_id = p.poi_type_id
+           WHERE p.is_deleted = 0 AND pt.code IN ('AIRPORT', 'RAILWAY_STATION')"""
+    ).fetchall()
+    for p in pois:
+        hub = db.execute(
+            """SELECT h.hub_id FROM transport_hubs h JOIN hub_types ht ON ht.hub_type_id = h.hub_type_id
+               WHERE ht.code = ? AND lower(h.name) = lower(?) ORDER BY h.hub_id LIMIT 1""",
+            (p["type_code"], p["name"]),
+        ).fetchone()
+        if hub is None:
+            continue
+        if db.execute("SELECT 1 FROM package_day_pois WHERE poi_id = ?", (p["poi_id"],)).fetchone():
+            continue
+        for side in ("subject", "object"):
+            # OR IGNORE: if the same edge already exists against the hub, the
+            # POI copy is simply dropped below instead of duplicated.
+            db.execute(
+                f"""UPDATE OR IGNORE knowledge_graph_edges SET {side}_type = 'TransportHub', {side}_id = ?,
+                        updated_at = datetime('now')
+                    WHERE tenant_id = ? AND {side}_type = 'PointOfInterest' AND {side}_id = ?""",
+                (hub["hub_id"], p["tenant_id"], p["poi_id"]),
+            )
+            db.execute(
+                f"DELETE FROM knowledge_graph_edges WHERE tenant_id = ? AND {side}_type = 'PointOfInterest' AND {side}_id = ?",
+                (p["tenant_id"], p["poi_id"]),
+            )
+        db.execute(
+            "UPDATE points_of_interest SET is_deleted = 1, updated_at = datetime('now'), "
+            "notes = COALESCE(notes || char(10) || char(10), '') || ? WHERE poi_id = ?",
+            (f"Retired Oct 2026: now a shared Transport Hub (hub #{hub['hub_id']}).", p["poi_id"]),
+        )
+
+    db.execute(
+        """UPDATE poi_types SET is_active = 0
+           WHERE code IN ('AIRPORT', 'RAILWAY_STATION') AND is_system = 0
+             AND NOT EXISTS (SELECT 1 FROM points_of_interest p
+                             WHERE p.poi_type_id = poi_types.poi_type_id AND p.is_deleted = 0)"""
+    )
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -488,6 +582,7 @@ MIGRATIONS = [
     ("2026_10_platform_lookups", _migration_platform_lookups),
     ("2026_10_transport_hubs", _migration_transport_hubs),
     ("2026_10_load_major_airports", _migration_load_major_airports),
+    ("2026_10_package_hubs", _migration_package_hubs),
 ]
 
 

@@ -44,6 +44,11 @@
           {% if c.component_type == "service" %}<code>{{ c.service_code }}</code> {{ c.service_description or "" }}
           {% elif c.component_type == "product" %}<code>{{ c.product_code }}</code> {{ c.product_name or "" }}
           {% else %}{{ c.description }}{% endif %}
+          {% if c.from_hub_name or c.to_hub_name %}
+          <div class="text-muted"><i class="bi bi-airplane"></i>
+            <span title="{{ c.from_hub_name or '' }}">{{ c.from_hub_code or c.from_hub_name or "?" }}</span> →
+            <span title="{{ c.to_hub_name or '' }}">{{ c.to_hub_code or c.to_hub_name or "?" }}</span></div>
+          {% endif %}
           {% if c.is_inherited %}<span class="ms-1">— repeats from Day {{ c.day_number }}</span>
           {% elif c.repeat_for_checkpoint %}<span class="badge bg-info-subtle text-info-emphasis ms-1">repeats for Checkpoint</span>{% endif %}
         </td>
