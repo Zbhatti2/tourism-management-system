@@ -309,7 +309,10 @@ def album(supplier_id):
     q = request.args.get("q", "").strip()
     sort = request.args.get("sort", "album")
     sort = sort if sort in ic.ALBUM_SORTS else "album"
-    view = request.args.get("view", "slider")
+    # mode=view: the read-only album opened from the top of the supplier page --
+    # slider and search only, no adding, AI collecting, editing or deleting.
+    readonly = request.args.get("mode") == "view"
+    view = "slider" if readonly else request.args.get("view", "slider")
     date_from, date_to = _valid_date(request.args.get("from")), _valid_date(request.args.get("to"))
     images = ic.album(db, g.tenant_id, supplier_id, q=q, sort=sort, date_from=date_from, date_to=date_to)
     total = len(ic.album(db, g.tenant_id, supplier_id)) if (q or date_from or date_to) else len(images)
@@ -321,7 +324,7 @@ def album(supplier_id):
                           "ORDER BY run_id DESC LIMIT 1", (g.tenant_id, f"[{supplier_id}]")).fetchone()
     return render_template("images/album.html", supplier=supplier, images=images, total=total, q=q, sort=sort,
                            view=view, date_from=date_from or "", date_to=date_to or "", sorts=ic.SORT_LABELS,
-                           pending=pending, max_desc=ic.DESCRIPTION_MAX, last_run=last_run,
+                           pending=pending, max_desc=ic.DESCRIPTION_MAX, last_run=last_run, readonly=readonly,
                            has_album=supplier["type_code"] in ic.ALBUM_TYPE_CODES)
 
 
