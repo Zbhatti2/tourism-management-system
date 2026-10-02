@@ -34,6 +34,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 
 from auth.decorators import system_admin_required
 from db import get_db, log_action
+from utils import haversine_km, parse_coordinates
 
 geography_admin_bp = Blueprint("geography_admin", __name__)
 
@@ -93,12 +94,20 @@ TABLES = {
         "pk": "city_id",
         "has_code": False,
         "has_description": False,
+        # Coordinates + time zone (Oct 2026): used for maps, straight-line
+        # distances and "nearest airport/station".
+        "has_geo": True,
         "parent": {
             "table": "states", "pk": "state_id", "fk": "state_id",
             "label_field": "label", "nav_label": "Province/State",
         },
         "references": [
             {"table": "addresses", "fk": "city_id", "label": "address(es)"},
+            {"table": "transport_hubs", "fk": "city_id", "label": "transport hub(s)"},
+            # count_only: blocks a delete, but a merge doesn't move these --
+            # a city pair can't simply be re-pointed (it may already exist).
+            {"table": "city_distances", "fk": "city_a_id", "label": "distance(s)", "count_only": True},
+            {"table": "city_distances", "fk": "city_b_id", "label": "distance(s)", "count_only": True},
         ],
     },
 }
@@ -163,6 +172,15 @@ def _row_values(form, cfg):
         values["description"] = form.get("description", "").strip() or None
     if cfg.get("parent"):
         values[cfg["parent"]["fk"]] = _safe_int(form.get("parent_id"), None)
+    if cfg.get("has_geo"):
+        coords = form.get("coordinates", "").strip()
+        parsed = parse_coordinates(coords) if coords else None
+        if coords and parsed is None:
+            values["__error"] = ("Coordinates weren't recognised. Paste them as decimal degrees "
+                                 "(31.558, 74.3507) or degrees/minutes/seconds.")
+        values["latitude"] = round(parsed[0], 6) if parsed else None
+        values["longitude"] = round(parsed[1], 6) if parsed else None
+        values["timezone"] = form.get("timezone", "").strip() or None
     return label, values
 
 
@@ -175,7 +193,12 @@ def index():
         total = db.execute(f"SELECT COUNT(*) c FROM {cfg['table']}").fetchone()["c"]
         active = db.execute(f"SELECT COUNT(*) c FROM {cfg['table']} WHERE is_active = 1").fetchone()["c"]
         tables.append({"key": key, "cfg": cfg, "total": total, "active": active})
-    return render_template("geography_admin/index.html", tables=tables)
+    geo = db.execute(
+        """SELECT COUNT(*) AS total, SUM(latitude IS NOT NULL) AS with_coords,
+                  SUM(timezone IS NOT NULL) AS with_tz FROM cities"""
+    ).fetchone()
+    distance_count = db.execute("SELECT COUNT(*) FROM city_distances").fetchone()[0]
+    return render_template("geography_admin/index.html", tables=tables, geo=geo, distance_count=distance_count)
 
 
 @geography_admin_bp.route("/<table_key>")
@@ -231,6 +254,9 @@ def new_entry(table_key):
         if cfg.get("parent") and not values[cfg["parent"]["fk"]]:
             flash(f"{cfg['parent']['nav_label']} is required.", "error")
             return render_template("geography_admin/form.html", cfg=cfg, table_key=table_key, entry=None, parent_options=_parent_options(db, cfg))
+        if values.get("__error"):
+            flash(values["__error"], "error")
+            return render_template("geography_admin/form.html", cfg=cfg, table_key=table_key, entry=None, parent_options=_parent_options(db, cfg))
         try:
             cols = ", ".join(values.keys())
             qs = ", ".join(["?"] * len(values))
@@ -263,6 +289,9 @@ def edit_entry(table_key, entry_id):
             return render_template("geography_admin/form.html", cfg=cfg, table_key=table_key, entry=entry, parent_options=_parent_options(db, cfg))
         if cfg.get("parent") and not values[cfg["parent"]["fk"]]:
             flash(f"{cfg['parent']['nav_label']} is required.", "error")
+            return render_template("geography_admin/form.html", cfg=cfg, table_key=table_key, entry=entry, parent_options=_parent_options(db, cfg))
+        if values.get("__error"):
+            flash(values["__error"], "error")
             return render_template("geography_admin/form.html", cfg=cfg, table_key=table_key, entry=entry, parent_options=_parent_options(db, cfg))
         try:
             set_clause = ", ".join(f"{col}=?" for col in values.keys())
@@ -350,6 +379,8 @@ def reassign(table_key, entry_id):
 
         moved = 0
         for ref in cfg["references"]:
+            if ref.get("count_only"):
+                continue
             cur = db.execute(f"UPDATE {ref['table']} SET {ref['fk']} = ? WHERE {ref['fk']} = ?", (target_id, entry_id))
             moved += cur.rowcount
 
@@ -378,3 +409,143 @@ def reassign(table_key, entry_id):
         cfg=cfg, table_key=table_key, entry=entry, others=others,
         usage_count=count, usage_breakdown=breakdown,
     )
+
+
+# ---- Distances between cities ------------------------------------------------
+#
+# One row per city pair in city_distances (stored with city_a_id <
+# city_b_id, so A->B and B->A are the same row): road km, typical drive
+# time, whether there's a rail link, and where the figures came from. The
+# straight-line distance is never stored -- it's calculated from the two
+# cities' coordinates (utils.haversine_km) wherever it's shown.
+
+def _city_options(db):
+    """Active cities with their province and country, for the pickers,
+    ordered country > province > city."""
+    return db.execute(
+        """SELECT ci.city_id, ci.label, ci.latitude, ci.longitude, s.label AS state_label, co.label AS country_label
+           FROM cities ci JOIN states s ON s.state_id = ci.state_id JOIN countries co ON co.country_id = s.country_id
+           WHERE ci.is_active = 1
+           ORDER BY co.label COLLATE NOCASE, s.label COLLATE NOCASE, ci.label COLLATE NOCASE"""
+    ).fetchall()
+
+
+def _distance_rows(db, where_sql="", params=()):
+    rows = db.execute(
+        f"""SELECT d.*, a.label AS a_label, a.latitude AS a_lat, a.longitude AS a_lon, sa.label AS a_state,
+                   b.label AS b_label, b.latitude AS b_lat, b.longitude AS b_lon, sb.label AS b_state,
+                   coa.label AS a_country, cob.label AS b_country
+            FROM city_distances d
+            JOIN cities a ON a.city_id = d.city_a_id JOIN states sa ON sa.state_id = a.state_id
+            JOIN countries coa ON coa.country_id = sa.country_id
+            JOIN cities b ON b.city_id = d.city_b_id JOIN states sb ON sb.state_id = b.state_id
+            JOIN countries cob ON cob.country_id = sb.country_id
+            {where_sql}
+            ORDER BY a.label COLLATE NOCASE, b.label COLLATE NOCASE""",
+        params,
+    ).fetchall()
+    return [dict(r, straight_km=haversine_km(r["a_lat"], r["a_lon"], r["b_lat"], r["b_lon"])) for r in rows]
+
+
+@geography_admin_bp.route("/distances")
+@system_admin_required
+def distances():
+    db = get_db()
+    city_id = _safe_int(request.args.get("city_id"), None)
+    where, params = "", ()
+    if city_id:
+        where, params = "WHERE d.city_a_id = ? OR d.city_b_id = ?", (city_id, city_id)
+    return render_template("geography_admin/distances.html", rows=_distance_rows(db, where, params),
+                           cities=_city_options(db), city_id=city_id)
+
+
+def _distance_values(form):
+    """(values, errors) from the distance form. Cities are stored in id order."""
+    errors = []
+    a, b = _safe_int(form.get("city_a_id"), None), _safe_int(form.get("city_b_id"), None)
+    if not a or not b:
+        errors.append("Choose both cities.")
+    elif a == b:
+        errors.append("Choose two different cities.")
+    road_km = None
+    if form.get("road_km", "").strip():
+        try:
+            road_km = round(float(form.get("road_km")), 1)
+        except ValueError:
+            errors.append("Road distance must be a number of km.")
+    hours, minutes = _safe_int(form.get("drive_hours"), 0) or 0, _safe_int(form.get("drive_minutes"), 0) or 0
+    drive = hours * 60 + minutes if (form.get("drive_hours", "").strip() or form.get("drive_minutes", "").strip()) else None
+    rail = form.get("rail_available") if form.get("rail_available") in ("Yes", "No") else None
+    if a and b and a > b:
+        a, b = b, a
+    values = {
+        "city_a_id": a, "city_b_id": b, "road_km": road_km, "drive_minutes": drive, "rail_available": rail,
+        "source": form.get("source", "").strip() or None,
+        "verified_on": form.get("verified_on", "").strip() or None,
+        "notes": form.get("notes", "").strip() or None,
+    }
+    return values, errors
+
+
+def _render_distance_form(db, row, form=None):
+    return render_template("geography_admin/distance_form.html", row=row, form=form, cities=_city_options(db))
+
+
+@geography_admin_bp.route("/distances/new", methods=["GET", "POST"])
+@system_admin_required
+def new_distance():
+    db = get_db()
+    if request.method == "POST":
+        values, errors = _distance_values(request.form)
+        if not errors and db.execute("SELECT 1 FROM city_distances WHERE city_a_id = ? AND city_b_id = ?",
+                                     (values["city_a_id"], values["city_b_id"])).fetchone():
+            errors.append("That pair of cities already has a distance on file — edit it instead.")
+        if errors:
+            for e in errors:
+                flash(e, "error")
+            return _render_distance_form(db, None, request.form)
+        cur = db.execute(f"INSERT INTO city_distances ({', '.join(values)}) VALUES ({', '.join('?' * len(values))})",
+                         tuple(values.values()))
+        db.commit()
+        log_action("Create", "city_distances", cur.lastrowid, "Added a city-to-city distance (global table)")
+        flash("Distance saved.", "success")
+        return redirect(url_for("geography_admin.distances"))
+    preset = {"city_a_id": request.args.get("city_a_id", ""), "city_b_id": request.args.get("city_b_id", "")}
+    return _render_distance_form(db, None, preset)
+
+
+@geography_admin_bp.route("/distances/<int:distance_id>/edit", methods=["GET", "POST"])
+@system_admin_required
+def edit_distance(distance_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM city_distances WHERE distance_id = ?", (distance_id,)).fetchone()
+    if row is None:
+        abort(404)
+    if request.method == "POST":
+        values, errors = _distance_values(request.form)
+        if not errors and db.execute(
+                "SELECT 1 FROM city_distances WHERE city_a_id = ? AND city_b_id = ? AND distance_id != ?",
+                (values["city_a_id"], values["city_b_id"], distance_id)).fetchone():
+            errors.append("That pair of cities already has another distance on file.")
+        if errors:
+            for e in errors:
+                flash(e, "error")
+            return _render_distance_form(db, row, request.form)
+        db.execute(f"UPDATE city_distances SET {', '.join(f'{c} = ?' for c in values)}, updated_at = datetime('now') "
+                   f"WHERE distance_id = ?", tuple(values.values()) + (distance_id,))
+        db.commit()
+        log_action("Update", "city_distances", distance_id, "Updated a city-to-city distance (global table)")
+        flash("Distance saved.", "success")
+        return redirect(url_for("geography_admin.distances"))
+    return _render_distance_form(db, row)
+
+
+@geography_admin_bp.route("/distances/<int:distance_id>/delete", methods=["POST"])
+@system_admin_required
+def delete_distance(distance_id):
+    db = get_db()
+    db.execute("DELETE FROM city_distances WHERE distance_id = ?", (distance_id,))
+    db.commit()
+    log_action("Delete", "city_distances", distance_id, "Deleted a city-to-city distance (global table)")
+    flash("Distance deleted.", "success")
+    return redirect(url_for("geography_admin.distances"))

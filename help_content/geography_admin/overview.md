@@ -24,3 +24,21 @@ and so on. Because Countries alone has over 200 rows, this screen has a
 free-text search box, and, wherever a table has a parent, a dropdown to
 filter down to just that parent's children (for example, only Pakistan's
 provinces).
+
+## City coordinates and time zones
+
+Each city can hold its centre point (paste coordinates from Google Maps)
+and its time zone (for example Asia/Karachi). They are used for maps,
+straight-line distances and finding the nearest airport or station. The
+Cities list flags any city still **Missing** coordinates. Most were
+filled in automatically from GeoNames, a free open geographic database.
+
+## Distances between Cities
+
+**Distances between Cities** holds one entry per pair of cities (it covers
+both directions): road distance, typical drive time, whether there is a
+rail link, where the figures came from and when they were checked. The
+straight-line distance is always worked out from the two cities'
+coordinates, so it never needs entering. Filter the list by city to see
+every distance on file from that city.
+

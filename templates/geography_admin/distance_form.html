@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% macro val(name) -%}
+{%- if form is not none and form.get(name) is not none -%}{{ form.get(name) }}
+{%- elif row and row[name] is not none -%}{{ row[name] }}
+{%- endif -%}
+{%- endmacro %}
+{% macro city_select(name, label) %}
+<label class="form-label" for="{{ name }}">{{ label }}</label>
+<select class="form-select city-pick" id="{{ name }}" name="{{ name }}" required>
+  <option value="">— choose a city —</option>
+  {% set current = val(name) | string %}
+  {% set ns = namespace(group=None) %}
+  {% for c in cities %}
+    {% set group = c.country_label ~ ' — ' ~ c.state_label %}
+    {% if group != ns.group %}{% if ns.group is not none %}</optgroup>{% endif %}<optgroup label="{{ group }}">{% set ns.group = group %}{% endif %}
+    <option value="{{ c.city_id }}" data-lat="{{ c.latitude if c.latitude is not none else '' }}" data-lon="{{ c.longitude if c.longitude is not none else '' }}" {{ 'selected' if current == c.city_id|string else '' }}>{{ c.label }}{{ '' if c.latitude is not none else ' (no coordinates)' }}</option>
+  {% endfor %}
+  {% if ns.group is not none %}</optgroup>{% endif %}
+</select>
+{% endmacro %}
+{% block title %}TMS System Admin — {{ 'Edit' if row else 'New' }} Distance{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('geography_admin.distances') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Distances between Cities</a>
+</nav>
+<div class="mb-4">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">{{ 'Edit' if row else 'New' }} Distance</h1>
+</div>
+{% set drive = (row.drive_minutes if row and row.drive_minutes is not none else none) %}
+<form method="post" class="card shadow-sm border-0" style="max-width: 760px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <div class="row g-3 mb-2">
+      <div class="col-md-6">{{ city_select('city_a_id', 'From city') }}</div>
+      <div class="col-md-6">{{ city_select('city_b_id', 'To city') }}</div>
+    </div>
+    <p class="small mb-3"><i class="bi bi-rulers text-muted"></i> Straight line: <strong id="straight">—</strong> <span class="text-muted">(calculated from the coordinates)</span></p>
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <label class="form-label" for="road_km">Road distance (km)</label>
+        <input class="form-control" id="road_km" name="road_km" type="number" step="0.1" min="0" value="{{ val('road_km') }}">
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Typical drive time</label>
+        <div class="input-group">
+          <input class="form-control" name="drive_hours" type="number" min="0" value="{{ form.get('drive_hours') if form is not none and form.get('drive_hours') is not none else (drive // 60 if drive is not none else '') }}">
+          <span class="input-group-text">h</span>
+          <input class="form-control" name="drive_minutes" type="number" min="0" max="59" value="{{ form.get('drive_minutes') if form is not none and form.get('drive_minutes') is not none else (drive % 60 if drive is not none else '') }}">
+          <span class="input-group-text">m</span>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="rail_available">Rail link</label>
+        <select class="form-select" id="rail_available" name="rail_available">
+          {% set rail = val('rail_available') %}
+          <option value="" {{ 'selected' if not rail else '' }}>Not known</option>
+          <option {{ 'selected' if rail == 'Yes' else '' }}>Yes</option>
+          <option {{ 'selected' if rail == 'No' else '' }}>No</option>
+        </select>
+      </div>
+    </div>
+    <div class="row g-3 mb-3">
+      <div class="col-md-8">
+        <label class="form-label" for="source">Source</label>
+        <input class="form-control" id="source" name="source" value="{{ val('source') }}" placeholder="e.g. Google Maps, Motorway M-2">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="verified_on">Checked on</label>
+        <input class="form-control" id="verified_on" name="verified_on" type="date" value="{{ val('verified_on') }}">
+      </div>
+    </div>
+    <div class="mb-1">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="form-control" id="notes" name="notes" rows="2" placeholder="e.g. via Motorway; road closed in monsoon">{{ val('notes') }}</textarea>
+    </div>
+  </div>
+  <div class="card-footer bg-white">
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-link" href="{{ url_for('geography_admin.distances') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Live straight-line distance between the two chosen cities.
+  (function () {
+    var a = document.getElementById("city_a_id"), b = document.getElementById("city_b_id"), out = document.getElementById("straight");
+    function coords(sel) {
+      var o = sel.options[sel.selectedIndex];
+      if (!o || !o.dataset.lat) return null;
+      return [parseFloat(o.dataset.lat), parseFloat(o.dataset.lon)];
+    }
+    function update() {
+      var p = coords(a), q = coords(b);
+      if (!p || !q) { out.textContent = "—"; return; }
+      var R = 6371.0088, r = Math.PI / 180;
+      var dl = (q[1] - p[1]) * r, dp = (q[0] - p[0]) * r;
+      var h = Math.pow(Math.sin(dp / 2), 2) + Math.cos(p[0] * r) * Math.cos(q[0] * r) * Math.pow(Math.sin(dl / 2), 2);
+      out.textContent = Math.round(2 * R * Math.asin(Math.sqrt(h))).toLocaleString() + " km";
+    }
+    a.addEventListener("change", update); b.addEventListener("change", update); update();
+  })();
+</script>
+{% endblock %}

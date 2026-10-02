@@ -1,0 +1,129 @@
+iso_country,state,city,latitude,longitude,timezone,geonames_name,geonameid
+PK,Khyber Pakhtunkhwa,Abbottabad,34.1463,73.21168,Asia/Karachi,Abbottabad,1185056
+PK,Punjab,Ahmedpur East,29.14269,71.25771,Asia/Karachi,Ahmadpur East,1184845
+PK,Punjab,Arif Wala,26.32478,66.29587,Asia/Karachi,Arif Wala,11250625
+PK,Punjab,Attock,33.76671,72.35977,Asia/Karachi,Attock City,1184249
+PK,Sindh,Badin,24.656,68.837,Asia/Karachi,Badin,1184055
+PK,Punjab,Bahawalnagar,29.99835,73.25272,Asia/Karachi,Bahawalnagar,1183883
+PK,Punjab,Bahawalpur,29.39779,71.6752,Asia/Karachi,Bahawalpur,1183880
+PK,Khyber Pakhtunkhwa,Bannu,32.98527,70.60403,Asia/Karachi,Bannu,1183460
+PK,Punjab,Bhakkar,31.62685,71.06471,Asia/Karachi,Bhakkar,1182815
+PK,Punjab,Bhalwal,32.26576,72.89809,Asia/Karachi,Bhalwal,1182787
+PK,Punjab,Burewala,30.16667,72.65,Asia/Karachi,Burewala,1182092
+PK,Punjab,Chakwal,32.93286,72.85394,Asia/Karachi,Chakwal,1181636
+PK,Baluchistan,Chaman,30.91769,66.45259,Asia/Karachi,Chaman,1181611
+PK,Khyber Pakhtunkhwa,Charsadda,34.14822,71.7406,Asia/Karachi,Charsadda,1181439
+PK,Punjab,Chichawatni,30.5301,72.69155,Asia/Karachi,Chichawatni,1181163
+PK,Punjab,Chiniot,31.72091,72.97836,Asia/Karachi,Chiniot,1181096
+PK,Punjab,Chishtian,29.79713,72.85772,Asia/Karachi,Chishtian,1181073
+PK,Sindh,Dadu,26.73033,67.7769,Asia/Karachi,Dadu,1180809
+PK,Punjab,Daska,32.32422,74.35039,Asia/Karachi,Daska Kalan,1180436
+PK,Punjab,Dera Ghazi Khan,30.04587,70.64029,Asia/Karachi,Dera Ghazi Khan,1180289
+PK,Khyber Pakhtunkhwa,Dera Ismail Khan,31.83129,70.9017,Asia/Karachi,Dera Ismail Khan,1180281
+PK,Baluchistan,Dera Murad Jamali,28.54657,68.22308,Asia/Karachi,Dera Murad Jamali,1397479
+PK,Punjab,Dipalpur,30.66984,73.65306,Asia/Karachi,Dipalpur,1179760
+PK,Punjab,Eimenabad,32.04237,74.25996,Asia/Karachi,Eminabad,1179406
+PK,Punjab,Faisalabad,31.41554,73.08969,Asia/Karachi,Faisalabad,1179400
+PK,Punjab,Farooqabad,31.88642,72.41362,Asia/Karachi,Faruka,1179346
+PK,Sindh,Ghotki,28.00437,69.31569,Asia/Karachi,Ghotki,1178456
+PK,Punjab,Gojra,31.14926,72.68323,Asia/Karachi,Gojra,1178231
+PK,Punjab,Gujar Khan,33.25411,73.30433,Asia/Karachi,Gujar Khan,1177682
+PK,Punjab,Gujranwala,32.15567,74.18705,Asia/Karachi,Gujranwala,1177662
+PK,Punjab,Gujranwala Cantonment,32.15567,74.18705,Asia/Karachi,Gujranwala,1177662
+PK,Punjab,Gujrat,32.5742,74.07542,Asia/Karachi,Gujrat,1177654
+PK,Punjab,Hafizabad,32.07095,73.68802,Asia/Karachi,Hafizabad,1177384
+PK,Punjab,Haroonabad,29.61206,73.13802,Asia/Karachi,Harunabad,1177073
+PK,Punjab,Harrapa,30.63251,72.87032,Asia/Karachi,Harappa,1177169
+PK,Punjab,Hasilpur,29.69221,72.54566,Asia/Karachi,Hasilpur,1177042
+PK,Punjab,Hassan Abdal,30.42388,72.69737,Asia/Karachi,Chak Thirty-one -Eleven Left,1177064
+PK,Punjab,Haveli Lakha,30.45097,73.69371,Asia/Karachi,Haveli Lakha,1176997
+PK,Baluchistan,Hub,25.02555,66.88534,Asia/Karachi,Hub,12524485
+PK,Sindh,Hyderabad,25.39689,68.37718,Asia/Karachi,Hyderabad,1176734
+PK,Islamabad Capital Territory,Islamabad,33.72148,73.04329,Asia/Karachi,Islamabad,1176615
+PK,Sindh,Jacobabad,28.28187,68.43761,Asia/Karachi,Jacobabad,1176515
+PK,Punjab,Jalalpur Jattan,32.64118,74.20561,Asia/Karachi,Jalalpur Jattan,1176368
+PK,Punjab,Jampur,29.64235,70.59518,Asia/Karachi,Jampur,1176241
+PK,Punjab,Jaranwala,31.3332,73.41868,Asia/Karachi,Jaranwala,1176106
+PK,Punjab,Jauharabad,32.29016,72.28182,Asia/Karachi,Jauharabad,1176022
+PK,Punjab,Jhang,31.26981,72.31687,Asia/Karachi,Jhang Sadr,1175892
+PK,Punjab,Jhelum,32.93448,73.73102,Asia/Karachi,Jhelum,1175864
+PK,Baluchistan,Kallat,29.02663,66.59361,Asia/Karachi,Kalat,1175296
+PK,Punjab,Kamalia,30.72708,72.64607,Asia/Karachi,Kamalia,1175156
+PK,Sindh,Kamber Ali Khan,27.58753,68.00066,Asia/Karachi,Kambar,1167622
+PK,Punjab,Kamoke,31.97526,74.22304,Asia/Karachi,Kamoke,1175088
+PK,Sindh,Kandhkot,28.24574,69.17974,Asia/Karachi,Kandhkot,1175021
+PK,Sindh,Karachi,24.8608,67.0104,Asia/Karachi,Karachi,1174872
+PK,Punjab,Kasur,31.11866,74.45025,Asia/Karachi,Kasur,1174625
+PK,Sindh,Khairpur,27.52948,68.75915,Asia/Karachi,Khairpur Mir’s,1162004
+PK,Punjab,Khanewal,30.30173,71.93212,Asia/Karachi,Khanewal,1174220
+PK,Punjab,Khanpur,28.64739,70.65694,Asia/Karachi,Khanpur,1174167
+PK,Punjab,Kharian,32.81612,73.88697,Asia/Karachi,Kharian,1174042
+PK,Punjab,Khushab,32.29667,72.3525,Asia/Karachi,Khushāb,1173687
+PK,Baluchistan,Khuzdar,27.81193,66.61096,Asia/Karachi,Khuzdar,1173664
+PK,Khyber Pakhtunkhwa,Kohat,33.58196,71.44929,Asia/Karachi,Kohat,1173491
+PK,Punjab,Kot Addu,30.46907,70.96699,Asia/Karachi,Kot Addu,1173378
+PK,Punjab,Kot Radha Kishan,31.17068,74.10126,Asia/Karachi,Kot Radha Kishan,1172915
+PK,Sindh,Kotri,25.36566,68.30831,Asia/Karachi,Kotri,1172904
+PK,Punjab,Lahore,31.558,74.35071,Asia/Karachi,Lahore,1172451
+PK,Punjab,Lala Musa,32.70138,73.95746,Asia/Karachi,Lala Musa,1172318
+PK,Sindh,Larkana,27.55898,68.21204,Asia/Karachi,Larkana,1172128
+PK,Punjab,Layyah,30.96128,70.93904,Asia/Karachi,Layyah,1172035
+PK,Punjab,Lodhran,29.5339,71.63244,Asia/Karachi,Lodhran,1171965
+PK,Punjab,Mailsi,29.80123,72.17398,Asia/Karachi,Mailsi,1171502
+PK,Punjab,Mandi Bahauddin,32.58704,73.49123,Asia/Karachi,Mandi Bahauddin,1171123
+PK,Khyber Pakhtunkhwa,Mansehra,34.33023,73.19679,Asia/Karachi,Mansehra,1170951
+PK,Khyber Pakhtunkhwa,Mardan,34.19794,72.04965,Asia/Karachi,Mardan,1170880
+PK,Punjab,Mian Channu,30.44067,72.35679,Asia/Karachi,Mian Channun,1170486
+PK,Punjab,Mianwali,32.57756,71.52847,Asia/Karachi,Mianwali,1170425
+PK,Khyber Pakhtunkhwa,Mingora,34.7795,72.36265,Asia/Karachi,Mingora,1170395
+PK,Azad Kashmir,Mirpur,33.14782,73.75187,Asia/Karachi,New Mirpur City,1169027
+PK,Sindh,Mirpur Khas,25.5276,69.01255,Asia/Karachi,Mirpur Khas,1170295
+PK,Sindh,Moro,26.66317,68.00016,Asia/Karachi,Moro,1170013
+PK,Punjab,Multan,30.19679,71.47824,Asia/Karachi,Multan,1169825
+PK,Punjab,Muridke,31.80258,74.25772,Asia/Karachi,Muridke,1169692
+PK,Azad Kashmir,Muzaffarabad,34.37002,73.47082,Asia/Karachi,Muzaffarābād,1169607
+PK,Punjab,Muzaffargarh,30.07258,71.19379,Asia/Karachi,Muzaffargarh,1169605
+PK,Punjab,Nankana Sahib,31.4501,73.70653,Asia/Karachi,Nankana Sahib,1169372
+PK,Punjab,Narowal,32.10197,74.87303,Asia/Karachi,Narowal,1169278
+PK,Sindh,Nawabshah (Benazirabad),26.23939,68.40369,Asia/Karachi,Nawabshah,1169116
+PK,Khyber Pakhtunkhwa,Nowshera,34.01583,71.98123,Asia/Karachi,Nowshera,1168864
+PK,Punjab,Okara,30.81029,73.45155,Asia/Karachi,Okara,1168718
+PK,Punjab,Pakpattan,30.34314,73.38944,Asia/Karachi,Pakpattan,1168555
+PK,Baluchistan,Panjgur,26.97186,64.09459,Asia/Karachi,Panjgur,1168446
+PK,Punjab,Pasrur,32.26286,74.66327,Asia/Karachi,Pasrur,1168307
+PK,Punjab,Pattoki,31.02021,73.85333,Asia/Karachi,Pattoki,1168226
+PK,Khyber Pakhtunkhwa,Peshawar,34.008,71.57849,Asia/Karachi,Peshawar,1168197
+PK,Punjab,Phool Nagar,31.2024,73.94857,Asia/Karachi,Phool Nagar,1182829
+PK,Baluchistan,Pishin,30.58176,66.99406,Asia/Karachi,Pishin,1167821
+PK,Punjab,Pusrur,32.26286,74.66327,Asia/Karachi,Pasrur,1168307
+PK,Baluchistan,Quetta,30.18414,67.00141,Asia/Karachi,Quetta,1167528
+PK,Punjab,Rahim Yar Khan,28.41987,70.30345,Asia/Karachi,Rahim Yar Khan,1167460
+PK,Punjab,Rajanpur,29.10408,70.32969,Asia/Karachi,Rajanpur,1167380
+PK,Punjab,Rasool Nagar,32.32794,73.7804,Asia/Karachi,Rasulnagar,1167064
+PK,Punjab,Rawalpindi,33.59733,73.0479,Asia/Karachi,Rawalpindi,1166993
+PK,Punjab,Renala Khurd,30.87878,73.59857,Asia/Karachi,Renala Khurd,1166933
+PK,Punjab,Sadiqabad,28.3091,70.12652,Asia/Karachi,Saddiqabad,1166652
+PK,Punjab,Sahiwal,31.97386,72.33109,Asia/Karachi,Sahiwal,1166547
+PK,Gilgit Baltisitan,Sakardu,35.29787,75.63372,Asia/Karachi,Skardu,1164709
+PK,Punjab,Sambrial,32.47835,74.35338,Asia/Karachi,Sambrial,1166265
+PK,Punjab,Sangla Hill,31.71667,73.38333,Asia/Karachi,Sangla Hill,1166146
+PK,Punjab,Sargodha,32.08586,72.67418,Asia/Karachi,Sargodha,1166000
+PK,Khyber Pakhtunkhwa,Shabqadar,34.21599,71.5548,Asia/Karachi,Shabqadar,1165744
+PK,Sindh,Shahdadkot,27.84726,67.90679,Asia/Karachi,Shahdad Kot,1165638
+PK,Sindh,Shahdadpur,27.84726,67.90679,Asia/Karachi,Shahdad Kot,1165638
+PK,Punjab,Shakargarh,32.26361,75.16008,Asia/Karachi,Shakargarh,1165388
+PK,Punjab,Sheikhupura,31.71287,73.98556,Asia/Karachi,Shekhupura,1165221
+PK,Sindh,Shikarpur,27.95558,68.63823,Asia/Karachi,Shikarpur,1165108
+PK,Punjab,Shujabad,29.88092,71.29344,Asia/Karachi,Shujaabad,1164970
+PK,Punjab,Sialkot,32.49268,74.53134,Asia/Karachi,Sialkot,1164909
+PK,Sindh,Sukkur,27.70323,68.85889,Asia/Karachi,Sukkur,1164408
+PK,Khyber Pakhtunkhwa,Swabi,34.12018,72.46982,Asia/Karachi,Swabi,1164216
+PK,Sindh,Tando Adam,25.76818,68.66196,Asia/Karachi,Tando Adam,1163967
+PK,Sindh,Tando Allahyar,25.4605,68.71745,Asia/Karachi,Tando Allahyar,1163965
+PK,Sindh,Tando Muhammad Khan,25.12384,68.53677,Asia/Karachi,Tando Muhammad Khan,1163952
+PK,Punjab,Taunsa,30.70358,70.65054,Asia/Karachi,Taunsa,1163724
+PK,Baluchistan,Turbat,26.00122,63.04849,Asia/Karachi,Turbat,1163054
+PK,Sindh,Umerkot,25.36329,69.74184,Asia/Karachi,Umarkot,1162959
+PK,Punjab,Vehari,30.0445,72.3556,Asia/Karachi,Vihari,1162813
+PK,Punjab,Wah Cantonment,33.77094,72.75116,Asia/Karachi,Wah Cantt,11785389
+PK,Punjab,Wazirabad,32.44324,74.12,Asia/Karachi,Wazirabad,1162456

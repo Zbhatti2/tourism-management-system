@@ -567,6 +567,73 @@ def _migration_package_hubs(db):
     db.commit()
 
 
+CITY_DISTANCES_DDL = """
+CREATE TABLE IF NOT EXISTS city_distances (
+    distance_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    city_a_id       INTEGER NOT NULL REFERENCES cities(city_id),
+    city_b_id       INTEGER NOT NULL REFERENCES cities(city_id),
+    road_km         REAL,
+    drive_minutes   INTEGER,                -- typical driving time
+    rail_available  TEXT CHECK (rail_available IN ('Yes','No')),
+    source          TEXT,                   -- where the figures came from
+    verified_on     TEXT,                   -- date last checked (YYYY-MM-DD)
+    notes           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (city_a_id < city_b_id),          -- one row per pair, stored in id order
+    UNIQUE (city_a_id, city_b_id)
+);
+CREATE INDEX IF NOT EXISTS idx_city_distances_b ON city_distances(city_b_id);
+"""
+
+
+def _migration_geography_distances(db):
+    """Geography & Distances (Group A, shared by every tenant):
+    cities gain latitude, longitude and timezone, filled from
+    platform_seed_data/city_coordinates_geonames.csv (GeoNames, CC BY 4.0)
+    -- only where empty. A city with no match gets its country's time zone
+    when every matched city in that country shares one. Then creates
+    city_distances: one row per city pair with road km, drive time, rail
+    and source; the straight-line distance is always calculated from the
+    coordinates, never stored."""
+    import csv
+    from pathlib import Path
+
+    for col, typ in (("latitude", "REAL"), ("longitude", "REAL"), ("timezone", "TEXT")):
+        if not _column_exists(db, "cities", col):
+            db.execute(f"ALTER TABLE cities ADD COLUMN {col} {typ}")
+    db.executescript(CITY_DISTANCES_DDL)
+
+    path = Path(__file__).resolve().parent / "platform_seed_data" / "city_coordinates_geonames.csv"
+    if path.exists():
+        with open(path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                city = db.execute(
+                    """SELECT ci.city_id, ci.latitude, ci.timezone FROM cities ci
+                       JOIN states s ON s.state_id = ci.state_id JOIN countries co ON co.country_id = s.country_id
+                       WHERE co.code = ? AND lower(s.label) = lower(?) AND lower(ci.label) = lower(?)""",
+                    (row["iso_country"], row["state"], row["city"]),
+                ).fetchone()
+                if city is None:
+                    continue
+                if city["latitude"] is None:
+                    db.execute("UPDATE cities SET latitude = ?, longitude = ? WHERE city_id = ?",
+                               (float(row["latitude"]), float(row["longitude"]), city["city_id"]))
+                if not city["timezone"]:
+                    db.execute("UPDATE cities SET timezone = ? WHERE city_id = ?", (row["timezone"], city["city_id"]))
+
+    for country in db.execute(
+        """SELECT s.country_id, MIN(ci.timezone) AS tz FROM cities ci JOIN states s ON s.state_id = ci.state_id
+           WHERE ci.timezone IS NOT NULL GROUP BY s.country_id HAVING COUNT(DISTINCT ci.timezone) = 1"""
+    ).fetchall():
+        db.execute(
+            """UPDATE cities SET timezone = ? WHERE timezone IS NULL
+               AND state_id IN (SELECT state_id FROM states WHERE country_id = ?)""",
+            (country["tz"], country["country_id"]),
+        )
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -583,6 +650,7 @@ MIGRATIONS = [
     ("2026_10_transport_hubs", _migration_transport_hubs),
     ("2026_10_load_major_airports", _migration_load_major_airports),
     ("2026_10_package_hubs", _migration_package_hubs),
+    ("2026_10_geography_distances", _migration_geography_distances),
 ]
 
 

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Distances between Cities{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('geography_admin.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Geography &amp; Distances</a>
+</nav>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">Distances between Cities</h1>
+  </div>
+  <a href="{{ url_for('geography_admin.new_distance', city_a_id=city_id or '') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> New Distance</a>
+</div>
+<p class="text-muted small">Shared by every tenant. One entry covers both directions. <strong>Straight line</strong> is calculated from the cities' coordinates; road distance, drive time and rail are entered here.</p>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto">
+    <select class="form-select" name="city_id" onchange="this.form.submit()">
+      <option value="">All cities</option>
+      {% for c in cities %}<option value="{{ c.city_id }}" {{ 'selected' if city_id == c.city_id else '' }}>{{ c.label }}, {{ c.state_label }}</option>{% endfor %}
+    </select>
+  </div>
+  {% if city_id %}<div class="col-auto"><a class="btn btn-link" href="{{ url_for('geography_admin.distances') }}">Clear</a></div>{% endif %}
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>From</th><th>To</th><th class="text-end">Straight line</th><th class="text-end">Road</th><th class="text-end">Drive time</th><th>Rail</th><th>Source</th><th>Checked</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><strong>{{ r.a_label }}</strong><div class="small text-muted">{{ r.a_state }}, {{ r.a_country }}</div></td>
+          <td><strong>{{ r.b_label }}</strong><div class="small text-muted">{{ r.b_state }}, {{ r.b_country }}</div></td>
+          <td class="text-end small">{% if r.straight_km is not none %}{{ "{:,.0f}".format(r.straight_km) }} km{% else %}<span class="text-muted" title="One of the cities has no coordinates">—</span>{% endif %}</td>
+          <td class="text-end">{% if r.road_km is not none %}{{ "{:,.0f}".format(r.road_km) }} km{% else %}—{% endif %}</td>
+          <td class="text-end">{% if r.drive_minutes is not none %}{{ r.drive_minutes // 60 }}h {{ "%02d"|format(r.drive_minutes % 60) }}m{% else %}—{% endif %}</td>
+          <td>{% if r.rail_available == 'Yes' %}<span class="badge bg-success-subtle text-success">Yes</span>{% elif r.rail_available == 'No' %}<span class="badge bg-secondary-subtle text-dark">No</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          <td class="small text-muted">{{ r.source or "" }}</td>
+          <td class="small text-muted text-nowrap">{{ r.verified_on or "" }}</td>
+          <td class="text-end text-nowrap">
+            <a href="{{ url_for('geography_admin.edit_distance', distance_id=r.distance_id) }}" class="btn btn-outline-secondary btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('geography_admin.delete_distance', distance_id=r.distance_id) }}" class="d-inline" onsubmit="return confirm('Delete this distance?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-danger btn-sm" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted py-5">No distances on file{{ ' for this city' if city_id else '' }} yet. <a href="{{ url_for('geography_admin.new_distance', city_a_id=city_id or '') }}">Add one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
