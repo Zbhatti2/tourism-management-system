@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Add Images — ' ~ supplier.supplier_name if supplier else 'Import Images' }}{% endblock %}
+{% block content %}
+{% if supplier %}
+<nav class="mb-2"><a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ supplier.supplier_name }}</a></nav>
+<h1 class="h3 mb-1">Add Images</h1>
+<p class="text-muted small mb-3">To <strong>{{ supplier.supplier_name }}</strong>'s Images Catalog. Choose photos (or a Zip of them); any file names are fine. Next you'll curate each one before it's added.</p>
+{% else %}
+<nav class="mb-2"><a href="{{ url_for('data_exchange.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Data Exchange</a></nav>
+<h1 class="h3 mb-1">Import Hotel &amp; Restaurant Images</h1>
+<p class="text-muted small mb-3">Photos for many Hotels, Resorts and Restaurants at once. Each photo is matched to its Hotel or Restaurant by its file name, then you curate them before anything is added to an album.</p>
+{% endif %}
+
+<div class="row g-3">
+  {% if not supplier %}
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body small">
+        <h2 class="h6"><i class="bi bi-info-circle me-1"></i>How to name the files</h2>
+        <p class="mb-2">Put the photos in one folder and Zip it. Photos can arrive by WhatsApp, email or anything else; only the file names matter.</p>
+        <p class="mb-2"><strong>Each file name must start with the exact Hotel / Restaurant name, followed by a hyphen <code>-</code>.</strong>
+          Whatever comes after the hyphen becomes the photo's suggested Title.</p>
+        <table class="table table-sm small mb-2">
+          <thead><tr><th>File name</th><th>Goes to</th><th>Suggested Title</th></tr></thead>
+          <tbody>
+            <tr><td><code>Hilton Hotel-Lobby at night.jpg</code></td><td>Hilton Hotel</td><td>Lobby at night</td></tr>
+            <tr><td><code>Hilton Hotel-Pool.jpg</code></td><td>Hilton Hotel</td><td>Pool</td></tr>
+            <tr><td><code>Hilton Hotel-1.jpg</code></td><td>Hilton Hotel</td><td>Hilton Hotel — photo 1</td></tr>
+            <tr><td><code>Pearl-Continental Hotel Lahore-Ballroom.jpg</code></td><td>Pearl-Continental Hotel Lahore</td><td>Ballroom</td></tr>
+          </tbody>
+        </table>
+        <ul class="mb-2 ps-3">
+          <li>Capitals, accents and underscores don't matter (<code>avari_hotel_lahore-pool.jpg</code> works).</li>
+          <li>A name that is <em>almost</em> right (<code>Avary Hotel Lahore-…</code>) is suggested but marked <em>Check match</em>.</li>
+          <li>A photo that's already in the album, or appears twice in the Zip, is marked <em>Duplicate</em>.</li>
+          <li>.jpg, .png, .webp, .gif, .tif and .heic; up to {{ 1000 }} photos per Zip.</li>
+        </ul>
+        <a href="{{ url_for('images.names_csv') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-filetype-csv"></i> Download the exact names ({{ suppliers|length }})</a>
+        <span class="text-muted ms-1">Send this list to whoever is collecting photos.</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  <div class="{{ 'col-lg-6' if not supplier else 'col-lg-7' }}">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6"><i class="bi bi-upload me-1"></i>Upload</h2>
+        <form method="post" enctype="multipart/form-data" action="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) if supplier else url_for('images.import_images') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" for="files">Zip file or photos</label>
+            <input class="form-control" type="file" id="files" name="files" multiple required
+                   accept=".zip,.jpg,.jpeg,.png,.gif,.bmp,.webp,.tif,.tiff,.heic">
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-sm-5">
+              <label class="form-label small fw-semibold" for="source">Source</label>
+              <select class="form-select" name="source" id="source">
+                {% for s in sources %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-7">
+              <label class="form-label small fw-semibold" for="contributor">Supplied by</label>
+              <input class="form-control" name="contributor" id="contributor" placeholder="e.g. Ali Raza (WhatsApp)">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" for="default_date">Date</label>
+            <input class="form-control" type="date" name="default_date" id="default_date" value="{{ today }}" style="max-width: 200px;">
+            <div class="form-text">Used for photos that don't record when they were taken. You can change any photo's date while curating.</div>
+          </div>
+          <button class="btn btn-primary" type="submit"><i class="bi bi-arrow-right-circle"></i> Upload and curate</button>
+          <span class="small text-muted ms-2">Nothing is added to an album yet.</span>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if batches %}
+<div class="card shadow-sm border-0 mt-3">
+  <div class="card-header bg-white fw-semibold small">Recent uploads</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle small">
+      <thead><tr><th>#</th><th>Uploaded</th><th>File</th><th>For</th><th>Source</th><th>Photos</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for b in batches %}
+        <tr>
+          <td class="text-muted">{{ b.batch_id }}</td>
+          <td>{{ b.created_at[:16] }}</td>
+          <td class="text-truncate" style="max-width: 260px;">{{ b.file_name or '' }}</td>
+          <td>{{ b.supplier_name or 'Many' }}</td>
+          <td>{{ b.source }}{% if b.contributor %} · {{ b.contributor }}{% endif %}</td>
+          <td>{{ b.added }} added{% if b.pending %} · <strong>{{ b.pending }} waiting</strong>{% endif %} of {{ b.total }}</td>
+          <td>{% if b.status == 'open' %}<span class="badge bg-warning-subtle text-warning-emphasis">Curating</span>{% elif b.status == 'done' %}<span class="badge bg-success-subtle text-success">Done</span>{% else %}<span class="badge bg-light text-muted border">Discarded</span>{% endif %}</td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('images.curate', batch_id=b.batch_id) }}">{{ 'Curate' if b.status == 'open' else 'View' }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

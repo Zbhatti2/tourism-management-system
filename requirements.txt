@@ -26,3 +26,6 @@ gunicorn>=21.2
 
 # Data Import wizard (blueprints/platform_import.py): reading and writing .xlsx templates.
 openpyxl>=3.1
+
+# Images Catalog (image_catalog.py): thumbnails and the date a photo was taken.
+Pillow>=10.0

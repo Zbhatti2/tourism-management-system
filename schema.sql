@@ -2382,7 +2382,15 @@ CREATE TABLE supplier_documents (
     notes           TEXT,                    -- brief summary; web URLs are auto-linked on display
     is_deleted      INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Images Catalog (image_catalog.py), used by 'Image / Photograph' rows:
+    -- document_name is the image's Title.
+    image_date      TEXT,                    -- YYYY-MM-DD: when the photo was taken (defaults on import)
+    sort_order      INTEGER,                 -- position in the supplier's album
+    source          TEXT,                    -- 'Individual' / 'AI Agent'
+    source_url      TEXT,                    -- where an AI Agent found it
+    content_hash    TEXT,                    -- SHA-256 of the stored file, for duplicate checks
+    thumb_data      BLOB                     -- cached JPEG thumbnail
 );
 CREATE INDEX idx_supplier_documents_tenant ON supplier_documents(tenant_id);
 CREATE INDEX idx_supplier_documents_supplier ON supplier_documents(supplier_id);
@@ -2909,3 +2917,48 @@ CREATE TABLE IF NOT EXISTS tenant_catalog_links (
 );
 CREATE INDEX IF NOT EXISTS idx_tenant_catalog_links_local ON tenant_catalog_links(tenant_id, local_table, local_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_catalog_links_catalog ON tenant_catalog_links(entity, catalog_id);
+
+-- ============================================================================
+-- Images Catalog (image_catalog.py): images waiting to be curated before
+-- they're added to a Hotel / Resort / Restaurant album.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS image_import_batches (
+    batch_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    source          TEXT NOT NULL DEFAULT 'Individual' CHECK (source IN ('Individual','AI Agent')),
+    contributor     TEXT,                   -- who supplied the photos (a person, or the agent's name)
+    file_name       TEXT,                   -- uploaded zip / first file name
+    default_date    TEXT,                   -- YYYY-MM-DD used when a photo doesn't record its own date
+    supplier_id     INTEGER REFERENCES suppliers(supplier_id),  -- set when added from one supplier's page
+    status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done','discarded')),
+    created_by      INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_image_import_batches_tenant ON image_import_batches(tenant_id);
+CREATE TABLE IF NOT EXISTS image_import_items (
+    item_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    batch_id        INTEGER NOT NULL REFERENCES image_import_batches(batch_id),
+    file_name       TEXT NOT NULL,
+    file_data       BLOB NOT NULL,
+    mime_type       TEXT,
+    file_size       INTEGER,
+    content_hash    TEXT,
+    thumb_data      BLOB,
+    supplier_id     INTEGER REFERENCES suppliers(supplier_id),
+    match_how       TEXT,                   -- exact / similar / ambiguous / entity / manual / NULL (no match)
+    match_note      TEXT,
+    duplicate_note  TEXT,                   -- set when the same image is already in the album or earlier in the batch
+    title           TEXT,
+    description     TEXT,
+    image_date      TEXT,
+    sort_order      INTEGER,
+    include         INTEGER NOT NULL DEFAULT 1,
+    source_url      TEXT,                   -- where an AI Agent found it
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','added','rejected')),
+    document_id     INTEGER REFERENCES supplier_documents(supplier_document_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_image_import_items_batch ON image_import_items(batch_id);
+CREATE INDEX IF NOT EXISTS idx_image_import_items_tenant ON image_import_items(tenant_id);

@@ -681,6 +681,21 @@ def _migration_catalog_sync(db):
     db.commit()
 
 
+def _migration_image_catalog(db):
+    """Images Catalog (Oct 2026): curation fields on supplier images (date,
+    sort order, source, source URL, content hash, cached thumbnail) and the
+    import batches images wait in until they're curated. See
+    image_catalog.py. Existing stored images get a content hash so a
+    re-sent copy is recognised as a duplicate."""
+    import image_catalog
+    for col, typ in image_catalog.DOCUMENT_COLUMNS:
+        if not _column_exists(db, "supplier_documents", col):
+            db.execute(f"ALTER TABLE supplier_documents ADD COLUMN {col} {typ}")
+    db.executescript(image_catalog.DDL)
+    image_catalog.backfill_hashes(db)
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -700,6 +715,7 @@ MIGRATIONS = [
     ("2026_10_geography_distances", _migration_geography_distances),
     ("2026_10_platform_catalogs", _migration_platform_catalogs),
     ("2026_10_catalog_sync", _migration_catalog_sync),
+    ("2026_10_image_catalog", _migration_image_catalog),
 ]
 
 

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Curate Images — Upload #{{ batch.batch_id }}{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  {% if for_supplier %}<a href="{{ url_for('images.album', supplier_id=for_supplier.supplier_id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ for_supplier.supplier_name }} — Images Catalog</a>
+  {% else %}<a href="{{ url_for('images.import_images') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Import Images</a>{% endif %}
+</nav>
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-0">Curate Images</h1>
+    <div class="small text-muted">
+      Upload #{{ batch.batch_id }} · {{ batch.created_at[:16] }} · {{ batch.source }}{% if batch.contributor %} · supplied by {{ batch.contributor }}{% endif %}
+      {% if for_supplier %} · for <strong>{{ for_supplier.supplier_name }}</strong>{% endif %}
+      · {% if batch.status == 'open' %}<span class="fw-semibold">nothing is in an album until you click Add</span>{% elif batch.status == 'done' %}finished{% else %}discarded{% endif %}
+    </div>
+  </div>
+</div>
+
+<ul class="nav nav-pills small mb-3 flex-wrap">
+  <li class="nav-item"><a class="nav-link {{ 'active' if show == 'all' else '' }}" href="{{ url_for('images.curate', batch_id=batch.batch_id) }}">All <span class="badge bg-secondary-subtle text-dark">{{ all_count }}</span></a></li>
+  {% for k, label in labels.items() if counts[k] %}
+  <li class="nav-item"><a class="nav-link {{ 'active' if show == k else '' }}" href="{{ url_for('images.curate', batch_id=batch.batch_id, show=k) }}">{{ label }} <span class="badge {{ badges[k] }}">{{ counts[k] }}</span></a></li>
+  {% endfor %}
+</ul>
+
+<template id="supplier-options">
+  <option value="">— choose Hotel / Restaurant —</option>
+  {% for s in suppliers %}<option value="{{ s.supplier_id }}">{{ s.supplier_name }}{% if s.city %} · {{ s.city }}{% endif %}</option>{% endfor %}
+</template>
+
+<form method="post" action="{{ url_for('images.save_batch', batch_id=batch.batch_id) }}" id="curate-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="show" value="{{ show }}">
+  <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+    {% for it in items %}
+    {% set editable = it.status == 'pending' and batch.status == 'open' %}
+    <div class="col">
+      <div class="card shadow-sm h-100 {{ 'border-0' if it.state in ('ready', 'added') else 'border-warning' if it.state == 'check' else 'border-danger-subtle' if it.state == 'unmatched' else 'border-0' }}">
+        <a href="{{ url_for('images.album_image', supplier_id=it.supplier_id, document_id=it.document_id, kind='full') if it.document_id else url_for('images.item_image', item_id=it.item_id, kind='full') }}" target="_blank" class="d-block bg-light text-center" style="height: 190px; overflow: hidden;">
+          {% if it.document_id %}
+          <img src="{{ url_for('images.album_image', supplier_id=it.supplier_id, document_id=it.document_id, kind='thumb') }}" alt="" style="height: 190px; width: 100%; object-fit: cover;" loading="lazy"
+               onerror="this.replaceWith(Object.assign(document.createElement('div'), {className: 'small text-muted pt-5', textContent: 'Since removed from the album'}));">
+          {% elif it.status == 'pending' %}
+          <img src="{{ url_for('images.item_image', item_id=it.item_id, kind='thumb') }}" alt="" style="height: 190px; width: 100%; object-fit: cover;" loading="lazy"
+               onerror="this.replaceWith(Object.assign(document.createElement('div'), {className: 'small text-muted pt-5', textContent: 'No preview for this file type'}));">
+          {% else %}<div class="small text-muted pt-5">Left out</div>{% endif %}
+        </a>
+        <div class="card-body small">
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <span class="text-muted text-break" title="{{ it.file_name }}">{{ it.file_name }}</span>
+            <span class="badge {{ badges[it.state] }} flex-shrink-0">{{ labels[it.state] }}</span>
+          </div>
+          {% if it.match_note and it.state in ('check', 'unmatched') %}<div class="text-warning-emphasis mb-2">{{ it.match_note }}</div>{% endif %}
+          {% if it.duplicate_note and it.status == 'pending' %}<div class="text-muted mb-2"><i class="bi bi-files"></i> {{ it.duplicate_note }}</div>{% endif %}
+          {% if it.source_url %}<div class="mb-2 text-truncate">Found at <a href="{{ it.source_url }}" target="_blank" rel="noopener">{{ it.source_url }}</a></div>{% endif %}
+          {% if editable %}
+            {% if for_supplier %}
+            <input type="hidden" name="supplier_{{ it.item_id }}" value="{{ it.supplier_id or '' }}">
+            {% else %}
+            <label class="form-label mb-0 text-muted">Hotel / Restaurant</label>
+            <select class="form-select form-select-sm mb-2 js-supplier" name="supplier_{{ it.item_id }}">
+              {% if it.supplier_id %}<option value="{{ it.supplier_id }}" selected>{{ it.supplier_name }}</option>{% else %}<option value="">— choose Hotel / Restaurant —</option>{% endif %}
+            </select>
+            {% endif %}
+            <label class="form-label mb-0 text-muted">Title</label>
+            <input class="form-control form-control-sm mb-2" name="title_{{ it.item_id }}" value="{{ it.title or '' }}" maxlength="150">
+            <label class="form-label mb-0 text-muted">Description</label>
+            <textarea class="form-control form-control-sm mb-2" name="description_{{ it.item_id }}" rows="2" maxlength="{{ max_desc }}">{{ it.description or '' }}</textarea>
+            <div class="row g-2 align-items-end">
+              <div class="col-7"><label class="form-label mb-0 text-muted">Date</label>
+                <input class="form-control form-control-sm" type="date" name="date_{{ it.item_id }}" value="{{ it.image_date or '' }}"></div>
+              <div class="col-5"><label class="form-label mb-0 text-muted">Sort order</label>
+                <input class="form-control form-control-sm" type="number" name="sort_{{ it.item_id }}" value="{{ it.sort_order or '' }}" min="0"></div>
+            </div>
+            <div class="form-check mt-2">
+              <input class="form-check-input js-include" type="checkbox" name="include_{{ it.item_id }}" id="inc{{ it.item_id }}" value="1" {{ 'checked' if it.include else '' }}>
+              <label class="form-check-label fw-semibold" for="inc{{ it.item_id }}">Add to album</label>
+            </div>
+          {% else %}
+            <div class="fw-semibold">{{ it.title or '' }}</div>
+            {% if it.supplier_name %}<div class="text-muted">{{ it.supplier_name }}</div>{% endif %}
+            {% if it.description %}<div>{{ it.description }}</div>{% endif %}
+            <div class="text-muted">{{ it.image_date or '' }}{% if it.sort_order %} · #{{ it.sort_order }}{% endif %}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="col-12"><div class="text-center text-muted py-5">No images in this view.</div></div>
+    {% endfor %}
+  </div>
+
+  {% if batch.status == 'open' %}
+  <div class="card shadow border-0 mt-3 sticky-bottom" style="bottom: 0.5rem;">
+    <div class="card-body d-flex flex-wrap align-items-center gap-2 py-2">
+      <button class="btn btn-primary" name="action" value="add" type="submit"><i class="bi bi-check2-circle"></i> Add ticked to {{ 'album' if for_supplier else 'albums' }}</button>
+      <button class="btn btn-outline-primary" name="action" value="save" type="submit">Save</button>
+      <button class="btn btn-outline-secondary" name="action" value="reject" type="submit" onclick="return confirm('Leave out every unticked image in this upload?');">Leave out unticked</button>
+      <span class="small text-muted ms-1"><a href="#" id="tick-all">Tick all</a> · <a href="#" id="untick-all">Untick all</a> (this view)</span>
+      <button class="btn btn-link text-danger ms-auto" name="action" value="discard" type="submit" onclick="return confirm('Discard the whole upload? Nothing will be added.');">Discard upload</button>
+    </div>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var tpl = document.getElementById('supplier-options');
+  document.querySelectorAll('.js-supplier').forEach(function (sel) {
+    sel.addEventListener('focus', function fill() {
+      if (sel.dataset.filled) return;
+      var current = sel.value;
+      sel.innerHTML = tpl.innerHTML;
+      sel.value = current;
+      sel.dataset.filled = '1';
+    });
+  });
+  function setAll(v) { document.querySelectorAll('.js-include').forEach(function (c) { c.checked = v; }); }
+  var t = document.getElementById('tick-all'), u = document.getElementById('untick-all');
+  if (t) t.addEventListener('click', function (e) { e.preventDefault(); setAll(true); });
+  if (u) u.addEventListener('click', function (e) { e.preventDefault(); setAll(false); });
+})();
+</script>
+{% endblock %}

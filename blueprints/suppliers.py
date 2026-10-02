@@ -123,7 +123,8 @@ def _city_options(db):
 
 def _get_supplier(db, supplier_id):
     supplier = db.execute(
-        """SELECT s.*, t.label AS type_label, t.template_key AS template_key, st.label AS subtype_label
+        """SELECT s.*, t.label AS type_label, t.template_key AS template_key, t.code AS type_code,
+                  st.label AS subtype_label
            FROM suppliers s
            LEFT JOIN supplier_types t ON t.supplier_type_id = s.supplier_type_id
            LEFT JOIN supplier_subtypes st ON st.supplier_subtype_id = s.supplier_subtype_id
@@ -422,10 +423,11 @@ def view_supplier(supplier_id):
     # DESC here rather than the document_name order documents_and_images
     # was fetched in above (that alphabetical order is still right for the
     # Documents and Links card, which isn't capped).
+    # Images Catalog (Oct 2026): the card previews the album in its curated
+    # order -- Sort order first, then newest -- the same order the album opens in.
     images = sorted(
         (d for d in documents_and_images if d["document_type_label"] == IMAGE_DOCUMENT_TYPE_LABEL),
-        key=lambda d: (d["created_at"], d["supplier_document_id"]),
-        reverse=True,
+        key=lambda d: (d["sort_order"] if d["sort_order"] is not None else 999999, -d["supplier_document_id"]),
     )
 
     return render_template(
@@ -1176,6 +1178,9 @@ def bulk_import_images(supplier_id):
     A file that can't be read any more by the time Import is clicked (moved/
     deleted since it was picked, or now permission-denied) is skipped
     rather than aborting the whole batch, and reported back by name."""
+    if request.method == "GET":
+        # Superseded by Add images -> curation (blueprints/images.py, Oct 2026).
+        return redirect(url_for("images.add_to_supplier", supplier_id=supplier_id))
     db = get_db()
     supplier = _get_supplier(db, supplier_id)
     if request.method == "POST":
@@ -1270,65 +1275,16 @@ def pick_bulk_import_files(supplier_id):
 
 # ------------------------------------------------------------- image catalog
 
-IMAGE_CATALOG_SORTS = {
-    # Applied to the OUTER "SELECT * FROM (...)" wrapper below, so these
-    # reference the inner query's flat output columns -- no "d." alias out
-    # here (that only exists inside the subquery).
-    "recent": "created_at DESC, supplier_document_id DESC",
-    "name": "document_name COLLATE NOCASE ASC",
-    "keywords": "keywords_str COLLATE NOCASE ASC, document_name COLLATE NOCASE ASC",
-}
 
 
 @suppliers_bp.route("/<int:supplier_id>/documents/catalog")
 @login_required
 def image_catalog(supplier_id):
-    """The full "Images / Photographs" Catalog for one Supplier (Zeb, Sept
-    2026: "Hyperlink to Display Entire Catalog List Page" with Thumbnail /
-    Image Name / Author / Description / Date added columns, Search, Sort,
-    and Select+Delete). Scoped to this Supplier, same as the card it's
-    linked from -- "entire catalog" here means every image on file for
-    this Supplier, not paginated/truncated."""
-    db = get_db()
-    supplier = _get_supplier(db, supplier_id)
-    q = request.args.get("q", "").strip()
-    sort = request.args.get("sort", "recent").strip()
-    if sort not in IMAGE_CATALOG_SORTS:
-        sort = "recent"
-
-    image_type_id = _image_document_type_id(db)
-    if image_type_id is None:
-        # No 'Image / Photograph' Document Type exists for this tenant at
-        # all (shouldn't normally happen -- it's part of the default seed
-        # data), so there can be no rows to show. Render the same empty
-        # Catalog page rather than a query with no meaningful WHERE.
-        return render_template("suppliers/image_catalog.html", supplier=supplier, images=[], q=q, sort=sort)
-
-    sql = """
-        SELECT d.*,
-               (SELECT path_or_url FROM supplier_document_locations l
-                WHERE l.supplier_document_id = d.supplier_document_id ORDER BY l.location_id LIMIT 1) AS thumbnail_source,
-               (SELECT location_type FROM supplier_document_locations l
-                WHERE l.supplier_document_id = d.supplier_document_id ORDER BY l.location_id LIMIT 1) AS thumbnail_location_type,
-               (SELECT GROUP_CONCAT(term, ', ') FROM supplier_document_keywords k
-                WHERE k.supplier_document_id = d.supplier_document_id) AS keywords_str
-        FROM supplier_documents d
-        WHERE d.supplier_id = ? AND d.is_deleted = 0 AND d.tenant_id = ? AND d.document_type_id = ?
-    """
-    params = [supplier_id, g.tenant_id, image_type_id]
-    if q:
-        sql += """ AND (
-            d.document_name LIKE ? OR d.authors LIKE ? OR d.description LIKE ?
-            OR EXISTS (SELECT 1 FROM supplier_document_keywords k WHERE k.supplier_document_id = d.supplier_document_id AND k.term LIKE ?)
-        )"""
-        like = f"%{q}%"
-        params += [like, like, like, like]
-    sql = f"SELECT * FROM ({sql}) ORDER BY {IMAGE_CATALOG_SORTS[sort]}"
-    images = db.execute(sql, params).fetchall()
-
-    return render_template(
-        "suppliers/image_catalog.html", supplier=supplier, images=images, q=q, sort=sort,
-    )
+    """The old "Images / Photographs" Catalog list, superseded by the Images
+    Catalog album (blueprints/images.py, Oct 2026) -- kept as a redirect so
+    old links and bookmarks still land in the right place."""
+    _get_supplier(get_db(), supplier_id)
+    return redirect(url_for("images.album", supplier_id=supplier_id, view="list", q=request.args.get("q") or None))
 
 
 @suppliers_bp.route("/<int:supplier_id>/documents/catalog/delete", methods=["POST"])
