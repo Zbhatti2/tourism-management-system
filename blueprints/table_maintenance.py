@@ -431,6 +431,25 @@ def _missing_required_extra_field(values, cfg):
     return None
 
 
+def _is_locked(entry):
+    """True for a platform-locked row (is_system = 1 -- Hotel, Restaurant,
+    the star-rating sub-types, the catalog's POI Types; see
+    platform_lookups.py). Those are maintained by the SystemAdmin from
+    Platform Lookups, so a tenant can't edit, deactivate, merge away or
+    delete them here. Tables without the column are never locked."""
+    return "is_system" in entry.keys() and bool(entry["is_system"])
+
+
+def _refuse_locked(table_key, entry):
+    flash(
+        f"'{entry['label']}' is a locked platform entry, shared by every TMS tenant so platform data "
+        f"(hotels, restaurants, points of interest) can be matched to it. It can't be edited, deactivated, "
+        f"merged or deleted here. You can still add your own entries alongside it.",
+        "error",
+    )
+    return redirect(url_for("table_maintenance.manage", table_key=table_key))
+
+
 def _parent_options(db, cfg):
     """Active rows from a table's parent lookup, for the picker on its
     add/edit form. None when the table isn't nested under anything."""
@@ -535,7 +554,7 @@ def manage(table_key):
     entries = []
     for r in rows:
         count, _ = _usage_count(db, cfg, r[cfg["pk"]])
-        entries.append({"row": r, "usage_count": count})
+        entries.append({"row": r, "usage_count": count, "locked": _is_locked(r)})
     return render_template(
         "table_maintenance/manage.html", table_key=table_key, cfg=cfg, entries=entries
     )
@@ -586,6 +605,8 @@ def edit_entry(table_key, entry_id):
     ).fetchone()
     if entry is None:
         abort(404)
+    if _is_locked(entry):
+        return _refuse_locked(table_key, entry)
     if request.method == "POST":
         form = request.form
         label, values = _row_values(form, cfg)
@@ -626,6 +647,8 @@ def toggle_active(table_key, entry_id):
     ).fetchone()
     if entry is None:
         abort(404)
+    if _is_locked(entry):
+        return _refuse_locked(table_key, entry)
     new_state = 0 if entry["is_active"] else 1
     db.execute(
         f"UPDATE {cfg['table']} SET is_active = ? WHERE {cfg['pk']} = ? AND tenant_id = ?",
@@ -647,6 +670,8 @@ def delete_entry(table_key, entry_id):
     ).fetchone()
     if entry is None:
         abort(404)
+    if _is_locked(entry):
+        return _refuse_locked(table_key, entry)
     count, _ = _usage_count(db, cfg, entry_id)
     if count > 0:
         flash(
@@ -676,6 +701,8 @@ def reassign(table_key, entry_id):
     ).fetchone()
     if entry is None:
         abort(404)
+    if _is_locked(entry):
+        return _refuse_locked(table_key, entry)
     count, breakdown = _usage_count(db, cfg, entry_id)
     others = db.execute(
         f"SELECT * FROM {cfg['table']} WHERE {cfg['pk']} != ? AND tenant_id = ? ORDER BY label COLLATE NOCASE",

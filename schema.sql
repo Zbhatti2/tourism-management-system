@@ -353,6 +353,7 @@ CREATE TABLE poi_types (
     description     TEXT,
     sort_order      INTEGER DEFAULT 0,
     is_active       INTEGER NOT NULL DEFAULT 1,
+    is_system       INTEGER NOT NULL DEFAULT 0,  -- 1 = locked platform code (Platform Lookups, platform_lookups.py): tenants can't edit, deactivate or delete it
     UNIQUE (tenant_id, code)
 );
 CREATE INDEX idx_poi_types_tenant ON poi_types(tenant_id);
@@ -491,6 +492,7 @@ CREATE TABLE supplier_types (
     sort_order      INTEGER DEFAULT 0,
     is_active       INTEGER NOT NULL DEFAULT 1,
     template_key    TEXT,                   -- e.g. 'hotel'; NULL = no specialized Template (most types). Per Zeb's "Template linked to the Supplier" request (Sept 2026) -- tells the Supplier view/edit UI which extra Type-specific sections to show (Amenities & Facilities / Rooms for 'hotel'; a future Type gets its own key + sections). See hotel_amenity_options/hotel_room_types below.
+    is_system       INTEGER NOT NULL DEFAULT 0,  -- 1 = locked platform code (Platform Lookups, platform_lookups.py): tenants can't edit, deactivate or delete it
     UNIQUE (tenant_id, code)
 );
 CREATE INDEX idx_supplier_types_tenant ON supplier_types(tenant_id);
@@ -506,6 +508,7 @@ CREATE TABLE supplier_subtypes (
     description     TEXT,
     sort_order      INTEGER DEFAULT 0,
     is_active       INTEGER NOT NULL DEFAULT 1,
+    is_system       INTEGER NOT NULL DEFAULT 0,  -- 1 = locked platform code (Platform Lookups, platform_lookups.py): tenants can't edit, deactivate or delete it
     UNIQUE (tenant_id, code)
 );
 CREATE INDEX idx_supplier_subtypes_tenant ON supplier_subtypes(tenant_id);

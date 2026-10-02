@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set singular = cfg.label[:-1] %}
+{% block title %}TMS System Admin — {{ 'Edit' if entry else 'New' }} {{ singular }}{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('platform_lookups.index', table=key) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Platform Lookups</a>
+</nav>
+<div class="mb-4">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">{{ 'Edit' if entry else 'New' }} Platform {{ singular }}</h1>
+</div>
+
+{% macro val(name) %}{{ form.get(name) if form.get(name) is not none else (entry[name] if entry and entry[name] is not none else '') }}{% endmacro %}
+
+<div class="card shadow-sm border-0" style="max-width: 620px;">
+  <div class="card-body">
+    <p class="text-muted small">Saved entries are locked in every tenant's Table Maintenance and applied to all tenants immediately.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if cfg.parent %}
+      <div class="mb-3">
+        <label class="form-label" for="parent_id">{{ cfg.parent.nav_label }}</label>
+        <select class="form-select" id="parent_id" name="parent_id" required>
+          <option value="">— choose —</option>
+          {% set current_parent = (form.get('parent_id') or (entry[cfg.parent.fk] if entry else '')) | string %}
+          {% for p in parent_options %}
+          <option value="{{ p[cfg.parent.pk] }}" {{ 'selected' if (p[cfg.parent.pk] | string) == current_parent else '' }}>{{ p.label }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Only locked platform {{ cfg.parent.nav_label }}s can be chosen.</div>
+      </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="label">Label</label>
+        <input class="form-control" id="label" name="label" value="{{ val('label') }}" required autofocus>
+        <div class="form-text">Changing it renames this entry in every tenant.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="code">Code</label>
+        {% if entry %}
+        <input class="form-control" id="code" value="{{ entry.code }}" disabled>
+        <div class="form-text">Fixed — it's what ties each tenant's copy to this entry.</div>
+        {% else %}
+        <input class="form-control" id="code" name="code" value="{{ form.get('code', '') }}" placeholder="Leave blank to generate from the label">
+        <div class="form-text">If a tenant already has an entry with this code or label, it is locked in place rather than duplicated.</div>
+        {% endif %}
+      </div>
+      {% if cfg.has_template_key %}
+      <div class="mb-3">
+        <label class="form-label" for="template_key">Supplier page template</label>
+        <select class="form-select" id="template_key" name="template_key">
+          {% set current_tk = form.get('template_key') if form.get('template_key') is not none else (entry.template_key if entry and entry.template_key else '') %}
+          {% for value, text in template_keys %}
+          <option value="{{ value }}" {{ 'selected' if value == current_tk else '' }}>{{ text }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Extra sections shown on suppliers of this type.</div>
+      </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="description">Description (optional)</label>
+        <textarea class="form-control" id="description" name="description" rows="2">{{ val('description') }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="sort_order">Sort order</label>
+        <input class="form-control" id="sort_order" name="sort_order" type="number" value="{{ val('sort_order') or 0 }}" style="max-width: 140px;">
+        <div class="form-text">Used for new tenants; existing tenants keep their own ordering.</div>
+      </div>
+      <button class="btn btn-primary" type="submit"><i class="bi bi-lock"></i> {{ 'Save' if entry else 'Add and lock' }}</button>
+      <a class="btn btn-link" href="{{ url_for('platform_lookups.index', table=key) }}">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

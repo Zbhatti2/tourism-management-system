@@ -82,6 +82,9 @@ MODULES = [
     {"key": "tenants_admin", "label": "Tenant Management", "icon": "diagram-3", "endpoint": "tenants_admin.list_tenants",
      "roles": ["SystemAdmin"]},
     {"key": "system_mgmt", "label": "System Management", "icon": "gear", "endpoint": "system_mgmt.index"},
+    # Locked lookup codes every tenant shares (platform_lookups.py).
+    {"key": "platform_lookups", "label": "Platform Lookups", "icon": "tags", "endpoint": "platform_lookups.index",
+     "roles": ["SystemAdmin"]},
 ]
 
 
@@ -137,6 +140,7 @@ def create_app():
     from blueprints.ai_agents import ai_agents_bp
     from blueprints.users import users_bp
     from blueprints.tenants_admin import tenants_admin_bp
+    from blueprints.platform_lookups import platform_lookups_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -168,6 +172,7 @@ def create_app():
     app.register_blueprint(currency_admin_bp, url_prefix="/currency-maintenance")
     app.register_blueprint(users_bp, url_prefix="/users")
     app.register_blueprint(tenants_admin_bp, url_prefix="/platform/tenants")
+    app.register_blueprint(platform_lookups_bp, url_prefix="/platform/lookups")
 
     app.jinja_env.globals["modules"] = MODULES
 
