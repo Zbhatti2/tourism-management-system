@@ -4,10 +4,11 @@
 <nav class="mb-2"><a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ supplier.supplier_name }}</a></nav>
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <div class="text-uppercase small text-muted fw-semibold">Images Catalog</div>
+    <div class="text-uppercase small text-muted fw-semibold">Images Catalog{% if readonly %} <span class="badge bg-light text-muted border ms-1">View only</span>{% endif %}</div>
     <h1 class="h3 mb-0">{{ supplier.supplier_name }}</h1>
     <div class="small text-muted">{% if supplier.type_label %}{{ supplier.type_label }} · {% endif %}{{ total }} image{{ 's' if total != 1 }}{% if images|length != total %} · {{ images|length }} shown{% endif %}</div>
   </div>
+  {% if not readonly %}
   <div class="d-flex gap-2 align-items-start">
     {% if has_album %}
     <details class="position-relative">
@@ -23,8 +24,9 @@
     {% endif %}
     <a href="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add images</a>
   </div>
+  {% endif %}
 </div>
-{% if last_run %}
+{% if last_run and not readonly %}
 <div class="small text-muted mb-2">AI Image Collector last ran {{ last_run.created_at[:16] }}:
   {% if last_run.status in ('queued', 'running') %}<a href="{{ url_for('images.agent_run', run_id=last_run.run_id) }}">still working…</a>
   {% elif last_run.status == 'failed' %}<a href="{{ url_for('images.agent_run', run_id=last_run.run_id) }}">failed</a>
@@ -32,7 +34,7 @@
 </div>
 {% endif %}
 
-{% for p in pending %}
+{% for p in pending if not readonly %}
 <div class="alert alert-warning small py-2">{{ p.n }} image{{ 's' if p.n != 1 }} for this {{ (supplier.type_label or 'supplier')|lower }} {{ 'are' if p.n != 1 else 'is' }} waiting to be curated.
   <a href="{{ url_for('images.curate', batch_id=p.batch_id) }}" class="alert-link">Curate upload #{{ p.batch_id }}</a></div>
 {% endfor %}
@@ -40,6 +42,7 @@
 <form method="get" class="card shadow-sm border-0 mb-3">
   <div class="card-body py-2 d-flex flex-wrap gap-2 align-items-end">
     <input type="hidden" name="view" value="{{ view }}">
+    {% if readonly %}<input type="hidden" name="mode" value="view">{% endif %}
     <div class="flex-grow-1" style="min-width: 220px;">
       <label class="form-label small text-muted mb-0">Search</label>
       <input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Title, description or date (e.g. 2026-05)">
@@ -51,17 +54,19 @@
         {% for k, label in sorts.items() %}<option value="{{ k }}" {{ 'selected' if sort == k else '' }}>{{ label }}</option>{% endfor %}
       </select></div>
     <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-search"></i> Search</button>
-    {% if q or date_from or date_to %}<a class="btn btn-sm btn-link" href="{{ url_for('images.album', supplier_id=supplier.supplier_id, view=view, sort=sort) }}">Clear</a>{% endif %}
+    {% if q or date_from or date_to %}<a class="btn btn-sm btn-link" href="{{ url_for('images.album', supplier_id=supplier.supplier_id, view=view, sort=sort, mode='view' if readonly else None) }}">Clear</a>{% endif %}
+    {% if not readonly %}
     <div class="btn-group btn-group-sm ms-auto" role="group">
       <a class="btn {{ 'btn-secondary' if view != 'list' else 'btn-outline-secondary' }}" href="{{ url_for('images.album', supplier_id=supplier.supplier_id, view='slider', q=q or None, sort=sort, **{'from': date_from or None, 'to': date_to or None}) }}"><i class="bi bi-images"></i> Album</a>
       <a class="btn {{ 'btn-secondary' if view == 'list' else 'btn-outline-secondary' }}" href="{{ url_for('images.album', supplier_id=supplier.supplier_id, view='list', q=q or None, sort=sort, **{'from': date_from or None, 'to': date_to or None}) }}"><i class="bi bi-list-ul"></i> List</a>
     </div>
+    {% endif %}
   </div>
 </form>
 
 {% if not images %}
 <div class="card shadow-sm border-0"><div class="card-body text-center text-muted py-5">
-  {% if total %}No images match this search.{% else %}No images yet. <a href="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) }}">Add the first ones</a>.{% endif %}
+  {% if total %}No images match this search.{% elif readonly %}No images yet.{% else %}No images yet. <a href="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) }}">Add the first ones</a>.{% endif %}
 </div></div>
 
 {% elif view != 'list' %}
