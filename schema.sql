@@ -2625,3 +2625,48 @@ CREATE TABLE agent_run_sources (
 );
 CREATE INDEX idx_agent_run_sources_tenant ON agent_run_sources(tenant_id);
 CREATE INDEX idx_agent_run_sources_run ON agent_run_sources(run_id);
+
+-- =============================================================================
+-- MODULE PD -- Platform Data: Transport Hubs (Oct 2026). GLOBAL, no tenant_id:
+-- airports, railway stations, bus terminals and seaports shared by every
+-- tenant, maintained by the SystemAdmin (blueprints/transport_hubs.py).
+-- Kept identical to db.py's TRANSPORT_HUBS_DDL (the migration that adds
+-- these to an existing database); hub_types are seeded by that migration.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS hub_types (
+    hub_type_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    code            TEXT NOT NULL UNIQUE,
+    label           TEXT NOT NULL,
+    icon            TEXT,                   -- Bootstrap icon name, e.g. 'airplane'
+    sort_order      INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS transport_hubs (
+    hub_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    hub_type_id     INTEGER NOT NULL REFERENCES hub_types(hub_type_id),
+    name            TEXT NOT NULL,
+    code            TEXT,                   -- IATA for airports (LHE); station code where one exists
+    icao_code       TEXT,                   -- airports only (OPLA)
+    region_id       INTEGER REFERENCES regions(region_id),
+    country_id      INTEGER REFERENCES countries(country_id),
+    state_id        INTEGER REFERENCES states(state_id),
+    state_province_text TEXT,
+    city_id         INTEGER REFERENCES cities(city_id),
+    city_text       TEXT,
+    latitude        REAL,
+    longitude       REAL,
+    operator        TEXT,                   -- e.g. Pakistan Railways, Daewoo Express, a port authority
+    scope           TEXT CHECK (scope IN ('International','Domestic','Regional')),
+    address         TEXT,
+    phone           TEXT,
+    website         TEXT,
+    notes           TEXT,
+    is_major        INTEGER NOT NULL DEFAULT 1,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_transport_hubs_type ON transport_hubs(hub_type_id);
+CREATE INDEX IF NOT EXISTS idx_transport_hubs_country ON transport_hubs(country_id);
+CREATE INDEX IF NOT EXISTS idx_transport_hubs_city ON transport_hubs(city_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transport_hubs_type_code ON transport_hubs(hub_type_id, code) WHERE code IS NOT NULL;

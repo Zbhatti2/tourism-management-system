@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Hub Types{% endblock %}
+{% block content %}
+<nav class="mb-2">
+  <a href="{{ url_for('transport_hubs.list_hubs') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Transport Hubs</a>
+</nav>
+<div class="mb-3">
+  <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+  <h1 class="h3 mb-0">Hub Types</h1>
+</div>
+<p class="text-muted small">The kinds of transport hub. Adding one (e.g. Metro Station, Heliport) is all it takes to start listing hubs of that kind.</p>
+
+<div class="card shadow-sm border-0 mb-3" style="max-width: 760px;">
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr><th>Label</th><th>Code</th><th>Icon</th><th>Sort</th><th>Hubs</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for t in types %}
+        <tr>
+          <td><i class="bi bi-{{ t.icon or 'geo' }} text-muted me-1"></i><strong>{{ t.label }}</strong></td>
+          <td class="small text-muted">{{ t.code }}</td>
+          <td class="small text-muted">{{ t.icon or "" }}</td>
+          <td class="small text-muted">{{ t.sort_order }}</td>
+          <td class="small">{{ t.hub_count }}</td>
+          <td>{% if t.is_active %}<span class="badge bg-success-subtle text-success">Active</span>{% else %}<span class="badge bg-secondary-subtle text-dark">Inactive</span>{% endif %}</td>
+          <td class="text-end"><a href="{{ url_for('transport_hubs.edit_hub_type', hub_type_id=t.hub_type_id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil"></i></a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<form method="post" class="card shadow-sm border-0" style="max-width: 760px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <h2 class="h6">Add a hub type</h2>
+    <div class="row g-2">
+      <div class="col-md-6"><input class="form-control" name="label" placeholder="Label, e.g. Metro Station" required></div>
+      <div class="col-md-4"><input class="form-control" name="icon" placeholder="Icon, e.g. train-lightrail-front"></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Add</button></div>
+    </div>
+    <div class="form-text">Icon names come from Bootstrap Icons (icons.getbootstrap.com).</div>
+  </div>
+</form>
+{% endblock %}

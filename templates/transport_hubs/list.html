@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Transport Hubs{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">Transport Hubs</h1>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('transport_hubs.hub_types') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-list-ul"></i> Hub Types</a>
+    <a href="{{ url_for('transport_hubs.new_hub') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> New Hub</a>
+  </div>
+</div>
+
+<p class="text-muted small mb-3">Airports, railway stations, bus terminals and seaports shared by every tenant. Tenants pick from this list; only TMS maintains it.</p>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="{{ url_for('transport_hubs.list_hubs', q=q, country_id=country_id, show=show) }}"
+     class="btn btn-sm {{ 'btn-dark' if not hub_type_id else 'btn-outline-secondary' }}">All</a>
+  {% for t in hub_types %}
+  <a href="{{ url_for('transport_hubs.list_hubs', hub_type_id=t.hub_type_id, q=q, country_id=country_id, show=show) }}"
+     class="btn btn-sm {{ 'btn-dark' if hub_type_id == t.hub_type_id|string else 'btn-outline-secondary' }}">
+    <i class="bi bi-{{ t.icon or 'geo' }}"></i> {{ t.label }} <span class="badge bg-secondary-subtle text-dark">{{ type_counts.get(t.hub_type_id, 0) }}</span>
+  </a>
+  {% endfor %}
+</div>
+
+<form method="get" class="mb-3">
+  <input type="hidden" name="hub_type_id" value="{{ hub_type_id }}">
+  <div class="row g-2">
+    <div class="col-auto flex-grow-1" style="min-width: 220px;">
+      <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search name, code, city or operator…">
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="country_id">
+        <option value="">All countries</option>
+        {% for co in country_options %}
+        <option value="{{ co.country_id }}" {{ "selected" if country_id == co.country_id|string else "" }}>{{ co.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <select class="form-select" name="show">
+        <option value="active" {{ "selected" if show == "active" else "" }}>Active</option>
+        <option value="inactive" {{ "selected" if show == "inactive" else "" }}>Inactive</option>
+        <option value="all" {{ "selected" if show == "all" else "" }}>All</option>
+      </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-outline-secondary" type="submit">Search</button></div>
+    {% if q or hub_type_id or country_id or show != 'active' %}
+    <div class="col-auto"><a href="{{ url_for('transport_hubs.list_hubs') }}" class="btn btn-link">Clear</a></div>
+    {% endif %}
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr><th>Name</th><th>Type</th><th>Code</th><th>City</th><th>Country</th><th>Operator</th><th>Scope</th><th>Major</th><th>Map</th></tr>
+      </thead>
+      <tbody>
+        {% for h in hubs %}
+        <tr onclick="window.location='{{ url_for('transport_hubs.view_hub', hub_id=h.hub_id) }}'" style="cursor:pointer;" class="{{ 'text-muted' if not h.is_active else '' }}">
+          <td><strong>{{ h.name }}</strong>{% if not h.is_active %} <span class="badge bg-secondary-subtle text-dark">Inactive</span>{% endif %}</td>
+          <td class="small text-nowrap"><i class="bi bi-{{ h.type_icon or 'geo' }} text-muted"></i> {{ h.type_label }}</td>
+          <td class="small text-nowrap">{{ h.code or "" }}{% if h.icao_code %} <span class="text-muted">/ {{ h.icao_code }}</span>{% endif %}</td>
+          <td class="small">{{ h.city_label or "" }}</td>
+          <td class="small text-muted">{{ h.country_label or "" }}</td>
+          <td class="small text-muted">{{ h.operator or "" }}</td>
+          <td class="small text-muted">{{ h.scope or "" }}</td>
+          <td class="small">{% if h.is_major %}<i class="bi bi-star-fill text-warning" title="Major hub"></i>{% endif %}</td>
+          <td class="small">{% if h.latitude is not none %}<i class="bi bi-geo-alt-fill text-success" title="{{ h.latitude }}, {{ h.longitude }}"></i>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted py-5">No transport hubs match. <a href="{{ url_for('transport_hubs.new_hub') }}">Add one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if hubs %}<div class="card-footer bg-white small text-muted">
+    {% if total > hubs | length %}Showing the first {{ hubs | length }} of {{ "{:,}".format(total) }} hubs — search, or pick a type or country, to narrow the list.
+    {% else %}{{ "{:,}".format(total) }} hub{{ 's' if total != 1 else '' }}{% endif %}
+  </div>{% endif %}
+</div>
+{% endblock %}
