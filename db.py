@@ -667,6 +667,20 @@ def _migration_platform_catalogs(db):
         platform_lookups.sync_platform_lookups(db)
 
 
+def _migration_catalog_sync(db):
+    """Catalog Sync (Oct 2026): tenant_catalog_links ties each tenant's POIs
+    and Suppliers to the platform catalog records they came from (or were
+    matched to), and tenants.catalog_synced_at marks tenants whose first
+    sync is done -- from then on platform changes reach them automatically.
+    See catalog_sync.py. Existing tenants start unsynced: the SystemAdmin
+    runs their first sync from the Catalog Sync screen, with a preview."""
+    import catalog_sync
+    db.executescript(catalog_sync.LINKS_DDL)
+    if not _column_exists(db, "tenants", "catalog_synced_at"):
+        db.execute("ALTER TABLE tenants ADD COLUMN catalog_synced_at TEXT")
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -685,6 +699,7 @@ MIGRATIONS = [
     ("2026_10_package_hubs", _migration_package_hubs),
     ("2026_10_geography_distances", _migration_geography_distances),
     ("2026_10_platform_catalogs", _migration_platform_catalogs),
+    ("2026_10_catalog_sync", _migration_catalog_sync),
 ]
 
 

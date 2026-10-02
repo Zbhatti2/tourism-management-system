@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Catalog Sync{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">Catalog Sync</h1>
+    <div class="small text-muted">Copies the platform's Points of Interest, Accommodation and Restaurants into each tenant's own POIs and Suppliers, and keeps them up to date.</div>
+  </div>
+</div>
+
+<div class="alert alert-light border small">
+  <i class="bi bi-info-circle me-1"></i>
+  Run a tenant's <strong>first sync</strong> here, with a preview. After that, platform changes reach the tenant automatically:
+  new catalog records are added, and fields the tenant hasn't changed follow the platform. Where the tenant changed a field, they see
+  <em>Platform has a different value</em> and choose. New tenants get the whole catalog when they're created.
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr>
+        <th>Tenant</th><th>Account</th><th>Sync</th>
+        {% for e, label in labels.items() %}<th class="text-end"><i class="bi bi-{{ icons[e] }}"></i> {{ label }}</th>{% endfor %}
+        <th>Waiting</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for r in tenants %}
+        <tr>
+          <td class="fw-semibold">{{ r.t.tenant_name }}</td>
+          <td class="small text-muted">{{ r.t.account_number }}</td>
+          <td class="small">
+            {% if r.t.catalog_synced_at %}<span class="badge bg-success-subtle text-success">Automatic</span>
+              <div class="text-muted">since {{ r.t.catalog_synced_at[:10] }}</div>
+            {% else %}<span class="badge bg-warning-subtle text-warning-emphasis">First sync not run</span>{% endif %}
+          </td>
+          {% for e in labels %}<td class="text-end small">{{ r.held[e] }} <span class="text-muted">/ {{ totals[e] }}</span></td>{% endfor %}
+          <td class="small">
+            {% if r.waiting %}<span class="badge bg-warning-subtle text-warning-emphasis">{{ r.waiting }} to review</span>{% endif %}
+            {% if not r.t.catalog_synced_at and r.new %}<span class="badge bg-primary-subtle text-primary">{{ r.new }} to bring in</span>{% endif %}
+          </td>
+          <td class="text-end"><a class="btn btn-sm {{ 'btn-primary' if not r.t.catalog_synced_at or r.waiting else 'btn-outline-secondary' }}"
+                href="{{ url_for('catalog_sync.preview', tenant_id=r.t.tenant_id) }}">{{ 'Preview first sync' if not r.t.catalog_synced_at else 'Open' }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted py-4">No tenants yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<p class="small text-muted mt-2">Counts show catalog records the tenant holds (added or linked) out of the active records in each catalog.</p>
+{% endblock %}

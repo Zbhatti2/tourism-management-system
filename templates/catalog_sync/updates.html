@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Platform Updates{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-0">Platform Updates</h1>
+    <div class="small text-muted">Your Points of Interest and Suppliers that came from the Platform Catalog update automatically, except fields you changed yourself.
+      Where the catalog now has a different value for one of those, choose which to keep.</div>
+  </div>
+</div>
+
+{% for gr in groups %}
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-{{ gr.icon }} me-1 text-muted"></i><a href="{{ gr.url }}" class="fw-semibold text-decoration-none">{{ gr.name }}</a>
+      <span class="small text-muted ms-1">{{ gr.entity_label }}</span></span>
+    <span class="d-flex gap-2">
+      {% for action, label, cls in [('accept_all', 'Accept all', 'btn-warning'), ('keep_all', 'Keep all mine', 'btn-outline-secondary')] %}
+      <form method="post" action="{{ url_for('catalog_updates.resolve', link_id=gr.link.link_id) }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="{{ action }}"><input type="hidden" name="next" value="{{ request.path }}">
+        <button class="btn btn-sm {{ cls }} py-0" type="submit">{{ label }}</button>
+      </form>
+      {% endfor %}
+    </span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 small align-middle">
+      <thead><tr><th style="width: 18%;">Field</th><th>Yours</th><th>Platform catalog</th><th></th></tr></thead>
+      <tbody>
+        {% for d in gr.diffs %}
+        <tr>
+          <td class="fw-semibold">{{ d.label }}</td>
+          <td style="white-space: pre-wrap;">{{ d.mine }}</td>
+          <td style="white-space: pre-wrap;">{{ d.platform }}</td>
+          <td class="text-end text-nowrap">
+            {% for action, label, cls in [('accept', 'Accept', 'btn-outline-warning'), ('keep', 'Keep mine', 'btn-outline-secondary')] %}
+            <form method="post" action="{{ url_for('catalog_updates.resolve', link_id=gr.link.link_id) }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="{{ action }}"><input type="hidden" name="field" value="{{ d.field }}">
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <button class="btn btn-sm {{ cls }} py-0" type="submit">{{ label }}</button>
+            </form>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card shadow-sm border-0"><div class="card-body text-center text-muted py-5">
+  <i class="bi bi-check2-circle fs-3 d-block mb-2"></i>Nothing to review. Everything that came from the Platform Catalog is up to date.
+</div></div>
+{% endfor %}
+{% endblock %}

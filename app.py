@@ -109,6 +109,9 @@ MODULES = [
     # Entity-based Excel/CSV import into the platform catalogs (platform_import.py).
     {"key": "platform_import", "label": "Data Import", "icon": "upload", "endpoint": "platform_import.index",
      "roles": ["SystemAdmin"]},
+    # Pushes the catalogs into each tenant's own POIs / Suppliers (catalog_sync.py).
+    {"key": "catalog_sync", "label": "Catalog Sync", "icon": "arrow-repeat", "endpoint": "catalog_sync.index",
+     "roles": ["SystemAdmin"]},
 ]
 
 
@@ -169,6 +172,7 @@ def create_app():
     from blueprints.transport_hubs import transport_hubs_bp
     from blueprints.platform_catalog import platform_catalog_bp
     from blueprints.platform_import import platform_import_bp
+    from blueprints.catalog_sync import catalog_sync_bp, catalog_updates_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -205,6 +209,8 @@ def create_app():
     app.register_blueprint(transport_hubs_bp, url_prefix="/platform/transport-hubs")
     app.register_blueprint(platform_catalog_bp, url_prefix="/platform/catalog")
     app.register_blueprint(platform_import_bp, url_prefix="/platform/import")
+    app.register_blueprint(catalog_sync_bp, url_prefix="/platform/catalog-sync")
+    app.register_blueprint(catalog_updates_bp, url_prefix="/catalog-updates")
 
     app.jinja_env.globals["modules"] = MODULES
 

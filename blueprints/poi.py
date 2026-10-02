@@ -19,6 +19,7 @@ from io import BytesIO
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for
 
 from auth.decorators import login_required
+import catalog_sync
 from db import get_db, log_action
 from utils import (UPLOAD_IMAGE_EXTENSIONS, basename, normalize_map_coordinates, open_local_path, pick_file_dialog,
                    pick_files_dialog, read_uploaded_file)
@@ -269,6 +270,8 @@ def list_pois():
     rows = db.execute(sql, params).fetchall()
     return render_template(
         "poi/list.html", pois=rows, q=q,
+        catalog_ids=catalog_sync.linked_local_ids(db, g.tenant_id, "points_of_interest"),
+        catalog_pending=catalog_sync.pending_count(db, g.tenant_id),
         poi_type_id=poi_type_id, city=city, state=state, country_id=country_id,
         poi_types=_poi_types(db), city_options=_poi_city_options(db),
         state_options=_poi_state_options(db), country_options=_poi_country_options(db),
@@ -303,7 +306,9 @@ def view_poi(poi_id):
     kg_edges = get_edges_for(db, g.tenant_id, "PointOfInterest", poi_id)
     poi_links = _poi_links(db, poi_id)
     poi_images = _poi_images(db, poi_id)
-    return render_template("poi/view.html", poi=poi, kg_edges=kg_edges, poi_links=poi_links, poi_images=poi_images)
+    catalog = catalog_sync.view_context(db, g.tenant_id, "points_of_interest", poi_id)
+    return render_template("poi/view.html", poi=poi, kg_edges=kg_edges, poi_links=poi_links, poi_images=poi_images,
+                           catalog=catalog)
 
 
 def _links_from_form(form):

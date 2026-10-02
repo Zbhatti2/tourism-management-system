@@ -14,6 +14,7 @@ import json
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
+import catalog_sync
 from auth.decorators import system_admin_required
 from db import get_db, log_action
 import platform_import as pi
@@ -197,7 +198,9 @@ def do_import(run_id):
     log_action("Import", TABLES[run["entity"]], run_id,
                f"Imported '{run['file_name']}' ({run['entity']}, {run['mode']}): " +
                ", ".join(f"{v} {k}" for k, v in counts.items() if v))
-    flash("Import finished: " + ", ".join(f"{v} {k}" for k, v in counts.items() if v) + ".", "success")
+    synced = catalog_sync.push(db, run["entity"]) if run["mode"] == "normal" else {}
+    flash("Import finished: " + ", ".join(f"{v} {k}" for k, v in counts.items() if v) + "." +
+          (f" Synced to {len(synced)} tenant{'s' if len(synced) != 1 else ''}." if synced else ""), "success")
     return redirect(url_for("platform_import.run", run_id=run_id))
 
 

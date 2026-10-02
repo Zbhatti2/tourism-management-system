@@ -3,7 +3,10 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Points of Interest</h1>
-  <a href="{{ url_for('poi.new_poi') }}" class="btn btn-primary"><i class="bi bi-geo-alt"></i> New Point of Interest</a>
+  <div class="d-flex gap-2">
+    {% if catalog_pending %}<a href="{{ url_for('catalog_updates.updates') }}" class="btn btn-outline-warning"><i class="bi bi-cloud-arrow-down"></i> Platform updates <span class="badge bg-warning text-dark">{{ catalog_pending }}</span></a>{% endif %}
+    <a href="{{ url_for('poi.new_poi') }}" class="btn btn-primary"><i class="bi bi-geo-alt"></i> New Point of Interest</a>
+  </div>
 </div>
 
 <form method="get" class="mb-3">
@@ -72,7 +75,7 @@
       <tbody>
         {% for p in pois %}
         <tr onclick="window.location='{{ url_for('poi.view_poi', poi_id=p.poi_id) }}'" style="cursor:pointer;">
-          <td><strong>{{ p.name }}</strong></td>
+          <td><strong>{{ p.name }}</strong>{% if p.poi_id in catalog_ids %} <i class="bi bi-cloud-check text-primary small" title="From the Platform Catalog"></i>{% endif %}</td>
           <td>{% if p.type_label %}<span class="badge bg-secondary-subtle text-dark">{{ p.type_label }}</span>{% endif %}</td>
           <td class="text-muted small">{{ p.city_label or "" }}</td>
           <td class="text-muted small">{{ p.state_label or "" }}</td>

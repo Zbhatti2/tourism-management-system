@@ -13,6 +13,7 @@ import json
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+import catalog_sync
 from auth.decorators import system_admin_required
 from db import get_db, log_action
 from fuzzy import split_alt_names
@@ -60,6 +61,14 @@ def _select_sql(spec):
                 LEFT JOIN regions rg ON rg.region_id = r.region_id
                 LEFT JOIN states s ON s.state_id = r.state_id
                 LEFT JOIN cities c ON c.city_id = r.city_id{joins}""")
+
+
+def _pushed(db, entity, ids):
+    """Pass a platform change on to tenants (catalog_sync.py); returns a
+    short note for the flash message."""
+    result = catalog_sync.push(db, entity, ids)
+    n = len(result)
+    return f" Synced to {n} tenant{'s' if n != 1 else ''}." if n else ""
 
 
 def _get(db, spec, rid):
@@ -199,7 +208,7 @@ def new_record(entity):
                          tuple(values.values()))
         db.commit()
         log_action("Create", spec["table"], cur.lastrowid, f"Added {spec['singular']} '{values['name']}' (platform catalog)")
-        flash(f"'{values['name']}' added.", "success")
+        flash(f"'{values['name']}' added.{_pushed(db, entity, [cur.lastrowid])}", "success")
         return redirect(url_for("platform_catalog.view_record", entity=entity, rid=cur.lastrowid))
     return _render_form(db, entity, spec, None, {"is_active": "1"})
 
@@ -220,7 +229,7 @@ def edit_record(entity, rid):
                    f"WHERE {spec['pk']} = ?", tuple(values.values()) + (rid,))
         db.commit()
         log_action("Update", spec["table"], rid, f"Updated {spec['singular']} '{values['name']}' (platform catalog)")
-        flash(f"'{values['name']}' saved.", "success")
+        flash(f"'{values['name']}' saved.{_pushed(db, entity, [rid])}", "success")
         return redirect(url_for("platform_catalog.view_record", entity=entity, rid=rid))
     return _render_form(db, entity, spec, row)
 
@@ -232,6 +241,7 @@ def delete_record(entity, rid):
     db = get_db()
     row = _get(db, spec, rid)
     db.execute(f"DELETE FROM {spec['table']} WHERE {spec['pk']} = ?", (rid,))
+    catalog_sync.forget_catalog_record(db, entity, rid)  # tenants keep their copies; they just stop syncing
     db.commit()
     log_action("Delete", spec["table"], rid, f"Deleted {spec['singular']} '{row['name']}' (platform catalog)")
     flash(f"'{row['name']}' deleted.", "success")
@@ -315,7 +325,8 @@ def merge_records(entity):
         merge_id = merge(db, entity, keep_id, remove_id, take, user_id=g.user_id)
         log_action("Merge", spec["table"], keep_id,
                    f"Merged {spec['singular']} '{removed['name']}' (#{remove_id}) into '{kept['name']}' (#{keep_id}); merge #{merge_id}")
-        flash(f"Merged '{removed['name']}' into '{kept['name']}'. It's kept as an alternate name, and the merge can be undone from the merge log.", "success")
+        note = _pushed(db, entity, [keep_id])
+        flash(f"Merged '{removed['name']}' into '{kept['name']}'. It's kept as an alternate name, and the merge can be undone from the merge log.{note}", "success")
         return redirect(_view_url(entity, keep_id))
     return render_template("platform_catalog/merge.html", entity=entity, spec=spec, kept=kept, removed=removed,
                            rows=rows, location=location, a_id=a_id, b_id=b_id, keep=keep,
@@ -348,5 +359,8 @@ def undo(entity, merge_id):
         flash(str(e), "error")
         return redirect(url_for("platform_catalog.merge_log", entity=entity))
     log_action("Unmerge", spec["table"], merge_id, f"Undid merge #{merge_id}")
+    log = db.execute("SELECT kept_id, removed_id FROM platform_merge_log WHERE merge_id = ?", (merge_id,)).fetchone()
+    if log:
+        _pushed(db, entity, [log["kept_id"], log["removed_id"]])
     flash("Merge undone: both records and their links are back as they were.", "success")
     return redirect(url_for("platform_catalog.merge_log", entity=entity))

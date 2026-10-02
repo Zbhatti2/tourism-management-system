@@ -100,7 +100,10 @@ CREATE TABLE tenants (
     is_platform     INTEGER NOT NULL DEFAULT 0,
     -- The tenant's own public website (e.g. www.mavietours.com), from which
     -- it sells its tours.
-    website_domain  TEXT
+    website_domain  TEXT,
+    -- When this tenant's first Catalog Sync ran (catalog_sync.py); NULL =
+    -- not yet. From then on platform catalog changes reach it automatically.
+    catalog_synced_at TEXT
 );
 
 -- Single-row counter behind tenants.account_number (see above).
@@ -2883,3 +2886,26 @@ CREATE TABLE IF NOT EXISTS platform_import_rows (
     result          TEXT,                   -- after import: created / updated / skipped / failed
     PRIMARY KEY (run_id, row_num)
 );
+
+-- ============================================================================
+-- Catalog Sync (catalog_sync.py): which of a tenant's POIs / Suppliers came
+-- from (or were matched to) which platform catalog record, and the per-field
+-- state that keeps the copy in sync.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS tenant_catalog_links (
+    link_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    entity          TEXT NOT NULL CHECK (entity IN ('pois','accommodation','restaurants')),
+    catalog_id      INTEGER NOT NULL,       -- platform_pois / platform_accommodation / platform_restaurants id
+    local_table     TEXT NOT NULL,          -- 'points_of_interest' or 'suppliers'
+    local_id        INTEGER,                -- the tenant's record; NULL when how = 'skipped'
+    how             TEXT NOT NULL CHECK (how IN ('added','linked','skipped')),
+    baseline        TEXT,                   -- JSON {field: value last taken from the platform}
+    pending         TEXT,                   -- JSON {field: platform value awaiting the tenant's Accept / Keep mine}
+    dismissed       TEXT,                   -- JSON {field: platform value the tenant kept theirs over}
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    synced_at       TEXT,
+    UNIQUE (tenant_id, entity, catalog_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tenant_catalog_links_local ON tenant_catalog_links(tenant_id, local_table, local_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_catalog_links_catalog ON tenant_catalog_links(entity, catalog_id);

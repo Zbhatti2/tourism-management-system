@@ -1,0 +1,65 @@
+{# The platform catalog record behind a tenant's POI or Supplier (catalog_sync.view_context). #}
+{% if catalog %}
+{% if catalog.diffs %}
+<div class="card border-warning shadow-sm mb-3">
+  <div class="card-header bg-warning-subtle d-flex justify-content-between align-items-center">
+    <span class="fw-semibold small"><i class="bi bi-cloud-arrow-down me-1"></i>Platform has a different value</span>
+    <span class="d-flex gap-2">
+      {% for action, label, cls in [('accept_all', 'Accept all', 'btn-warning'), ('keep_all', 'Keep all mine', 'btn-outline-secondary')] %}
+      <form method="post" action="{{ url_for('catalog_updates.resolve', link_id=catalog.link.link_id) }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="{{ action }}"><input type="hidden" name="next" value="{{ request.path }}">
+        <button class="btn btn-sm {{ cls }} py-0" type="submit">{{ label }}</button>
+      </form>
+      {% endfor %}
+    </span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 small align-middle">
+      <thead><tr><th>Field</th><th>Yours</th><th>Platform catalog</th><th></th></tr></thead>
+      <tbody>
+        {% for d in catalog.diffs %}
+        <tr>
+          <td class="fw-semibold">{{ d.label }}</td>
+          <td style="white-space: pre-wrap;">{{ d.mine }}</td>
+          <td style="white-space: pre-wrap;">{{ d.platform }}</td>
+          <td class="text-end text-nowrap">
+            {% for action, label, cls in [('accept', 'Accept', 'btn-outline-warning'), ('keep', 'Keep mine', 'btn-outline-secondary')] %}
+            <form method="post" action="{{ url_for('catalog_updates.resolve', link_id=catalog.link.link_id) }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="{{ action }}"><input type="hidden" name="field" value="{{ d.field }}">
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <button class="btn btn-sm {{ cls }} py-0" type="submit">{{ label }}</button>
+            </form>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-body py-2">
+    <details>
+      <summary class="small">
+        <i class="bi bi-cloud-check text-primary me-1"></i>
+        <span class="fw-semibold">From the Platform Catalog</span>
+        <span class="text-muted">— {{ 'added from' if catalog.how == 'added' else 'linked to' }}
+          “{{ catalog.row.name if catalog.row else 'a removed record' }}”. Fields you haven't changed update automatically.</span>
+      </summary>
+      {% if catalog.details %}
+      <dl class="row mb-0 small mt-2">
+        {% for label, value, long in catalog.details %}
+        <dt class="col-sm-3">{{ label }}</dt><dd class="col-sm-9" {% if long %}style="white-space: pre-wrap;"{% endif %}>{% if value is string and value.startswith('http') %}<a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a>{% else %}{{ value }}{% endif %}</dd>
+        {% endfor %}
+        {% if catalog.source or catalog.checked_on %}
+        <dt class="col-sm-3 text-muted">Source</dt><dd class="col-sm-9 text-muted">{{ catalog.source or '' }}{% if catalog.checked_on %} · checked {{ catalog.checked_on }}{% endif %}</dd>
+        {% endif %}
+      </dl>
+      {% else %}<div class="small text-muted mt-2">The catalog has no further details for this record.</div>{% endif %}
+    </details>
+  </div>
+</div>
+{% endif %}

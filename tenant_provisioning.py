@@ -10,7 +10,7 @@ Two entry points call this:
 Kept as one function so the two can never drift apart on what
 "provisioning a tenant" means: a fresh wrapped encryption key (DEK), the
 next 8-digit account number, the first TenantAdmin user, and the tenant's
-own copy of the lookup tables.
+own copy of the lookup tables, and its copy of the platform catalogs.
 """
 import re
 import secrets
@@ -73,5 +73,11 @@ def provision_tenant(db, tenant_name: str, username: str, display_name: str, pas
     from seed_data import seed_lookup_tables
     seed_lookup_tables(db, tenant_id)
     db.commit()
+
+    # Start the tenant with the platform catalogs (POIs, hotels, restaurants)
+    # and keep it in sync from then on -- see catalog_sync.py.
+    import catalog_sync
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenant_catalog_links'").fetchone():
+        catalog_sync.apply(db, tenant_id, auto=True)
 
     return tenant_id, seed_phrase_value

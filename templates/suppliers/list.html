@@ -3,11 +3,14 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Suppliers</h1>
+  <div class="d-flex gap-2">
+  {% if catalog_pending %}<a href="{{ url_for('catalog_updates.updates') }}" class="btn btn-outline-warning"><i class="bi bi-cloud-arrow-down"></i> Platform updates <span class="badge bg-warning text-dark">{{ catalog_pending }}</span></a>{% endif %}
   {% if is_external_resource %}
   <a href="{{ url_for('suppliers.new_external_resource') }}" class="btn btn-primary"><i class="bi bi-person-badge"></i> New External Resource</a>
   {% else %}
   <a href="{{ url_for('suppliers.new_supplier') }}" class="btn btn-primary"><i class="bi bi-truck"></i> New Supplier</a>
   {% endif %}
+  </div>
 </div>
 
 <form method="get" class="mb-3">
@@ -84,7 +87,7 @@
         {% for s in suppliers %}
         <tr onclick="window.location='{{ url_for('suppliers.view_supplier', supplier_id=s.supplier_id) }}'" style="cursor:pointer;">
           <td>
-            <strong>{{ s.supplier_name }}</strong>
+            <strong>{{ s.supplier_name }}</strong>{% if s.supplier_id in catalog_ids %} <i class="bi bi-cloud-check text-primary small" title="From the Platform Catalog"></i>{% endif %}
             {% if s.is_external_resource %}<span class="badge bg-info-subtle text-dark border">External Resource</span>{% endif %}
           </td>
           <td>{% if s.type_label %}<span class="badge bg-secondary-subtle text-dark">{{ s.type_label }}</span>{% endif %}</td>
