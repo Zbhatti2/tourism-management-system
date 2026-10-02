@@ -15,6 +15,39 @@ from db import close_db, get_db, log_action
 system_mgmt_bp = Blueprint("system_mgmt", __name__)
 
 
+def _platform_data_counts(db):
+    """One tile per Platform Admin data screen for the SystemAdmin's
+    Platform Data card: title, icon, link, and a live count (None while
+    that catalog's table doesn't exist yet)."""
+    from blueprints.platform_data import PLATFORM_CATALOG
+
+    def count(sql):
+        return db.execute(sql).fetchone()[0]
+
+    def table_count(table):
+        exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?", (table,)).fetchone()
+        return count(f"SELECT COUNT(*) FROM {table}") if exists else None
+
+    pid_row = db.execute("SELECT tenant_id FROM tenants WHERE is_platform = 1").fetchone()
+    pid = pid_row[0] if pid_row else -1
+    c = PLATFORM_CATALOG
+    return [
+        {**c["transport_hubs"], "count": table_count(c["transport_hubs"]["table"]), "unit": "hubs"},
+        {**c["pois"], "count": table_count(c["pois"]["table"]), "unit": "places"},
+        {"title": "Geography", "icon": "globe-americas", "endpoint": "geography_admin.index",
+         "count": count("SELECT COUNT(*) FROM cities"), "unit": "cities"},
+        {**c["embassies"], "count": table_count(c["embassies"]["table"]), "unit": "missions"},
+        {**c["accommodation"], "count": table_count(c["accommodation"]["table"]), "unit": "properties"},
+        {**c["restaurants"], "count": table_count(c["restaurants"]["table"]), "unit": "restaurants"},
+        {"title": "Currencies", "icon": "currency-exchange", "endpoint": "currency_admin.index",
+         "count": count("SELECT COUNT(*) FROM currencies WHERE is_active = 1"), "unit": "active"},
+        {"title": "Platform Lookups", "icon": "tags", "endpoint": "platform_lookups.index",
+         "count": sum(count(f"SELECT COUNT(*) FROM {t} WHERE tenant_id = {int(pid)} AND is_system = 1")
+                      for t in ("supplier_types", "supplier_subtypes", "poi_types")),
+         "unit": "locked codes"},
+    ]
+
+
 @system_mgmt_bp.route("/")
 @login_required
 def index():
@@ -27,7 +60,7 @@ def index():
         tenant_count = db.execute("SELECT COUNT(*) c FROM tenants WHERE is_platform = 0").fetchone()["c"]
         return render_template("system/index.html", tenant=None, last_backup_at=last_backup_row["c"],
                                tenant_count=tenant_count, purge_eligible_count=0, host_org=None,
-                               host_currencies=[])
+                               host_currencies=[], platform_data=_platform_data_counts(db))
     tenant_row = db.execute(
         "SELECT tenant_name, account_number, website_domain, data_retention_days, last_purge_at, created_at, host_currency_code FROM tenants WHERE tenant_id = ?",
         (g.tenant_id,),

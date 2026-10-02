@@ -2,19 +2,8 @@
 {% block title %}Table Maintenance{% endblock %}
 {% block content %}
 <h1 class="h3 mb-2">Table Maintenance</h1>
-<p class="text-muted mb-4">Select a table below to add, edit, deactivate, or delete its entries.</p>
-
-<a href="{{ url_for('geography_admin.index') }}" class="text-decoration-none">
-  <div class="card shadow-sm border-0 mb-4 table-maint-card">
-    <div class="card-body d-flex justify-content-between align-items-center">
-      <div>
-        <h2 class="h6 mb-1 text-dark"><i class="bi bi-globe-americas me-2 text-muted"></i>Geography Maintenance</h2>
-        <p class="text-muted small mb-0">Region / Country / Province / City — shared across every tenant, not just yours.</p>
-      </div>
-      <i class="bi bi-chevron-right text-muted"></i>
-    </div>
-  </div>
-</a>
+<p class="text-muted mb-4">Select a table below to add, edit, deactivate, or delete its entries.
+  Geography and currencies are shared by every tenant and maintained by TMS.</p>
 
 <a href="{{ url_for('service_taxonomy_admin.index') }}" class="text-decoration-none">
   <div class="card shadow-sm border-0 mb-4 table-maint-card">
@@ -22,18 +11,6 @@
       <div>
         <h2 class="h6 mb-1 text-dark"><i class="bi bi-upc-scan me-2 text-muted"></i>Service Code Maintenance</h2>
         <p class="text-muted small mb-0">Category / Group / Sub-Group taxonomy behind every Service Code — shared across every tenant, not just yours.</p>
-      </div>
-      <i class="bi bi-chevron-right text-muted"></i>
-    </div>
-  </div>
-</a>
-
-<a href="{{ url_for('currency_admin.index') }}" class="text-decoration-none">
-  <div class="card shadow-sm border-0 mb-4 table-maint-card">
-    <div class="card-body d-flex justify-content-between align-items-center">
-      <div>
-        <h2 class="h6 mb-1 text-dark"><i class="bi bi-cash-coin me-2 text-muted"></i>Currency &amp; Exchange Rates</h2>
-        <p class="text-muted small mb-0">ISO currencies and their USD exchange rates — shared across every tenant, not just yours.</p>
       </div>
       <i class="bi bi-chevron-right text-muted"></i>
     </div>

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Geography Maintenance — {{ cfg.label }}{% endblock %}
+{% block title %}Geography &amp; Distances — {{ cfg.label }}{% endblock %}
 {% block content %}
 <nav class="mb-2">
-  <a href="{{ url_for('geography_admin.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Geography Maintenance</a>
+  <a href="{{ url_for('geography_admin.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Geography &amp; Distances</a>
 </nav>
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h3 mb-0">Geography Maintenance — {{ cfg.label }}</h1>
+  <h1 class="h3 mb-0">Geography &amp; Distances — {{ cfg.label }}</h1>
   <a href="{{ url_for('geography_admin.new_entry', table_key=table_key) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Entry</a>
 </div>
 

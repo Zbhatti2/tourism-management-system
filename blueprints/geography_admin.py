@@ -1,5 +1,5 @@
 """
-Module — Geography Maintenance. Lets a Tenant Admin add/edit/deactivate/
+Module — Geography Maintenance. Lets the SystemAdmin add/edit/deactivate/
 delete rows in the four GLOBAL geography tables — regions, countries,
 states (Province/State), cities — the same way Table Maintenance already
 does for tenant-scoped lookup tables.
@@ -8,10 +8,10 @@ The key difference from table_maintenance.py: these four tables have NO
 tenant_id column at all. They're shared across every tenant (see
 schema.sql's MODULE E comment), so an edit made here — a relabel, a merge,
 a delete — is visible to, and affects, every tenant, not just the one the
-editing admin belongs to. That's a deliberate choice for Phase 1.1 (single
-tenant, TenantAdmin-editable, same access level as every other lookup
-table) — worth revisiting if/when a second tenant is provisioned and this
-data is genuinely shared property.
+editing admin belongs to. Originally TenantAdmin-editable (Phase 1.1,
+single tenant); since Oct 2026 it is SystemAdmin-only ("Geography &
+Distances" in the Platform Admin sidebar), because it is genuinely shared
+platform data -- Group A of the platform master-data plan.
 
 The four tables also form a strict hierarchy — Region -> Country ->
 Province/State -> City — so each (except Regions, the top) has a required
@@ -32,7 +32,7 @@ import sqlite3
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
-from auth.decorators import tenant_admin_required
+from auth.decorators import system_admin_required
 from db import get_db, log_action
 
 geography_admin_bp = Blueprint("geography_admin", __name__)
@@ -167,7 +167,7 @@ def _row_values(form, cfg):
 
 
 @geography_admin_bp.route("/")
-@tenant_admin_required
+@system_admin_required
 def index():
     db = get_db()
     tables = []
@@ -179,7 +179,7 @@ def index():
 
 
 @geography_admin_bp.route("/<table_key>")
-@tenant_admin_required
+@system_admin_required
 def manage(table_key):
     cfg = _table_config(table_key)
     db = get_db()
@@ -218,7 +218,7 @@ def manage(table_key):
 
 
 @geography_admin_bp.route("/<table_key>/new", methods=["GET", "POST"])
-@tenant_admin_required
+@system_admin_required
 def new_entry(table_key):
     cfg = _table_config(table_key)
     db = get_db()
@@ -248,7 +248,7 @@ def new_entry(table_key):
 
 
 @geography_admin_bp.route("/<table_key>/<int:entry_id>/edit", methods=["GET", "POST"])
-@tenant_admin_required
+@system_admin_required
 def edit_entry(table_key, entry_id):
     cfg = _table_config(table_key)
     db = get_db()
@@ -279,7 +279,7 @@ def edit_entry(table_key, entry_id):
 
 
 @geography_admin_bp.route("/<table_key>/<int:entry_id>/toggle-active", methods=["POST"])
-@tenant_admin_required
+@system_admin_required
 def toggle_active(table_key, entry_id):
     cfg = _table_config(table_key)
     db = get_db()
@@ -295,7 +295,7 @@ def toggle_active(table_key, entry_id):
 
 
 @geography_admin_bp.route("/<table_key>/<int:entry_id>/delete", methods=["POST"])
-@tenant_admin_required
+@system_admin_required
 def delete_entry(table_key, entry_id):
     cfg = _table_config(table_key)
     db = get_db()
@@ -318,7 +318,7 @@ def delete_entry(table_key, entry_id):
 
 
 @geography_admin_bp.route("/<table_key>/<int:entry_id>/reassign", methods=["GET", "POST"])
-@tenant_admin_required
+@system_admin_required
 def reassign(table_key, entry_id):
     """Bulk-move every record that references `entry_id` (children one
     level down the hierarchy, plus addresses/country_phone_codes — across

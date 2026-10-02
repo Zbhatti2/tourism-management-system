@@ -1,18 +1,20 @@
 ---
-title: Geography Maintenance Overview
+title: Geography & Distances Overview
 order: 1
 keywords: [geography, regions, countries, states, provinces, cities, shared, global]
 ---
-Geography Maintenance (under **Tables & Utilities**) manages the four
+Geography & Distances is a **TMS System Admin** screen (in the Platform
+Admin sidebar). It manages the four
 geography tables that power the Region → Country → Province/State → City
 pickers used everywhere in TMS: Regions, Countries, States/Provinces, and
 Cities.
 
 ## Shared across every tenant
 
-Unlike most lookup tables in Table Maintenance, these four have no
-tenant scoping at all — a relabel, merge, or delete made here is visible
-to, and affects, every tenant, not just yours. Edit with that in mind.
+These four tables have no tenant scoping at all — a relabel, merge, or
+delete made here is visible to, and affects, every tenant. That is why
+only the SystemAdmin can edit them; tenants use them through the pickers
+on their own forms.
 
 ## Hierarchy and search
 
