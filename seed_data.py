@@ -2296,6 +2296,13 @@ def seed_lookup_tables(db, tenant_id: int):
     seed_global_lookups(db)
     db.commit()
 
+    # Lock in the platform's shared codes (Hotel, Resort, Restaurant, the
+    # star-rating sub-types, the catalog's POI Types) for this tenant --
+    # see platform_lookups.py. A no-op until the platform list exists.
+    from platform_lookups import platform_tenant_id, sync_platform_lookups
+    if tenant_id != platform_tenant_id(db):
+        sync_platform_lookups(db, tenant_id)
+
 
 def seed_first_tenant(db):
     """Initial data for a BRAND-NEW, empty database only: the first tenant

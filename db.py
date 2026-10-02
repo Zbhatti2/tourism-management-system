@@ -276,6 +276,20 @@ def _migration_backups_nightly_type(db):
     db.commit()
 
 
+def _migration_platform_lookups(db):
+    """Platform Lookups: adds is_system to supplier_types, supplier_subtypes
+    and poi_types, seeds the platform tenant's starter list of locked rows
+    (Hotel/Resort/Restaurant, the Five Star/4-Star sub-types, the
+    sightseeing POI Types), then locks the matching rows in every tenant --
+    matched by code, then label, so existing suppliers/POIs keep their
+    links. See platform_lookups.py."""
+    import platform_lookups
+
+    platform_lookups.add_is_system_columns(db)
+    platform_lookups.seed_starter_platform_lookups(db)
+    platform_lookups.sync_platform_lookups(db)
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -288,6 +302,7 @@ MIGRATIONS = [
     ("2026_09_tenant_website_domain", _migration_tenant_website_domain),
     ("2026_09_content_locations_file_storage", _migration_content_locations_file_storage),
     ("2026_09_backups_nightly_type", _migration_backups_nightly_type),
+    ("2026_10_platform_lookups", _migration_platform_lookups),
 ]
 
 

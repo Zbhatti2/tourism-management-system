@@ -12,6 +12,9 @@
 <p class="text-muted small">
   Editing a label here updates it everywhere it's already used — no other action needed.
   An entry that's still in use can't be deleted outright; deactivate it to hide it from new selections, or use "Merge into..." to move its records to a different entry first.
+  {% if entries | selectattr('locked') | list %}
+  Entries marked <span class="badge bg-secondary-subtle text-dark"><i class="bi bi-lock-fill"></i> Platform</span> are shared by every TMS tenant and maintained by TMS, so platform data can be matched to them — they can't be changed here.
+  {% endif %}
 </p>
 
 <div class="card shadow-sm border-0">
@@ -34,7 +37,7 @@
         {% for item in entries %}
         <tr>
           <td class="text-muted small">{{ item.row.code or "" }}</td>
-          <td><strong>{{ item.row.label }}</strong></td>
+          <td><strong>{{ item.row.label }}</strong>{% if item.locked %} <span class="badge bg-secondary-subtle text-dark ms-1" title="Locked platform entry — maintained by TMS, shared by every tenant"><i class="bi bi-lock-fill"></i> Platform</span>{% endif %}</td>
           {% if cfg.parent %}<td class="text-muted small">{{ item.row.parent_label or "" }}</td>{% endif %}
           {% for field in cfg.get("extra_fields", []) %}
           <td class="text-muted small">
@@ -62,6 +65,9 @@
             {% endif %}
           </td>
           <td class="text-end">
+            {% if item.locked %}
+            <span class="text-muted small" title="Locked platform entry — can't be edited, deactivated, merged or deleted"><i class="bi bi-lock"></i> Locked</span>
+            {% else %}
             <div class="btn-group btn-group-sm">
               <a href="{{ url_for('table_maintenance.edit_entry', table_key=table_key, entry_id=item.row[cfg.pk]) }}" class="btn btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
               <a href="{{ url_for('table_maintenance.reassign', table_key=table_key, entry_id=item.row[cfg.pk]) }}" class="btn btn-outline-secondary" title="Merge into another entry"><i class="bi bi-signpost-split"></i></a>
@@ -76,6 +82,7 @@
                 <button class="btn btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
               </form>
             </div>
+            {% endif %}
           </td>
         </tr>
         {% else %}

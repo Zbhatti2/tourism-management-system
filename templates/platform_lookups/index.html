@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — Platform Lookups{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">Platform Lookups</h1>
+  </div>
+  <form method="post" action="{{ url_for('platform_lookups.sync_now') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="table" value="{{ active }}">
+    <button class="btn btn-outline-secondary btn-sm" type="submit" title="Re-apply the platform list to every tenant"><i class="bi bi-arrow-repeat"></i> Re-apply to all tenants</button>
+  </form>
+</div>
+
+<p class="text-muted small mb-3">
+  These codes are shared by every tenant and <strong>locked</strong> in each tenant's Table Maintenance, so platform data
+  (Accommodation, Restaurants, Points of Interest) always has a matching entry to land in when a tenant adopts it.
+  Changes here are applied to all {{ tenant_total }} tenant{{ 's' if tenant_total != 1 else '' }} immediately.
+  Codes can't be changed once created. Removing an entry never deletes anything in a tenant — their copy just becomes an ordinary, editable entry.
+</p>
+
+<ul class="nav nav-tabs" role="tablist">
+  {% for s in sections %}
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {{ 'active' if s.key == active else '' }}" data-bs-toggle="tab" data-bs-target="#tab-{{ s.key }}" type="button" role="tab">
+      {{ s.cfg.label }} <span class="badge bg-secondary-subtle text-dark">{{ s.rows | length }}</span>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+
+<div class="tab-content">
+  {% for s in sections %}
+  <div class="tab-pane fade {{ 'show active' if s.key == active else '' }}" id="tab-{{ s.key }}" role="tabpanel">
+    <div class="card shadow-sm border-0 border-top-0 rounded-top-0">
+      <div class="card-body pb-0 d-flex justify-content-end">
+        <a href="{{ url_for('platform_lookups.new_entry', key=s.key) }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> New {{ s.cfg.label[:-1] }}</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Label</th>
+              {% if s.cfg.parent %}<th>{{ s.cfg.parent.nav_label }}</th>{% endif %}
+              {% if s.cfg.has_template_key %}<th>Template</th>{% endif %}
+              <th>Description</th>
+              <th>Sort</th>
+              <th>Locked in</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in s.rows %}
+            <tr>
+              <td class="text-muted small text-nowrap">{{ item.row.code }}</td>
+              <td><i class="bi bi-lock-fill text-muted small me-1"></i><strong>{{ item.row.label }}</strong></td>
+              {% if s.cfg.parent %}<td class="small">{{ item.row.parent_label or "" }}</td>{% endif %}
+              {% if s.cfg.has_template_key %}<td class="small text-muted">{{ item.row.template_key or "—" }}</td>{% endif %}
+              <td class="small text-muted">{{ item.row.description or "" }}</td>
+              <td class="small text-muted">{{ item.row.sort_order }}</td>
+              <td class="small">{{ item.tenants }} / {{ tenant_total }} tenant{{ 's' if tenant_total != 1 else '' }}</td>
+              <td class="text-end text-nowrap">
+                <a href="{{ url_for('platform_lookups.edit_entry', key=s.key, entry_id=item.row[s.cfg.pk]) }}" class="btn btn-outline-secondary btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="{{ url_for('platform_lookups.remove_entry', key=s.key, entry_id=item.row[s.cfg.pk]) }}" class="d-inline"
+                      onsubmit="return confirm({{ ('Remove ' ~ item.row.label ~ ' from the platform list? Tenants keep their copy, but it will no longer be locked.') | tojson }});">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-outline-danger btn-sm" type="submit" title="Remove from platform list"><i class="bi bi-unlock"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center text-muted py-4">No locked entries yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
