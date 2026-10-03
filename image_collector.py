@@ -40,6 +40,7 @@ import traceback
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
+import agent_runs
 import ai_usage
 import image_catalog as ic
 from image_owners import KINDS
@@ -50,6 +51,8 @@ MAX_PAGES = 5
 MAX_CANDIDATES = 30          # image addresses tried per supplier
 MAX_REVIEW = 16              # photos sent for review per supplier
 MIN_W, MIN_H = 600, 400
+PAGES_BUDGET_SECONDS = 90       # reading pages, per supplier / POI
+DOWNLOAD_BUDGET_SECONDS = 150   # downloading candidate photos, per supplier / POI
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 SKIP_WORDS = ("logo", "icon", "sprite", "favicon", "avatar", "badge", "flag", "map", "placeholder", "blank",
               "spinner", "loader", "tripadvisor", "button", "banner-ad", "payment", "qr")
@@ -103,11 +106,38 @@ def explain_api_error(e):
 
 # ---- seams (replaced in tests) ------------------------------------------------------------------
 
-def http_get(url, timeout=15, max_bytes=3 * 1024 * 1024):
-    """(content bytes, content-type) or raises."""
+def http_get(url, timeout=15, max_bytes=3 * 1024 * 1024, deadline=40):
+    """(content bytes, content-type) or raises. timeout limits connecting and
+    each wait for data; deadline limits the whole download, so a site that
+    trickles data can't hang the run. The download runs in a helper thread
+    because a blocking read can't be interrupted from inside."""
+    holder = {}
+
+    def work():
+        try:
+            holder["result"] = _download(url, timeout, max_bytes, holder)
+        except Exception as e:  # noqa: BLE001 -- handed back to the caller
+            holder["error"] = e
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(deadline)
+    if t.is_alive():
+        resp = holder.get("response")
+        if resp is not None:
+            threading.Thread(target=resp.close, daemon=True).start()
+        raise CollectorError(f"took longer than {deadline} seconds")
+    if "error" in holder:
+        raise holder["error"]
+    return holder["result"]
+
+
+def _download(url, timeout, max_bytes, holder):
     import requests
-    with requests.get(url, timeout=timeout, stream=True, allow_redirects=True,
-                      headers={"User-Agent": "Mozilla/5.0 (compatible; TMS-Image-Collector/1.0)"}) as r:
+    r = requests.get(url, timeout=(min(timeout, 10), timeout), stream=True, allow_redirects=True,
+                     headers={"User-Agent": "Mozilla/5.0 (compatible; TMS-Image-Collector/1.0)"})
+    holder["response"] = r
+    try:
         r.raise_for_status()
         data = b""
         for chunk in r.iter_content(65536):
@@ -115,6 +145,8 @@ def http_get(url, timeout=15, max_bytes=3 * 1024 * 1024):
             if len(data) > max_bytes:
                 raise CollectorError("too large")
         return data, r.headers.get("Content-Type", "")
+    finally:
+        r.close()
 
 
 def anthropic_client(platform=False):
@@ -129,7 +161,8 @@ def anthropic_client(platform=False):
         import anthropic
     except ImportError as e:
         raise CollectorError("The 'anthropic' package isn't installed on the server.") from e
-    return anthropic.Anthropic(api_key=key)
+    return anthropic.Anthropic(api_key=key, timeout=agent_runs.API_TIMEOUT_SECONDS,
+                               max_retries=agent_runs.API_MAX_RETRIES)
 
 
 def models():
@@ -258,11 +291,16 @@ def image_links(html, base_url):
 
 # ---- step 3: download --------------------------------------------------------------------------------------------
 
-def download_photos(candidates, known_hashes, log):
+def download_photos(candidates, known_hashes, log, budget=DOWNLOAD_BUDGET_SECONDS):
     """[(data, url, page, alt, w, h)] of real photos not already known."""
+    import time
     from PIL import Image
     photos, hashes = [], set(known_hashes)
+    started = time.monotonic()
     for url, page, alt in candidates[:MAX_CANDIDATES]:
+        if time.monotonic() - started > budget:
+            log(f"stopped downloading after {budget} seconds")
+            break
         try:
             data, ctype = http_get(url, max_bytes=MAX_IMAGE_BYTES)
         except Exception:
@@ -351,8 +389,13 @@ def collect_for_supplier(db, client, tenant_id, supplier, per_supplier, meter, l
         log(f"no pages found{': ' + note if note else ''}")
         return []
     log(f"{len(pages)} page(s): " + ", ".join(urlparse(u).netloc + urlparse(u).path[:30] for u, _ in pages))
+    import time
     candidates, seen = [], set()
+    started = time.monotonic()
     for url, _why in pages:
+        if time.monotonic() - started > PAGES_BUDGET_SECONDS:
+            log(f"stopped reading pages after {PAGES_BUDGET_SECONDS} seconds")
+            break
         try:
             html, ctype = http_get(url)
         except Exception as e:
@@ -451,9 +494,10 @@ def start_run(db, tenant_id, user_id, supplier_ids, per_supplier=8, scope_label=
         raise CollectorError("Choose at least one Point of Interest." if platform
                              else "Choose at least one Hotel, Resort or Restaurant.")
     label = scope_label or (sups[0]["supplier_name"] if len(sups) == 1 else f"{len(sups)} {'POIs' if platform else 'suppliers'}")
-    cur = db.execute("INSERT INTO image_agent_runs (tenant_id, user_id, scope_label, supplier_ids, per_supplier, owner_kind) "
-                     "VALUES (?, ?, ?, ?, ?, ?)", (tenant_id, user_id, label, json.dumps([s["supplier_id"] for s in sups]),
-                                                   max(1, min(int(per_supplier or 8), 20)), kind))
+    cur = db.execute("INSERT INTO image_agent_runs (tenant_id, user_id, scope_label, supplier_ids, per_supplier, owner_kind, "
+                     "items_total) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (tenant_id, user_id, label, json.dumps([s["supplier_id"] for s in sups]),
+                      max(1, min(int(per_supplier or 8), 20)), kind, len(sups)))
     db.commit()
     run_id = cur.lastrowid
     if background:
@@ -489,7 +533,8 @@ def run_collection(db, run_id):
 
     def log(text):
         lines.append(text)
-        db.execute("UPDATE image_agent_runs SET progress = ? WHERE run_id = ?", ("\n".join(lines)[-6000:], run_id))
+        db.execute("UPDATE image_agent_runs SET progress = ?, heartbeat_at = datetime('now') WHERE run_id = ?",
+                   ("\n".join(lines)[-6000:], run_id))
         db.commit()
 
     def meter(model, usage):
@@ -497,7 +542,8 @@ def run_collection(db, run_id):
                         user_id=run["user_id"], ref_type="image_agent_runs", ref_id=run_id, note=current["name"])
 
     current = {"name": run["scope_label"]}
-    db.execute("UPDATE image_agent_runs SET status = 'running', started_at = datetime('now') WHERE run_id = ?", (run_id,))
+    db.execute("UPDATE image_agent_runs SET status = 'running', started_at = datetime('now'), heartbeat_at = datetime('now') "
+               "WHERE run_id = ? AND status = 'queued'", (run_id,))
     db.commit()
     try:
         client = anthropic_client(platform)
@@ -505,7 +551,12 @@ def run_collection(db, run_id):
         single = sups[0]["supplier_id"] if len(sups) == 1 else None
         batch_id = None
         staged = failures = 0
-        for s in sups:
+        for done, s in enumerate(sups):
+            db.execute("UPDATE image_agent_runs SET items_done = ?, heartbeat_at = datetime('now') WHERE run_id = ?",
+                       (done, run_id))
+            db.commit()
+            if agent_runs.cancelled(db, "image_agent_runs", run_id):
+                return
             current["name"] = s["supplier_name"]
             over = None if platform else ai_usage.check_limit(db, tenant_id)
             if over:
@@ -536,8 +587,11 @@ def run_collection(db, run_id):
             db.commit()
         if failures and failures == len(sups):
             raise CollectorError(f"Every {'POI' if platform else 'supplier'} in this run failed; see Progress for the reasons.")
+        if agent_runs.cancelled(db, "image_agent_runs", run_id):
+            return
         log(f"Done: {staged} photo(s) ready to curate." if staged else "Done: no new photos found.")
-        db.execute("UPDATE image_agent_runs SET status = 'done', finished_at = datetime('now') WHERE run_id = ?", (run_id,))
+        db.execute("UPDATE image_agent_runs SET status = 'done', items_done = items_total, finished_at = datetime('now') "
+                   "WHERE run_id = ? AND status = 'running'", (run_id,))
         db.commit()
     except Exception as e:
         msg = explain_api_error(e) or f"{e}"
@@ -545,20 +599,17 @@ def run_collection(db, run_id):
             log(f"Stopped: {msg}")
         except Exception:
             pass
-        db.execute("UPDATE image_agent_runs SET status = 'failed', error = ?, finished_at = datetime('now') WHERE run_id = ?",
-                   (msg[:1000] or traceback.format_exc()[-1000:], run_id))
+        db.execute("UPDATE image_agent_runs SET status = 'failed', error = ?, finished_at = datetime('now') "
+                   "WHERE run_id = ? AND status = 'running'", (msg[:1000] or traceback.format_exc()[-1000:], run_id))
         db.commit()
 
 
 def mark_stale(db, tenant_id):
+    """Runs that stopped responding (a hung request, or a server restart)
+    are marked failed -- see agent_runs.py."""
     if tenant_id is None:
         return
-    """Runs cut off by a server restart: anything 'running' or 'queued' for
-    over 30 minutes is marked failed."""
-    db.execute("UPDATE image_agent_runs SET status = 'failed', error = 'Stopped (the server restarted).', "
-               "finished_at = datetime('now') WHERE tenant_id = ? AND status IN ('queued','running') "
-               "AND created_at < datetime('now', '-30 minutes')", (tenant_id,))
-    db.commit()
+    agent_runs.mark_stale(db, "image_agent_runs", " AND tenant_id = ?", (tenant_id,))
 
 
 def run_cost(db, run_id):

@@ -49,6 +49,13 @@ import page. There the agent finds photos of platform Points of
 Interest, and you curate them before tenants receive them. See *Platform
 Catalogs → POI Master Image Catalog*.
 
+## Watching a run
+
+A run's page shows how long it has been running, a progress bar, and
+when it last did something. **Stop** ends it; values already found stay
+in the review queue. A run with no activity for 10 minutes is stopped
+automatically.
+
 ## Cost
 
 TMS Agents are a platform cost. They appear on the **Platform agents**

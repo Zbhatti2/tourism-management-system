@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}AI Image Collector — {{ run.scope_label }}{% endblock %}
-{% block head %}{% if run.status in ('queued', 'running') %}<meta http-equiv="refresh" content="4">{% endif %}{% endblock %}
 {% block content %}
 <nav class="mb-2">
   {% if owner %}<a href="{{ url_for('images.album', kind=kind.key, owner_id=owner.id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ owner.name }} — {{ 'Master Image Catalog' if kind.platform else 'Images Catalog' }}</a>
@@ -19,6 +18,7 @@
   </div>
 </div>
 
+{% include "_run_progress.html" %}
 {% if run.status in ('queued', 'running') %}
 <div class="alert alert-light border small">Searching the web, reading pages and reviewing photos takes about a minute per {{ 'point of interest' if kind.platform else ('hotel' if owner else 'hotel or restaurant') }}.
   This page refreshes by itself; you can also leave it and come back from Import Images.</div>
@@ -29,7 +29,7 @@
   <div class="col-lg-8">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-header bg-white small fw-semibold">Progress</div>
-      <div class="card-body"><pre class="small mb-0" style="white-space: pre-wrap;">{{ run.progress or 'Starting…' }}</pre></div>
+      <div class="card-body"><pre class="small mb-0" style="white-space: pre-wrap;" id="run-progress-text">{{ run.progress or 'Starting…' }}</pre></div>
     </div>
   </div>
   <div class="col-lg-4">

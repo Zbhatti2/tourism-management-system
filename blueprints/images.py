@@ -28,8 +28,9 @@ import json
 from datetime import date
 from io import BytesIO
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 
+import agent_runs
 import ai_usage
 import image_catalog as ic
 import image_collector as collector
@@ -279,10 +280,8 @@ def collect_many(kind="supplier"):
     return _start_collector(db, kind, scope, chosen[:limit], request.form.get("per_supplier", 6), label, back)
 
 
-@images_bp.route("/agent/<int:run_id>")
-@any_user
-def agent_run(run_id):
-    db = get_db()
+def _run(db, run_id):
+    """(run, kind, scope) -- 404 unless the run belongs to this user."""
     run = db.execute("SELECT * FROM image_agent_runs WHERE run_id = ?", (run_id,)).fetchone()
     if run is None:
         abort(404)
@@ -290,13 +289,49 @@ def agent_run(run_id):
     scope = _scope(db, kind)
     if run["tenant_id"] != scope:
         abort(404)
+    return run, kind, scope
+
+
+@images_bp.route("/agent/<int:run_id>/status.json")
+@any_user
+def agent_run_status(run_id):
+    db = get_db()
+    _run_, _kind_, scope = _run(db, run_id)
+    collector.mark_stale(db, scope)
+    return jsonify(agent_runs.status_json(db, "image_agent_runs", run_id, extra_cols=("images_staged", "batch_id")))
+
+
+@images_bp.route("/agent/<int:run_id>/stop", methods=["POST"])
+@any_user
+def agent_run_stop(run_id):
+    db = get_db()
+    _run_, kind, scope = _run(db, run_id)
+    if agent_runs.stop(db, "image_agent_runs", run_id, g.get("display_name") or g.get("username")):
+        log_action("ImageCollector", "image_agent_runs", run_id, "Stopped the AI Image Collector",
+                   tenant_id=None if kind.platform else scope)
+        flash("Run stopped. Photos it already found are kept.", "success")
+    return redirect(url_for("images.agent_run", run_id=run_id))
+
+
+@images_bp.route("/agent/<int:run_id>")
+@any_user
+def agent_run(run_id):
+    db = get_db()
+    run, kind, scope = _run(db, run_id)
     collector.mark_stale(db, scope)
     run = db.execute("SELECT * FROM image_agent_runs WHERE run_id = ?", (run_id,)).fetchone()
     cost, calls, searches = collector.run_cost(db, run_id)
     ids = json.loads(run["supplier_ids"])
     owner = kind.owner(db, scope, ids[0]) if len(ids) == 1 else None
     return render_template("images/agent_run.html", run=run, cost=cost, calls=calls, searches=searches or 0,
-                           owner=owner, kind=kind, import_url=_import_url(kind))
+                           owner=owner, kind=kind, import_url=_import_url(kind), now_utc=_now_utc(db),
+                           status_url=url_for("images.agent_run_status", run_id=run_id),
+                           stop_url=url_for("images.agent_run_stop", run_id=run_id),
+                           unit="POIs" if kind.platform else "hotels / restaurants")
+
+
+def _now_utc(db):
+    return db.execute("SELECT datetime('now')").fetchone()[0]
 
 
 # ---- curation -------------------------------------------------------------------------------------

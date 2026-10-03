@@ -764,6 +764,21 @@ def _migration_poi_master_images(db):
     db.commit()
 
 
+def _migration_agent_run_progress(db):
+    """Agent run pages show a timer, a progress bar and the last activity,
+    and have a Stop button (agent_runs.py): heartbeat_at, items_total,
+    items_done and cancel_requested on image_agent_runs and
+    platform_agent_runs."""
+    import agent_runs
+    for table in agent_runs.TABLES:
+        if not _table_exists(db, table):
+            continue
+        for col, typ in agent_runs.COLUMNS:
+            if not _column_exists(db, table, col):
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -788,6 +803,7 @@ MIGRATIONS = [
     ("2026_10_drop_platform_hotel_rates", _migration_drop_platform_hotel_rates),
     ("2026_10_platform_agents", _migration_platform_agents),
     ("2026_10_poi_master_images", _migration_poi_master_images),
+    ("2026_10_agent_run_progress", _migration_agent_run_progress),
 ]
 
 

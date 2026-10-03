@@ -3021,7 +3021,11 @@ CREATE TABLE IF NOT EXISTS image_agent_runs (
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     started_at      TEXT,
     finished_at     TEXT,
-    owner_kind      TEXT NOT NULL DEFAULT 'supplier'  -- supplier (tenant) / platform_poi (TMS Agent)
+    owner_kind      TEXT NOT NULL DEFAULT 'supplier', -- supplier (tenant) / platform_poi (TMS Agent)
+    heartbeat_at    TEXT,                   -- last sign of life (agent_runs.py)
+    items_total     INTEGER,                -- for the progress bar
+    items_done      INTEGER NOT NULL DEFAULT 0,
+    cancel_requested INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_image_agent_runs_tenant ON image_agent_runs(tenant_id);
 
@@ -3041,7 +3045,11 @@ CREATE TABLE IF NOT EXISTS platform_agent_runs (
     created_by      INTEGER REFERENCES users(user_id),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     started_at      TEXT,
-    finished_at     TEXT
+    finished_at     TEXT,
+    heartbeat_at    TEXT,                   -- last sign of life (agent_runs.py)
+    items_total     INTEGER,                -- for the progress bar
+    items_done      INTEGER NOT NULL DEFAULT 0,
+    cancel_requested INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS platform_agent_proposals (
     proposal_id     INTEGER PRIMARY KEY AUTOINCREMENT,
