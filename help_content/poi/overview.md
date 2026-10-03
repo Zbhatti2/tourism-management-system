@@ -24,11 +24,11 @@ Dashboard's Points of Interest tile.
   with its own URL and a one-line description. Click **Add link** on the
   Edit form to add a row, or the "×" next to a row to remove it; blank
   rows are dropped automatically when you save.
-- **Images / Photographs** — click the **Images/Photographs** button next
-  to Year established (only available once the POI has been saved at
-  least once) to open its own page: add an image via a Cloud Link or a
-  Local Drive Path (with a **Browse…** picker), or use **Bulk Import** to
-  add several at once with one native multi-select file dialog.
+- **Images / Photographs**: the POI's **Images Catalog**, a curated
+  album with a slider and a list. **View Images** at the top of the page
+  browses it; **Add images** in the Images card adds photos or a Zip.
+  Points of Interest from the platform catalog also inherit its Master
+  Image Catalog. See *Images Catalog → Point of Interest images*.
 - **Knowledge graph data** — a freeform, semicolon-separated field for
   loosely structured relationships (e.g. "Managed by the Auqaf
   Department"), plus a **structured** Knowledge Graph section built from

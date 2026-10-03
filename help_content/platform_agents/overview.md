@@ -42,6 +42,13 @@ Approved values are written straight to the catalog. They're dated
 record had none. Points of Interest changes then reach tenants through
 **Catalog Sync**.
 
+## POI Image Collector
+
+The **POI Image Collector** card opens the POI Master Image Catalog's
+import page. There the agent finds photos of platform Points of
+Interest, and you curate them before tenants receive them. See *Platform
+Catalogs → POI Master Image Catalog*.
+
 ## Cost
 
 TMS Agents are a platform cost. They appear on the **Platform agents**

@@ -1180,7 +1180,7 @@ def bulk_import_images(supplier_id):
     rather than aborting the whole batch, and reported back by name."""
     if request.method == "GET":
         # Superseded by Add images -> curation (blueprints/images.py, Oct 2026).
-        return redirect(url_for("images.add_to_supplier", supplier_id=supplier_id))
+        return redirect(url_for("images.add_images", kind="supplier", owner_id=supplier_id))
     db = get_db()
     supplier = _get_supplier(db, supplier_id)
     if request.method == "POST":
@@ -1284,7 +1284,7 @@ def image_catalog(supplier_id):
     Catalog album (blueprints/images.py, Oct 2026) -- kept as a redirect so
     old links and bookmarks still land in the right place."""
     _get_supplier(get_db(), supplier_id)
-    return redirect(url_for("images.album", supplier_id=supplier_id, view="list", q=request.args.get("q") or None))
+    return redirect(url_for("images.album", kind="supplier", owner_id=supplier_id, view="list", q=request.args.get("q") or None))
 
 
 @suppliers_bp.route("/<int:supplier_id>/documents/catalog/delete", methods=["POST"])

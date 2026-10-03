@@ -106,7 +106,10 @@ CREATE TABLE tenants (
     catalog_synced_at TEXT,
     -- Optional monthly AI allowance in US dollars, set by the SystemAdmin
     -- (ai_usage.py); NULL = no limit. Tenant agent runs stop once reached.
-    ai_monthly_limit_usd REAL
+    ai_monthly_limit_usd REAL,
+    -- How changes to the platform's POI Master Image Catalog reach this
+    -- tenant (poi_image_sync.py): 'auto', 'review' or 'none'.
+    poi_image_updates TEXT NOT NULL DEFAULT 'review'
 );
 
 -- Single-row counter behind tenants.account_number (see above).
@@ -2472,7 +2475,20 @@ CREATE TABLE poi_images (
     mime_type       TEXT,
     file_size       INTEGER,
     sort_order      INTEGER DEFAULT 0,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Oct 2026, POI Master Image Catalog (poi_image_sync.py): an image
+    -- inherited from platform_poi_images (bytes stay there), the master
+    -- version last taken, whether the tenant re-captioned it, soft delete.
+    platform_image_id INTEGER,
+    platform_version INTEGER,
+    local_edited    INTEGER NOT NULL DEFAULT 0,
+    is_deleted      INTEGER NOT NULL DEFAULT 0,
+    removed_by_platform INTEGER NOT NULL DEFAULT 0,
+    image_date      TEXT,
+    source          TEXT,
+    source_url      TEXT,
+    content_hash    TEXT,
+    thumb_data      BLOB
 );
 CREATE INDEX idx_poi_images_tenant ON poi_images(tenant_id);
 CREATE INDEX idx_poi_images_poi ON poi_images(poi_id);
@@ -2932,7 +2948,9 @@ CREATE TABLE IF NOT EXISTS image_import_batches (
     status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done','discarded')),
     created_by      INTEGER REFERENCES users(user_id),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    finished_at     TEXT
+    finished_at     TEXT,
+    owner_kind      TEXT NOT NULL DEFAULT 'supplier',  -- supplier / poi / platform_poi (image_owners.py)
+    owner_id        INTEGER                 -- set when added from one owner's page
 );
 CREATE INDEX IF NOT EXISTS idx_image_import_batches_tenant ON image_import_batches(tenant_id);
 CREATE TABLE IF NOT EXISTS image_import_items (
@@ -2957,7 +2975,10 @@ CREATE TABLE IF NOT EXISTS image_import_items (
     source_url      TEXT,                   -- where an AI Agent found it
     status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','added','rejected')),
     document_id     INTEGER REFERENCES supplier_documents(supplier_document_id),
-    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    owner_id        INTEGER,                -- the hotel / POI it is for (supplier_id kept for older rows)
+    image_ref       INTEGER,                -- the album image it became (document_id kept for older rows)
+    licence         TEXT                    -- platform images: licence / credit line
 );
 CREATE INDEX IF NOT EXISTS idx_image_import_items_batch ON image_import_items(batch_id);
 CREATE INDEX IF NOT EXISTS idx_image_import_items_tenant ON image_import_items(tenant_id);
@@ -2999,7 +3020,8 @@ CREATE TABLE IF NOT EXISTS image_agent_runs (
     error           TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     started_at      TEXT,
-    finished_at     TEXT
+    finished_at     TEXT,
+    owner_kind      TEXT NOT NULL DEFAULT 'supplier'  -- supplier (tenant) / platform_poi (TMS Agent)
 );
 CREATE INDEX IF NOT EXISTS idx_image_agent_runs_tenant ON image_agent_runs(tenant_id);
 
@@ -3040,3 +3062,46 @@ CREATE TABLE IF NOT EXISTS platform_agent_proposals (
 );
 CREATE INDEX IF NOT EXISTS idx_platform_agent_proposals_run ON platform_agent_proposals(run_id);
 CREATE INDEX IF NOT EXISTS idx_platform_agent_proposals_status ON platform_agent_proposals(status);
+
+-- ============================================================================
+-- POI Master Image Catalog (image_owners.py, poi_image_sync.py): the
+-- platform's curated images per platform POI (GLOBAL), and each tenant's
+-- queue of master-catalog changes waiting for review.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS platform_poi_images (
+    image_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    poi_id          INTEGER NOT NULL,       -- platform_pois.poi_id (no FK: images outlive a deleted POI for tenants still using them)
+    title           TEXT NOT NULL,
+    description     TEXT,
+    image_date      TEXT,
+    sort_order      INTEGER,
+    source          TEXT,                   -- 'Individual' / 'AI Agent'
+    contributor     TEXT,
+    source_url      TEXT,
+    licence         TEXT,                   -- licence / credit line, e.g. 'CC BY-SA 4.0, photo by …'
+    content_hash    TEXT,
+    file_name       TEXT,
+    mime_type       TEXT,
+    file_size       INTEGER,
+    file_data       BLOB NOT NULL,
+    thumb_data      BLOB,
+    is_active       INTEGER NOT NULL DEFAULT 1,   -- 0 = removed from the master catalog (bytes kept for tenants)
+    version         INTEGER NOT NULL DEFAULT 1,   -- bumped when title / description / date / licence change
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_platform_poi_images_poi ON platform_poi_images(poi_id);
+
+CREATE TABLE IF NOT EXISTS poi_image_updates (
+    update_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    poi_id          INTEGER NOT NULL REFERENCES points_of_interest(poi_id),  -- the tenant's POI
+    platform_image_id INTEGER NOT NULL,     -- platform_poi_images.image_id
+    change          TEXT NOT NULL CHECK (change IN ('new','changed','removed')),
+    version         INTEGER NOT NULL,       -- the master image's version this update brings
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','skipped')),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_by      INTEGER REFERENCES users(user_id),
+    decided_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_poi_image_updates_tenant ON poi_image_updates(tenant_id, status);

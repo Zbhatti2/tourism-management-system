@@ -579,6 +579,15 @@ def _insert_link(db, tenant_id, entity, catalog_id, local_id, how):
     return db.execute("SELECT * FROM tenant_catalog_links WHERE link_id = ?", (cur.lastrowid,)).fetchone()
 
 
+def _inherit_images(db, tenant_id, entity, local_id, catalog_id):
+    """A POI that came from / was linked to the platform takes the platform
+    POI's Master Image Catalog (poi_image_sync.py), whatever the tenant's
+    image update setting."""
+    if entity == "pois" and local_id:
+        import poi_image_sync
+        poi_image_sync.inherit_all(db, tenant_id, local_id, catalog_id)
+
+
 # ---- a whole sync run ------------------------------------------------------------------------
 
 def apply(db, tenant_id, decisions=None, auto=False, entities=SYNC_ENTITIES, catalog_ids=None):
@@ -614,10 +623,12 @@ def apply(db, tenant_id, decisions=None, auto=False, entities=SYNC_ENTITIES, cat
                 db.execute("UPDATE tenant_catalog_links SET baseline = ?, synced_at = datetime('now') WHERE link_id = ?",
                            (json.dumps({f: _clean(v) for f, v in values.items()}), link["link_id"]))
                 c["added"] += 1
+                _inherit_images(db, tenant_id, entity, local_id, p["id"])
             elif choice == "link":
                 link = _insert_link(db, tenant_id, entity, p["id"], it["match"]["id"], "linked")
                 sync_link(db, a, link, p, first=True)
                 c["linked"] += 1
+                _inherit_images(db, tenant_id, entity, it["match"]["id"], p["id"])
             elif choice == "skip":
                 _insert_link(db, tenant_id, entity, p["id"], None, "skipped")
                 c["skipped"] += 1

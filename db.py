@@ -730,6 +730,40 @@ def _migration_platform_agents(db):
     db.commit()
 
 
+def _migration_poi_master_images(db):
+    """POI Master Image Catalog (Oct 2026): platform_poi_images (the
+    SystemAdmin's curated images per platform POI), tenant POI images that
+    inherit them (poi_images.platform_image_id ...), the tenant's update
+    setting (tenants.poi_image_updates: auto / review / none, default
+    review) and its review queue (poi_image_updates). Import batches gain
+    an owner kind and id so the same curation screens serve Hotels /
+    Restaurants, tenant POIs and platform POIs. See image_owners.py and
+    poi_image_sync.py."""
+    import image_catalog
+    import image_owners
+    import poi_image_sync
+    for col, typ in image_catalog.BATCH_COLUMNS:
+        if not _column_exists(db, "image_import_batches", col):
+            db.execute(f"ALTER TABLE image_import_batches ADD COLUMN {col} {typ}")
+    for col, typ in image_catalog.ITEM_COLUMNS:
+        if not _column_exists(db, "image_import_items", col):
+            db.execute(f"ALTER TABLE image_import_items ADD COLUMN {col} {typ}")
+    db.execute("UPDATE image_import_batches SET owner_id = supplier_id WHERE owner_id IS NULL AND supplier_id IS NOT NULL")
+    db.execute("UPDATE image_import_items SET owner_id = supplier_id WHERE owner_id IS NULL AND supplier_id IS NOT NULL")
+    db.execute("UPDATE image_import_items SET image_ref = document_id WHERE image_ref IS NULL AND document_id IS NOT NULL")
+    if not _column_exists(db, "image_agent_runs", "owner_kind"):
+        db.execute("ALTER TABLE image_agent_runs ADD COLUMN owner_kind TEXT NOT NULL DEFAULT 'supplier'")
+    db.executescript(image_owners.PLATFORM_POI_DDL)
+    for col, typ in poi_image_sync.POI_IMAGE_COLUMNS:
+        if not _column_exists(db, "poi_images", col):
+            db.execute(f"ALTER TABLE poi_images ADD COLUMN {col} {typ}")
+    if not _column_exists(db, "tenants", "poi_image_updates"):
+        db.execute("ALTER TABLE tenants ADD COLUMN poi_image_updates TEXT NOT NULL DEFAULT 'review'")
+    db.executescript(poi_image_sync.DDL)
+    image_catalog.backfill_poi_hashes(db)
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -753,6 +787,7 @@ MIGRATIONS = [
     ("2026_10_ai_metering_image_collector", _migration_ai_metering_image_collector),
     ("2026_10_drop_platform_hotel_rates", _migration_drop_platform_hotel_rates),
     ("2026_10_platform_agents", _migration_platform_agents),
+    ("2026_10_poi_master_images", _migration_poi_master_images),
 ]
 
 

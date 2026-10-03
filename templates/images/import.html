@@ -1,51 +1,68 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Add Images — ' ~ supplier.supplier_name if supplier else 'Import Images' }}{% endblock %}
+{% set is_hotel = kind.key == 'supplier' %}
+{% set what = 'Hotel / Restaurant' if is_hotel else 'Point of Interest' %}
+{% block title %}{{ 'Add Images — ' ~ owner.name if owner else ('Import Hotel & Restaurant Images' if is_hotel else ('POI Master Images' if kind.platform else 'Import POI Images')) }}{% endblock %}
 {% block content %}
-{% if supplier %}
-<nav class="mb-2"><a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ supplier.supplier_name }}</a></nav>
+{% if owner %}
+<nav class="mb-2"><a href="{{ page_url }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ owner.name }}</a></nav>
 <h1 class="h3 mb-1">Add Images</h1>
-<p class="text-muted small mb-3">To <strong>{{ supplier.supplier_name }}</strong>'s Images Catalog. Choose photos (or a Zip of them); any file names are fine. Next you'll curate each one before it's added.</p>
+<p class="text-muted small mb-3">To <strong>{{ owner.name }}</strong>'s {{ 'Master Image Catalog' if kind.platform else 'Images Catalog' }}. Choose photos (or a Zip of them); any file names are fine. Next you'll curate each one before it's added.
+  {% if kind.platform %}Tenants receive curated master images according to their POI image update setting.{% endif %}</p>
+{% else %}
+{% if kind.platform %}
+<nav class="mb-2"><a href="{{ url_for('platform_catalog.list_records', entity='pois') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Points of Interest (platform)</a></nav>
+<div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+<h1 class="h3 mb-1">POI Master Image Catalog — Import</h1>
+<p class="text-muted small mb-3">Photos for many platform Points of Interest at once. Each photo is matched to its POI by its file name, then you curate them.
+  Curated images become each POI's Master Image Catalog, which tenants inherit (Auto-update, Review before update or No updates — each tenant's choice).</p>
 {% else %}
 <nav class="mb-2"><a href="{{ url_for('data_exchange.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Data Exchange</a></nav>
-<h1 class="h3 mb-1">Import Hotel &amp; Restaurant Images</h1>
-<p class="text-muted small mb-3">Photos for many Hotels, Resorts and Restaurants at once. Each photo is matched to its Hotel or Restaurant by its file name, then you curate them before anything is added to an album.</p>
+<h1 class="h3 mb-1">{{ 'Import Hotel & Restaurant Images' if is_hotel else 'Import Point of Interest Images' }}</h1>
+<p class="text-muted small mb-3">Photos for many {{ 'Hotels, Resorts and Restaurants' if is_hotel else 'Points of Interest' }} at once. Each photo is matched to its {{ what }} by its file name, then you curate them before anything is added to an album.</p>
+{% endif %}
 {% endif %}
 
 <div class="row g-3">
-  {% if not supplier %}
+  {% if not owner %}
   <div class="col-lg-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body small">
         <h2 class="h6"><i class="bi bi-info-circle me-1"></i>How to name the files</h2>
         <p class="mb-2">Put the photos in one folder and Zip it. Photos can arrive by WhatsApp, email or anything else; only the file names matter.</p>
-        <p class="mb-2"><strong>Each file name must start with the exact Hotel / Restaurant name, followed by a hyphen <code>-</code>.</strong>
+        <p class="mb-2"><strong>Each file name must start with the exact {{ what }} name, followed by a hyphen <code>-</code>.</strong>
           Whatever comes after the hyphen becomes the photo's suggested Title.</p>
         <table class="table table-sm small mb-2">
           <thead><tr><th>File name</th><th>Goes to</th><th>Suggested Title</th></tr></thead>
           <tbody>
+            {% if is_hotel %}
             <tr><td><code>Hilton Hotel-Lobby at night.jpg</code></td><td>Hilton Hotel</td><td>Lobby at night</td></tr>
             <tr><td><code>Hilton Hotel-Pool.jpg</code></td><td>Hilton Hotel</td><td>Pool</td></tr>
             <tr><td><code>Hilton Hotel-1.jpg</code></td><td>Hilton Hotel</td><td>Hilton Hotel — photo 1</td></tr>
             <tr><td><code>Pearl-Continental Hotel Lahore-Ballroom.jpg</code></td><td>Pearl-Continental Hotel Lahore</td><td>Ballroom</td></tr>
+            {% else %}
+            <tr><td><code>Badshahi Mosque-Main prayer hall.jpg</code></td><td>Badshahi Mosque</td><td>Main prayer hall</td></tr>
+            <tr><td><code>Badshahi Mosque-Courtyard at dusk.jpg</code></td><td>Badshahi Mosque</td><td>Courtyard at dusk</td></tr>
+            <tr><td><code>Badshahi Mosque-2.jpg</code></td><td>Badshahi Mosque</td><td>Badshahi Mosque — photo 2</td></tr>
+            {% endif %}
           </tbody>
         </table>
         <ul class="mb-2 ps-3">
-          <li>Capitals, accents and underscores don't matter (<code>avari_hotel_lahore-pool.jpg</code> works).</li>
-          <li>A name that is <em>almost</em> right (<code>Avary Hotel Lahore-…</code>) is suggested but marked <em>Check match</em>.</li>
+          <li>Capitals, accents and underscores don't matter.</li>
+          <li>A name that is <em>almost</em> right is suggested but marked <em>Check match</em>.</li>
           <li>A photo that's already in the album, or appears twice in the Zip, is marked <em>Duplicate</em>.</li>
-          <li>.jpg, .png, .webp, .gif, .tif and .heic; up to {{ 1000 }} photos per Zip.</li>
+          <li>.jpg, .png, .webp, .gif, .tif and .heic; up to 1000 photos per Zip.</li>
         </ul>
-        <a href="{{ url_for('images.names_csv') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-filetype-csv"></i> Download the exact names ({{ suppliers|length }})</a>
+        <a href="{{ url_for('images.names_csv', kind=kind.key) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-filetype-csv"></i> Download the exact names ({{ owners|length }})</a>
         <span class="text-muted ms-1">Send this list to whoever is collecting photos.</span>
       </div>
     </div>
   </div>
   {% endif %}
-  <div class="{{ 'col-lg-6' if not supplier else 'col-lg-7' }}">
+  <div class="{{ 'col-lg-6' if not owner else 'col-lg-7' }}">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body">
         <h2 class="h6"><i class="bi bi-upload me-1"></i>Upload</h2>
-        <form method="post" enctype="multipart/form-data" action="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) if supplier else url_for('images.import_images') }}">
+        <form method="post" enctype="multipart/form-data" action="{{ url_for('images.add_images', kind=kind.key, owner_id=owner.id) if owner else import_url }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="mb-3">
             <label class="form-label small fw-semibold" for="files">Zip file or photos</label>
@@ -77,18 +94,24 @@
   </div>
 </div>
 
-{% if not supplier %}
+{% if not owner and kind.key in ('supplier', 'platform_poi') %}
 <div class="card shadow-sm border-0 mt-3">
   <div class="card-body">
-    <h2 class="h6"><i class="bi bi-stars me-1"></i>AI Image Collector</h2>
+    <h2 class="h6"><i class="bi bi-stars me-1"></i>{{ 'TMS Agent: POI Image Collector' if kind.platform else 'AI Image Collector' }}</h2>
+    {% if kind.platform %}
+    <p class="small text-muted mb-2">Finds photos of each Point of Interest on its official website, tourism boards and Wikimedia Commons, keeps real photos of the place,
+      notes the licence or credit where the page states it, and suggests a Title and Description. They arrive here as an upload to curate.
+      Runs are a platform cost (the "Platform agents" line on AI Usage), typically around 10 cents per POI. Check each photo's licence before approving it.</p>
+    {% else %}
     <p class="small text-muted mb-2">Finds photos on each property's official website (and its brand or tourism-board page), keeps real photos of the property,
       and suggests a Title and Description for each. They arrive here as an upload to curate; nothing is added to an album until you do.
       Runs are charged to your organisation's AI usage, typically around 10 cents per hotel or restaurant.
-      {% if allowance.limit is not none %}This month: ${{ '%.2f'|format(allowance.spent) }} of your ${{ '%.2f'|format(allowance.limit) }} allowance used.{% endif %}</p>
-    <form method="post" action="{{ url_for('images.collect_many') }}" class="row g-2 align-items-end">
+      {% if allowance and allowance.limit is not none %}This month: ${{ '%.2f'|format(allowance.spent) }} of your ${{ '%.2f'|format(allowance.limit) }} allowance used.{% endif %}</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('images.collect_many', kind=kind.key) }}" class="row g-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="col-sm-3"><label class="form-label small text-muted mb-0">Type</label>
-        <select class="form-select form-select-sm" name="type"><option value="">Hotels, Resorts &amp; Restaurants</option>
+        <select class="form-select form-select-sm" name="type"><option value="">{{ 'All POI types' if kind.platform else 'Hotels, Resorts & Restaurants' }}</option>
           {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
       <div class="col-sm-3"><label class="form-label small text-muted mb-0">City</label>
         <select class="form-select form-select-sm" name="city"><option value="">All cities</option>
@@ -101,7 +124,7 @@
         <label class="form-check-label small" for="only_empty">Only those with no photos yet</label></div></div>
       <div class="col-12 d-flex align-items-center gap-2">
         <input class="form-check-input mt-0" type="checkbox" id="ai_ok" required>
-        <label class="form-check-label small" for="ai_ok">I understand this uses our AI allowance</label>
+        <label class="form-check-label small" for="ai_ok">{{ 'I understand this is a platform AI cost' if kind.platform else 'I understand this uses our AI allowance' }}</label>
         <button class="btn btn-outline-primary btn-sm ms-2" type="submit"><i class="bi bi-stars"></i> Find photos with AI</button></div>
     </form>
     {% if runs %}
@@ -133,7 +156,7 @@
           <td class="text-muted">{{ b.batch_id }}</td>
           <td>{{ b.created_at[:16] }}</td>
           <td class="text-truncate" style="max-width: 260px;">{{ b.file_name or '' }}</td>
-          <td>{{ b.supplier_name or 'Many' }}</td>
+          <td>{{ b.owner_name or 'Many' }}</td>
           <td>{{ b.source }}{% if b.contributor %} · {{ b.contributor }}{% endif %}</td>
           <td>{{ b.added }} added{% if b.pending %} · <strong>{{ b.pending }} waiting</strong>{% endif %} of {{ b.total }}</td>
           <td>{% if b.status == 'open' %}<span class="badge bg-warning-subtle text-warning-emphasis">Curating</span>{% elif b.status == 'done' %}<span class="badge bg-success-subtle text-success">Done</span>{% else %}<span class="badge bg-light text-muted border">Discarded</span>{% endif %}</td>

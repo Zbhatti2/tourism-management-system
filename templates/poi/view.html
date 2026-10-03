@@ -7,6 +7,7 @@
     {% if poi.type_label %}<span class="badge bg-secondary-subtle text-dark mt-1">{{ poi.type_label }}</span>{% endif %}
   </div>
   <div class="d-flex gap-2">
+    <a href="{{ url_for('images.album', kind='poi', owner_id=poi.poi_id, mode='view') }}" class="btn btn-outline-secondary btn-sm" title="Browse the photo album (view only)"><i class="bi bi-eye"></i> View Images</a>
     <a href="{{ url_for('poi.edit_poi', poi_id=poi.poi_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
     <form method="post" action="{{ url_for('poi.delete_poi', poi_id=poi.poi_id) }}" onsubmit="return confirm('Delete this point of interest?');" class="d-inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -99,25 +100,25 @@
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h2 class="h6 mb-0">Images / Photographs</h2>
           <div class="d-flex gap-1">
-            <a href="{{ url_for('poi.view_poi_images', poi_id=poi.poi_id) }}" class="btn btn-sm btn-outline-secondary" title="View the full image catalog"><i class="bi bi-collection"></i> Catalog</a>
-            <a href="{{ url_for('poi.bulk_import_poi_images', poi_id=poi.poi_id) }}" class="btn btn-sm btn-outline-secondary" title="Bulk import images/photographs"><i class="bi bi-images"></i> Bulk Import</a>
-            <a href="{{ url_for('poi.new_poi_image', poi_id=poi.poi_id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+            <a href="{{ url_for('images.album', kind='poi', owner_id=poi.poi_id) }}" class="btn btn-sm btn-outline-secondary" title="Album with slider, search and list"><i class="bi bi-images"></i> Images Catalog</a>
+            <a href="{{ url_for('images.add_images', kind='poi', owner_id=poi.poi_id) }}" class="btn btn-sm btn-outline-primary" title="Add one or more images (or a Zip), then curate them"><i class="bi bi-plus"></i> Add images</a>
           </div>
         </div>
+        {% if poi_image_updates %}<div class="alert alert-info small py-1 px-2 mb-2"><i class="bi bi-cloud-download"></i> {{ poi_image_updates }} platform image update{{ 's' if poi_image_updates != 1 }} to review. <a class="alert-link" href="{{ url_for('images.platform_updates', poi=poi.poi_id) }}">Review</a></div>{% endif %}
         {% for img in poi_images[:5] %}
         <div class="d-flex align-items-start gap-2 border-top py-2">
-          <img src="{{ url_for('poi.poi_image_thumbnail', poi_id=poi.poi_id, image_id=img.poi_image_id) }}"
+          <img src="{{ url_for('images.album_image', kind='poi', owner_id=poi.poi_id, image_id=img.poi_image_id, size='thumb') }}"
                alt="" width="40" height="40" class="rounded flex-shrink-0" style="object-fit: cover;"
                onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22%3E%3Crect width=%2240%22 height=%2240%22 fill=%22%23e9ecef%22/%3E%3C/svg%3E';">
-          <a href="{{ url_for('poi.view_poi_image', poi_id=poi.poi_id, image_id=img.poi_image_id) }}" class="small text-decoration-none">
-            <strong>{{ img.image_name or (img.path_or_url | basename) }}</strong>
+          <a href="{{ url_for('images.album_image', kind='poi', owner_id=poi.poi_id, image_id=img.poi_image_id, size='full') }}" target="_blank" class="small text-decoration-none">
+            <strong>{{ img.image_name or (img.path_or_url | basename) }}</strong>{% if img.platform_image_id %} <span class="badge bg-info-subtle text-info-emphasis fw-normal">Platform</span>{% endif %}
             {% if img.authors %}<span class="text-muted"> — {{ img.authors }}</span>{% endif %}
             <br>
             {% if img.description %}<span class="text-muted">{{ img.description }}</span>{% endif %}
           </a>
         </div>
-        {% else %}<p class="text-muted small mb-0">No images or photographs on file. Select "+" to add one, or "Bulk Import" to add several at once.</p>{% endfor %}
-        {% if poi_images | length > 5 %}<p class="text-muted small mb-0 mt-2">…and {{ poi_images | length - 5 }} more — see the full Catalog.</p>{% endif %}
+        {% else %}<p class="text-muted small mb-0">No images or photographs yet. Select "Add images" to add one or several (or a Zip).</p>{% endfor %}
+        {% if poi_images | length > 5 %}<p class="text-muted small mb-0 mt-2">…and {{ poi_images | length - 5 }} more in the <a href="{{ url_for('images.album', kind='poi', owner_id=poi.poi_id) }}">Images Catalog</a>.</p>{% endif %}
       </div>
     </div>
 

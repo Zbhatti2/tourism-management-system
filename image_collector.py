@@ -23,6 +23,13 @@ worker). For each supplier:
    Description for each.
 5. Stage the kept photos in one curation upload (source 'AI Agent'), each
    with its source page.
+
+The same agent also runs at platform level, as a TMS Agent, for the POI
+Master Image Catalog (owner kind 'platform_poi'): it prefers the site's
+official website, tourism boards and Wikimedia Commons, notes each photo's
+licence / credit where the page states it, uses the platform API key and is
+metered as a platform cost (tenant NULL). Its photos wait for SystemAdmin
+curation like any upload.
 """
 import base64
 import io
@@ -35,6 +42,7 @@ from urllib.parse import urljoin, urlparse
 
 import ai_usage
 import image_catalog as ic
+from image_owners import KINDS
 
 FEATURE = "Image Collector"
 AGENT_NAME = "AI Image Collector"
@@ -45,6 +53,8 @@ MIN_W, MIN_H = 600, 400
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 SKIP_WORDS = ("logo", "icon", "sprite", "favicon", "avatar", "badge", "flag", "map", "placeholder", "blank",
               "spinner", "loader", "tripadvisor", "button", "banner-ad", "payment", "qr")
+POI_FEATURE = "POI Image Collector"
+POI_AGENT_NAME = "TMS POI Image Collector"
 AVOID_SITES = ("booking.com", "tripadvisor.", "agoda.", "expedia.", "hotels.com", "trivago.", "kayak.",
                "facebook.com", "instagram.com", "pinterest.", "yelp.")
 
@@ -107,15 +117,19 @@ def http_get(url, timeout=15, max_bytes=3 * 1024 * 1024):
         return data, r.headers.get("Content-Type", "")
 
 
-def anthropic_client():
+def anthropic_client(platform=False):
+    """Tenant runs use ANTHROPIC_API_KEY; platform (TMS Agent) runs use
+    PLATFORM_ANTHROPIC_API_KEY, falling back to ANTHROPIC_API_KEY."""
     from config import Config
-    if not Config.ANTHROPIC_API_KEY:
-        raise CollectorError("No ANTHROPIC_API_KEY is configured on the server.")
+    key = ((getattr(Config, "PLATFORM_ANTHROPIC_API_KEY", None) if platform else None) or Config.ANTHROPIC_API_KEY)
+    if not key:
+        raise CollectorError("No Anthropic API key is configured on the server"
+                             + (" (PLATFORM_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY)." if platform else " (ANTHROPIC_API_KEY)."))
     try:
         import anthropic
     except ImportError as e:
         raise CollectorError("The 'anthropic' package isn't installed on the server.") from e
-    return anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+    return anthropic.Anthropic(api_key=key)
 
 
 def models():
@@ -132,10 +146,25 @@ def _tool_input(response, name):
     return None
 
 
+def _poi_pages_prompt(t, place):
+    return (
+        f"Find web pages with good photographs of this point of interest ({(t.get('type_label') or 'place').lower()}): "
+        f"\"{t['supplier_name']}\"{' in ' + place if place else ''}"
+        f"{' (website: ' + t['web_page'] + ')' if t.get('web_page') else ''}.\n\n"
+        "Prefer, in this order: the site's own official website or its managing authority; the national, provincial "
+        "or city tourism board; Wikimedia Commons (its category or file pages for this place) and Wikipedia; "
+        "reputable museums, heritage bodies and archives. Avoid booking and review sites, social media and stock-photo "
+        "sellers. Make sure the pages are about this exact place in this city, not a namesake.\n\n"
+        f"Use web search, then call report_pages with at most {MAX_PAGES} page URLs taken from the search results "
+        "(never invent a URL). For each page, note the licence or credit terms of its photos if the page states them "
+        "(e.g. 'CC BY-SA 4.0'). If you can't find this place, report no pages."
+    )
+
+
 def find_pages(client, model, supplier, meter):
-    """[(url, why)] of pages likely to have photos of this supplier."""
+    """[(url, why)] of pages likely to have photos of this supplier / POI."""
     place = ", ".join(x for x in (supplier["city"], supplier.get("country")) if x)
-    prompt = (
+    prompt = _poi_pages_prompt(supplier, place) if supplier.get("kind") == "platform_poi" else (
         f"Find web pages with good photographs of this {supplier['type_label'].lower()}: "
         f"\"{supplier['supplier_name']}\"{' in ' + place if place else ''}"
         f"{' (website: ' + supplier['web_page'] + ')' if supplier.get('web_page') else ''}.\n\n"
@@ -151,7 +180,8 @@ def find_pages(client, model, supplier, meter):
               "input_schema": {"type": "object", "properties": {
                   "official_website": {"type": "string"},
                   "pages": {"type": "array", "items": {"type": "object", "properties": {
-                      "url": {"type": "string"}, "why": {"type": "string"}}, "required": ["url"]}},
+                      "url": {"type": "string"}, "why": {"type": "string"}, "licence": {"type": "string"}},
+                      "required": ["url"]}},
                   "note": {"type": "string"}}, "required": ["pages"]}}]
     messages = [{"role": "user", "content": prompt}]
     found = None
@@ -165,6 +195,7 @@ def find_pages(client, model, supplier, meter):
     if found is None:
         return [], "The search didn't identify any pages."
     pages, seen = [], set()
+    licences = {}
     for p in ([{"url": found.get("official_website"), "why": "Official website"}] if found.get("official_website") else []) + \
             list(found.get("pages") or []):
         url = (p.get("url") or "").strip()
@@ -173,6 +204,9 @@ def find_pages(client, model, supplier, meter):
             continue
         seen.add(url)
         pages.append((url, (p.get("why") or "").strip()))
+        if (p.get("licence") or "").strip():
+            licences[url] = p["licence"].strip()[:200]
+    supplier.setdefault("_licences", {}).update(licences)
     return pages[:MAX_PAGES + 1], (found.get("note") or "").strip()
 
 
@@ -256,7 +290,19 @@ def review_photos(client, model, supplier, photos, meter):
     """{index: {"title", "description"}} for photos worth keeping."""
     if not photos:
         return {}
-    content = [{"type": "text", "text": (
+    if supplier.get("kind") == "platform_poi":
+        intro = (
+            f"These are candidate photos for the Master Image Catalog of the point of interest "
+            f"\"{supplier['supplier_name']}\"{' in ' + supplier['city'] if supplier.get('city') else ''} "
+            f"({(supplier.get('type_label') or 'place').lower()}), found on the web, for tour operators' brochures. "
+            "Keep a photo only if it plausibly shows this place: its exterior, architecture, interior, grounds, "
+            "notable details or the view of it. Reject logos, maps, illustrations, text graphics, generic stock images, "
+            "other places, and photos where people are the subject. For each photo you keep, give a short Title "
+            "(2-6 words, e.g. 'Main gate at sunset') and a one-sentence Description (under 180 characters) describing "
+            "only what is visible. Call review_photos.")
+    else:
+        intro = None
+    content = [{"type": "text", "text": intro or (
         f"These are candidate photos for the Images Catalog of the {supplier['type_label'].lower()} "
         f"\"{supplier['supplier_name']}\"{' in ' + supplier['city'] if supplier.get('city') else ''}, found on the web. "
         "Keep a photo only if it plausibly shows this property: its building, entrance, lobby, rooms, bathrooms, "
@@ -297,7 +343,8 @@ def _slug(text):
 
 
 def collect_for_supplier(db, client, tenant_id, supplier, per_supplier, meter, log):
-    """[(file name, data, meta)] staged-ready photos for one supplier."""
+    """[(file name, data, meta)] staged-ready photos for one supplier (or,
+    with supplier["kind"] = 'platform_poi', one platform POI)."""
     search_model, vision_model = models()
     pages, note = find_pages(client, search_model, supplier, meter)
     if not pages:
@@ -320,10 +367,12 @@ def collect_for_supplier(db, client, tenant_id, supplier, per_supplier, meter, l
     if not candidates:
         log("no images on those pages")
         return []
-    known = {r[0] for r in db.execute(
-        "SELECT content_hash FROM supplier_documents WHERE supplier_id = ? AND tenant_id = ? AND is_deleted = 0 "
-        "AND content_hash IS NOT NULL UNION SELECT content_hash FROM image_import_items WHERE supplier_id = ? "
-        "AND tenant_id = ? AND status = 'pending'", (supplier["supplier_id"], tenant_id, supplier["supplier_id"], tenant_id))}
+    kind = KINDS[supplier.get("kind") or "supplier"]
+    oid = supplier["supplier_id"]
+    known = {h for (o, h) in kind.hashes(db, tenant_id) if o == oid}
+    known |= {r[0] for r in db.execute(
+        "SELECT i.content_hash FROM image_import_items i JOIN image_import_batches b ON b.batch_id = i.batch_id "
+        "WHERE i.owner_id = ? AND i.tenant_id = ? AND i.status = 'pending' AND b.owner_kind = ?", (oid, tenant_id, kind.key))}
     photos = download_photos(candidates, known, log)
     # Largest first: gallery photos beat thumbnails.
     photos.sort(key=lambda p: -(p[4] * p[5]))
@@ -338,8 +387,9 @@ def collect_for_supplier(db, client, tenant_id, supplier, per_supplier, meter, l
             name = name[:-4] + ".png"
         elif ic.mime_for(url.split("?")[0]) == "image/webp":
             name = name[:-4] + ".webp"
-        out.append((name, data, {"supplier_id": supplier["supplier_id"], "title": title,
-                                 "description": keep[i]["description"], "source_url": page if page else url}))
+        out.append((name, data, {"owner_id": oid, "title": title, "description": keep[i]["description"],
+                                 "source_url": page if page else url,
+                                 "licence": (supplier.get("_licences") or {}).get(page)}))
     log(f"kept {len(out)} of {len(photos)} after review")
     return out
 
@@ -363,20 +413,47 @@ def suppliers_for(db, tenant_id, ids):
     return out
 
 
-def start_run(db, tenant_id, user_id, supplier_ids, per_supplier=8, scope_label=None, background=True):
+def platform_pois_for(db, ids):
+    """Platform POIs in the same shape as suppliers_for() (supplier_id /
+    supplier_name are the POI's id and name)."""
+    out = []
+    for pid in ids:
+        r = db.execute("""SELECT p.poi_id, p.name, p.website, COALESCE(c.label, p.city_text) AS city, co.label AS country,
+                                 pt.label AS type_label
+                          FROM platform_pois p LEFT JOIN cities c ON c.city_id = p.city_id
+                          LEFT JOIN countries co ON co.country_id = p.country_id
+                          LEFT JOIN poi_types pt ON pt.poi_type_id = p.poi_type_id
+                          WHERE p.poi_id = ? AND p.is_active = 1""", (pid,)).fetchone()
+        if r:
+            out.append({"supplier_id": r["poi_id"], "supplier_name": r["name"], "web_page": r["website"],
+                        "city": r["city"], "country": r["country"], "type_label": r["type_label"] or "Point of Interest",
+                        "kind": "platform_poi"})
+    return out
+
+
+def targets_for(db, kind, tenant_id, ids):
+    return platform_pois_for(db, ids) if kind == "platform_poi" else suppliers_for(db, tenant_id, ids)
+
+
+def start_run(db, tenant_id, user_id, supplier_ids, per_supplier=8, scope_label=None, background=True, kind="supplier"):
     """Create a run and start it. Returns run_id. Raises CollectorError
-    (no API key, allowance used up, nothing to do)."""
-    over = ai_usage.check_limit(db, tenant_id)
-    if over:
-        raise CollectorError(over)
-    anthropic_client()  # fail now, not in the background, if the API isn't configured
-    sups = suppliers_for(db, tenant_id, supplier_ids)
+    (no API key, allowance used up, nothing to do). kind='platform_poi':
+    a TMS Agent run for the POI Master Image Catalog; tenant_id is then the
+    TMS Platform tenant and the cost is a platform cost."""
+    platform = kind == "platform_poi"
+    if not platform:
+        over = ai_usage.check_limit(db, tenant_id)
+        if over:
+            raise CollectorError(over)
+    anthropic_client(platform)  # fail now, not in the background, if the API isn't configured
+    sups = targets_for(db, kind, tenant_id, supplier_ids)
     if not sups:
-        raise CollectorError("Choose at least one Hotel, Resort or Restaurant.")
-    label = scope_label or (sups[0]["supplier_name"] if len(sups) == 1 else f"{len(sups)} suppliers")
-    cur = db.execute("INSERT INTO image_agent_runs (tenant_id, user_id, scope_label, supplier_ids, per_supplier) "
-                     "VALUES (?, ?, ?, ?, ?)", (tenant_id, user_id, label, json.dumps([s["supplier_id"] for s in sups]),
-                                                max(1, min(int(per_supplier or 8), 20))))
+        raise CollectorError("Choose at least one Point of Interest." if platform
+                             else "Choose at least one Hotel, Resort or Restaurant.")
+    label = scope_label or (sups[0]["supplier_name"] if len(sups) == 1 else f"{len(sups)} {'POIs' if platform else 'suppliers'}")
+    cur = db.execute("INSERT INTO image_agent_runs (tenant_id, user_id, scope_label, supplier_ids, per_supplier, owner_kind) "
+                     "VALUES (?, ?, ?, ?, ?, ?)", (tenant_id, user_id, label, json.dumps([s["supplier_id"] for s in sups]),
+                                                   max(1, min(int(per_supplier or 8), 20)), kind))
     db.commit()
     run_id = cur.lastrowid
     if background:
@@ -406,6 +483,8 @@ def _run_in_thread(run_id):
 def run_collection(db, run_id):
     run = db.execute("SELECT * FROM image_agent_runs WHERE run_id = ?", (run_id,)).fetchone()
     tenant_id = run["tenant_id"]
+    kind = run["owner_kind"] if "owner_kind" in run.keys() and run["owner_kind"] else "supplier"
+    platform = kind == "platform_poi"
     lines = []
 
     def log(text):
@@ -414,21 +493,21 @@ def run_collection(db, run_id):
         db.commit()
 
     def meter(model, usage):
-        ai_usage.record(db, tenant_id, FEATURE, model, usage, user_id=run["user_id"], ref_type="image_agent_runs",
-                        ref_id=run_id, note=current["name"])
+        ai_usage.record(db, None if platform else tenant_id, POI_FEATURE if platform else FEATURE, model, usage,
+                        user_id=run["user_id"], ref_type="image_agent_runs", ref_id=run_id, note=current["name"])
 
     current = {"name": run["scope_label"]}
     db.execute("UPDATE image_agent_runs SET status = 'running', started_at = datetime('now') WHERE run_id = ?", (run_id,))
     db.commit()
     try:
-        client = anthropic_client()
-        sups = suppliers_for(db, tenant_id, json.loads(run["supplier_ids"]))
+        client = anthropic_client(platform)
+        sups = targets_for(db, kind, tenant_id, json.loads(run["supplier_ids"]))
         single = sups[0]["supplier_id"] if len(sups) == 1 else None
         batch_id = None
         staged = failures = 0
         for s in sups:
             current["name"] = s["supplier_name"]
-            over = ai_usage.check_limit(db, tenant_id)
+            over = None if platform else ai_usage.check_limit(db, tenant_id)
             if over:
                 log(f"Stopped before {s['supplier_name']}: {over}")
                 break
@@ -446,16 +525,17 @@ def run_collection(db, run_id):
             if not files:
                 continue
             if batch_id is None:
-                batch_id = ic.create_batch(db, tenant_id, [], source="AI Agent", contributor=AGENT_NAME,
-                                           supplier_id=single, user_id=run["user_id"],
-                                           upload_name=f"{AGENT_NAME}: {run['scope_label']}")
+                agent = POI_AGENT_NAME if platform else AGENT_NAME
+                batch_id = ic.create_batch(db, tenant_id, [], source="AI Agent", contributor=agent,
+                                           owner_id=single, user_id=run["user_id"],
+                                           upload_name=f"{agent}: {run['scope_label']}", kind=kind)
                 db.execute("UPDATE image_agent_runs SET batch_id = ? WHERE run_id = ?", (batch_id, run_id))
             ic.add_items(db, tenant_id, batch_id, [(n, d) for n, d, _m in files], meta={n: m for n, _d, m in files})
             staged += len(files)
             db.execute("UPDATE image_agent_runs SET images_staged = ? WHERE run_id = ?", (staged, run_id))
             db.commit()
         if failures and failures == len(sups):
-            raise CollectorError("Every supplier in this run failed; see Progress for the reasons.")
+            raise CollectorError(f"Every {'POI' if platform else 'supplier'} in this run failed; see Progress for the reasons.")
         log(f"Done: {staged} photo(s) ready to curate." if staged else "Done: no new photos found.")
         db.execute("UPDATE image_agent_runs SET status = 'done', finished_at = datetime('now') WHERE run_id = ?", (run_id,))
         db.commit()
@@ -471,6 +551,8 @@ def run_collection(db, run_id):
 
 
 def mark_stale(db, tenant_id):
+    if tenant_id is None:
+        return
     """Runs cut off by a server restart: anything 'running' or 'queued' for
     over 30 minutes is marked failed."""
     db.execute("UPDATE image_agent_runs SET status = 'failed', error = 'Stopped (the server restarted).', "
