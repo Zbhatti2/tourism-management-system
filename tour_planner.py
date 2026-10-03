@@ -587,7 +587,8 @@ def parse_request(client, text, meter, brief=None):
     prompt = (
         "A tour operator typed this request for a group tour (it may end with their answers to earlier questions). "
         "Read it into a Tour Brief. Couples share a double room; individuals who need their own room get a single. "
-        "Put only what the request states; leave other fields out.\n\n"
+        "Put only what the request states; leave other fields out. Treat anything the planner added under 'Anything "
+        "else the agent should know and consider' as instructions for the whole plan, and keep it in notes.\n\n"
         "The brief already holds these values (form defaults or the planner's own entries); they stand unless the "
         f"request says otherwise:\n{json.dumps(current, ensure_ascii=False)}\n\n"
         "Then list QUESTIONS, but only what blocks planning the route, overnight stops and days, and only when neither "
@@ -617,6 +618,21 @@ def add_answers(db, plan_id, pairs):
     db.commit()
 
 
+EXTRA_QUESTION = "Anything else the agent should know and consider"
+
+
+def add_note(db, plan_id, text):
+    """Keep the planner's extra guidance in the brief's notes too, so every
+    later stage (route, hotels, days...) takes it into account."""
+    plan = db.execute("SELECT brief FROM tour_plans WHERE plan_id = ?", (plan_id,)).fetchone()
+    b = dict(DEFAULT_BRIEF, **json.loads(plan["brief"] or "{}"))
+    notes = (b.get("notes") or "").strip()
+    if text.strip() and text.strip() not in notes:
+        b["notes"] = (notes + ("\n" if notes else "") + text.strip()).strip()
+        db.execute("UPDATE tour_plans SET brief = ? WHERE plan_id = ?", (json.dumps(b, ensure_ascii=False), plan_id))
+        db.commit()
+
+
 def dismiss_questions(db, plan_id):
     run = db.execute("SELECT run_id, result FROM tour_plan_runs WHERE plan_id = ? AND stage_key = 'brief' "
                      "ORDER BY run_id DESC LIMIT 1", (plan_id,)).fetchone()
@@ -632,6 +648,11 @@ def merge_brief(brief, found):
     b = dict(brief)
     for k, v in found.items():
         if k == "questions" or v in (None, "", []):
+            continue
+        if k == "notes":  # add to the planner's notes, never replace them
+            old = (b.get("notes") or "").strip()
+            if v.strip() and v.strip() not in old:
+                b["notes"] = (old + ("\n" if old else "") + v.strip()).strip()
             continue
         if k in DEFAULT_BRIEF:
             b[k] = v

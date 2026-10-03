@@ -187,10 +187,15 @@ def answer_questions(plan_id):
         a = (request.form.get(f"a_{i}") or "").strip()
         if a:
             pairs.append((q, a))
+    extra = (request.form.get("extra") or "").strip()
+    if extra:
+        pairs.append((tp.EXTRA_QUESTION, extra))
     if not pairs:
-        flash("Type an answer to at least one question, or click Skip.", "error")
+        flash("Type an answer, or something you want the agent to consider, first.", "error")
         return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="brief"))
     tp.add_answers(db, plan_id, pairs)
+    if extra:
+        tp.add_note(db, plan_id, extra)
     try:
         tp.start_run(db, g.tenant_id, g.user_id, plan_id, "brief")
     except tp.PlannerError as e:

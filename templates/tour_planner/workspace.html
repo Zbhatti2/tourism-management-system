@@ -106,11 +106,27 @@
             <textarea class="form-control form-control-sm" id="a_{{ loop.index0 }}" name="a_{{ loop.index0 }}" rows="1"></textarea>
           </div>
           {% endfor %}
+          <div class="mb-2 mt-3 pt-2 border-top">
+            <label class="form-label small fw-semibold mb-1" for="extra">{{ questions|length + 1 }}. Anything else you want the agent to know and consider</label>
+            <textarea class="form-control form-control-sm" id="extra" name="extra" rows="3" placeholder="Suggestions, other options, preferences: e.g. include a night in Naltar if it fits; avoid night driving; two guests are vegetarian; prefer heritage hotels over chains"></textarea>
+            <div class="form-text">This is kept in the brief's notes, so every later stage (route, stops, hotels, days) takes it into account.</div>
+          </div>
           <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
             <button class="btn btn-primary btn-sm" type="submit" name="action" value="answer"><i class="bi bi-send"></i> Send answers to the agent</button>
             <button class="btn btn-outline-secondary btn-sm" type="submit" name="action" value="dismiss" formnovalidate>Skip — the brief below is fine</button>
             <span class="small text-muted">Or fill the answers straight into the brief form.</span>
           </div>
+        </div>
+      </form>
+      {% endif %}
+      {% if not questions and not st.approved_at and plan.request_text and not (run and run.status in ('queued', 'running')) %}
+      <form method="post" action="{{ url_for('tour_planner.answer_questions', plan_id=plan.plan_id) }}" class="card shadow-sm border-0 mb-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-body">
+          <label class="form-label small fw-semibold mb-1" for="extra0"><i class="bi bi-chat-left-text"></i> Anything else you want the agent to know and consider?</label>
+          <textarea class="form-control form-control-sm mb-2" id="extra0" name="extra" rows="2" placeholder="Suggestions, other options, preferences…"></textarea>
+          <button class="btn btn-outline-primary btn-sm" type="submit" name="action" value="answer"><i class="bi bi-send"></i> Send to the agent</button>
+          <span class="small text-muted ms-2">The agent reads the request again with it; it's also kept in the brief's notes for every later stage.</span>
         </div>
       </form>
       {% endif %}
