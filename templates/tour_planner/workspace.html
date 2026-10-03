@@ -45,6 +45,28 @@
 {% endmacro %}
 {% macro src(s) %}{% if s and s.startswith('http') %}<a href="{{ s }}" target="_blank" rel="noopener">{{ s.split('/')[2] }}</a>{% else %}{{ s or '' }}{% endif %}{% endmacro %}
 
+{% macro criteria_form(open, back='checkpoints') %}
+        <details class="card shadow-sm border-0 mb-3" {{ 'open' if open else '' }}>
+          <summary class="card-header bg-white small fw-semibold">Checkpoint criteria <span class="fw-normal text-muted">— what makes a city a good overnight stop for this tour</span></summary>
+          <form class="card-body" method="post" action="{{ url_for('tour_planner.save_criteria', plan_id=plan.plan_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="{{ back }}">
+            <div class="row g-2 small">
+              <div class="col-md-3"><label class="form-label small text-muted mb-0">Max km from the last checkpoint</label><input class="form-control form-control-sm" type="number" min="0" name="max_km" value="{{ criteria.max_km if criteria.max_km is not none else '' }}" placeholder="no limit"></div>
+              <div class="col-md-3"><label class="form-label small text-muted mb-0">Min km between checkpoints</label><input class="form-control form-control-sm" type="number" min="0" name="min_km" value="{{ criteria.min_km if criteria.min_km is not none else '' }}" placeholder="none"></div>
+              <div class="col-md-6"><label class="form-label small text-muted mb-0">Max driving per day</label><div class="form-control-plaintext form-control-sm py-1">{{ brief.max_drive_hours or 8 }} hours <span class="text-muted">(from the Tour Brief)</span></div></div>
+              <div class="col-md-6"><label class="form-label small text-muted mb-0">Hotel / stay requirements</label><textarea class="form-control form-control-sm" rows="2" name="hotel" placeholder="e.g. 3-star or better, all {{ fig.guest_rooms }} guest rooms in one hotel, hot water, parking for the buses">{{ criteria.hotel }}</textarea></div>
+              <div class="col-md-6"><label class="form-label small text-muted mb-0">Food / meals</label><textarea class="form-control form-control-sm" rows="2" name="food" placeholder="e.g. hotel serves dinner and breakfast for the group; a halal restaurant nearby">{{ criteria.food }}</textarea></div>
+              <div class="col-md-6"><label class="form-label small text-muted mb-0">Points of interest</label><textarea class="form-control form-control-sm" rows="2" name="pois" placeholder="e.g. stay near the major attractions so visits are in the evening or early morning">{{ criteria.pois }}</textarea></div>
+              <div class="col-md-6"><label class="form-label small text-muted mb-0">Anything else</label><textarea class="form-control form-control-sm" rows="2" name="other" placeholder="e.g. avoid towns without fuel stations; a rest day every 4 days">{{ criteria.other }}</textarea></div>
+              <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="prefer_flagged" id="pf" {{ 'checked' if criteria.prefer_flagged else '' }}><label class="form-check-label" for="pf">Prefer cities TMS already flags as overnight checkpoints</label></div>
+                <div class="text-muted">The agent can still pick a city TMS doesn't flag; when you approve, those are suggested to TMS for flagging.</div></div>
+            </div>
+            <div class="mt-2"><button class="btn btn-sm btn-primary" type="submit">Save criteria</button>
+              {% if stages.checkpoints.data %}<span class="small text-muted ms-2">Saving clears the checkpoints and later stages; then run the agent again.</span>{% else %}<span class="small text-muted ms-2">Used when the agent chooses the checkpoints (next stage).</span>{% endif %}</div>
+          </form>
+        </details>
+      {% endmacro %}
+
 {% block content %}
 <nav class="mb-2"><a href="{{ url_for('tour_planner.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Tour Planner</a></nav>
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
@@ -227,16 +249,17 @@
         {{ flags_list(r.flags) }}
         <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Outbound route{% if not r.return_differs %} (the return is the same road){% endif %}</div>
           <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
-            <thead><tr><th>#</th><th>City</th><th class="text-end">km from previous</th><th>Drive time</th><th class="text-end">Cumulative km</th><th>Cumulative drive</th><th>Road</th><th>Figures from</th></tr></thead>
+            <thead><tr><th>#</th><th>City</th><th class="text-end">km from previous</th><th>Drive time</th><th class="text-end">Cumulative km</th><th>Cumulative drive</th><th>Road</th></tr></thead>
             <tbody>{% for c in r.outbound %}{% set cu = journey.cumulative[loop.index0] if journey else none %}<tr>
               <td class="text-muted">{{ loop.index }}</td>
               <td><strong>{{ c.city }}</strong>{% if c.country %} <span class="text-muted">{{ c.country }}</span>{% endif %}{% if not c.city_id %} <span class="badge bg-light text-muted border" title="Not in TMS geography yet">not in TMS</span>{% endif %}{% if c.tms_checkpoint %} <span class="badge bg-success-subtle text-success" title="Flagged in TMS as a good overnight stop"><i class="bi bi-moon-stars"></i> TMS checkpoint</span>{% endif %}{% if c.note %}<div class="text-muted">{{ c.note }}</div>{% endif %}</td>
-              <td class="text-end">{{ c.km_from_previous if c.km_from_previous is not none else ('' if loop.first else '?') }}</td>
+              <td class="text-end">{{ c.km_from_previous if c.km_from_previous is not none else ('' if loop.first else '?') }}{% if c.distance_source and c.distance_source.startswith('http') %} <a href="{{ c.distance_source }}" target="_blank" rel="noopener" title="From the web: {{ c.distance_source.split('/')[2] }}"><i class="bi bi-globe2"></i></a>{% elif c.distance_source and c.distance_source != 'TMS' and not loop.first %} <span class="text-muted" title="{{ c.distance_source }}">~</span>{% endif %}</td>
               <td>{% if not loop.first %}{{ hours(c.minutes_from_previous) }}{% if c.minutes_max_from_previous %}–{{ hours(c.minutes_max_from_previous) }}{% endif %}{% endif %}</td>
               <td class="text-end fw-semibold">{% if cu and not loop.first %}{{ cu.km|round(1) }}{% if cu.partial %}<span class="text-muted" title="Some legs before this have no figure">+?</span>{% endif %}{% elif loop.first %}0{% endif %}</td>
               <td>{% if cu and not loop.first %}{{ hours(cu.minutes) }}{% if cu.minutes_max and cu.minutes_max != cu.minutes %}–{{ hours(cu.minutes_max) }}{% endif %}{% endif %}</td>
-              <td>{{ c.road or '' }}</td><td>{{ src(c.distance_source) }}</td></tr>{% endfor %}</tbody>
-          </table></div></div>
+              <td>{{ c.road or '' }}</td></tr>{% endfor %}</tbody>
+          </table></div>
+          <div class="card-footer bg-white small text-muted">Distances are from TMS unless marked: <i class="bi bi-globe2"></i> from the web (click for the page), ~ the agent's estimate.</div></div>
         {% if r.return_differs and r.return_route %}
         <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Return route</div>
           <div class="card-body small">{% for c in r.return_route %}{{ c.city }}{% if not loop.last %} → {% endif %}{% endfor %}</div></div>
@@ -245,46 +268,26 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold d-flex justify-content-between">Points of interest <span class="fw-normal text-muted">tick the ones to plan for</span></div>
             <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
-              <thead><tr><th></th><th>Place</th><th>Near</th><th>On route?</th><th>Detour (round trip)</th><th>Visit</th><th>From</th></tr></thead>
+              <thead><tr><th></th><th>Place</th><th>Near</th><th>On route?</th><th>Detour (round trip)</th><th>Visit</th></tr></thead>
               <tbody>{% for p in r.pois %}<tr>
                 <td><input class="form-check-input" type="checkbox" name="poi" value="{{ loop.index0 }}" {{ 'checked' if p.include else '' }}></td>
                 <td><strong>{{ p.name }}</strong>{% if p.major %} <span class="badge bg-primary-subtle text-primary">major</span>{% endif %}{% if p.type %} <span class="text-muted">{{ p.type }}</span>{% endif %}{% if p.why %}<div class="text-muted">{{ p.why }}</div>{% endif %}</td>
                 <td>{{ p.near_city }}</td>
                 <td>{{ 'Yes' if p.on_route else 'Detour' }}</td>
                 <td>{% if not p.on_route %}{{ p.detour_km_round_trip or '?' }} km · {{ hours(p.detour_minutes_round_trip) }}{% endif %}</td>
-                <td>{{ hours(p.visit_minutes) if p.visit_minutes else '' }}</td>
-                <td>{{ src(p.source) }}</td></tr>{% endfor %}</tbody>
+                <td>{{ hours(p.visit_minutes) if p.visit_minutes else '' }}</td></tr>{% endfor %}</tbody>
             </table></div>
             <div class="card-footer bg-white"><button class="btn btn-sm btn-outline-secondary" type="submit">Save the ticks</button></div>
           </div>
         </form>
+        {{ criteria_form(not brief.checkpoint_criteria, 'route') }}
         {{ review_bar() }}
       {% endif %}
 
     {# ------------------------------------------------------------------ checkpoints #}
     {% elif key == 'checkpoints' %}
-{% macro criteria_form(open) %}
-        <details class="card shadow-sm border-0 mb-3" {{ 'open' if open else '' }}>
-          <summary class="card-header bg-white small fw-semibold">Checkpoint criteria <span class="fw-normal text-muted">— what makes a city a good overnight stop for this tour</span></summary>
-          <form class="card-body" method="post" action="{{ url_for('tour_planner.save_criteria', plan_id=plan.plan_id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="row g-2 small">
-              <div class="col-md-3"><label class="form-label small text-muted mb-0">Max km from the last checkpoint</label><input class="form-control form-control-sm" type="number" min="0" name="max_km" value="{{ criteria.max_km if criteria.max_km is not none else '' }}" placeholder="no limit"></div>
-              <div class="col-md-3"><label class="form-label small text-muted mb-0">Min km between checkpoints</label><input class="form-control form-control-sm" type="number" min="0" name="min_km" value="{{ criteria.min_km if criteria.min_km is not none else '' }}" placeholder="none"></div>
-              <div class="col-md-6"><label class="form-label small text-muted mb-0">Max driving per day</label><div class="form-control-plaintext form-control-sm py-1">{{ brief.max_drive_hours or 8 }} hours <span class="text-muted">(from the Tour Brief)</span></div></div>
-              <div class="col-md-6"><label class="form-label small text-muted mb-0">Hotel / stay requirements</label><textarea class="form-control form-control-sm" rows="2" name="hotel" placeholder="e.g. 3-star or better, all {{ fig.guest_rooms }} guest rooms in one hotel, hot water, parking for the buses">{{ criteria.hotel }}</textarea></div>
-              <div class="col-md-6"><label class="form-label small text-muted mb-0">Food / meals</label><textarea class="form-control form-control-sm" rows="2" name="food" placeholder="e.g. hotel serves dinner and breakfast for the group; a halal restaurant nearby">{{ criteria.food }}</textarea></div>
-              <div class="col-md-6"><label class="form-label small text-muted mb-0">Points of interest</label><textarea class="form-control form-control-sm" rows="2" name="pois" placeholder="e.g. stay near the major attractions so visits are in the evening or early morning">{{ criteria.pois }}</textarea></div>
-              <div class="col-md-6"><label class="form-label small text-muted mb-0">Anything else</label><textarea class="form-control form-control-sm" rows="2" name="other" placeholder="e.g. avoid towns without fuel stations; a rest day every 4 days">{{ criteria.other }}</textarea></div>
-              <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="prefer_flagged" id="pf" {{ 'checked' if criteria.prefer_flagged else '' }}><label class="form-check-label" for="pf">Prefer cities TMS already flags as overnight checkpoints</label></div>
-                <div class="text-muted">The agent can still pick a city TMS doesn't flag; when you approve, those are suggested to TMS for flagging.</div></div>
-            </div>
-            <div class="mt-2"><button class="btn btn-sm btn-primary" type="submit">Save criteria</button>
-              {% if st.data %}<span class="small text-muted ms-2">Saving clears the checkpoints and later stages; then run the agent again.</span>{% endif %}</div>
-          </form>
-        </details>
-      {% endmacro %}
-      {% if not can_run %}<div class="alert alert-light border small">Approve the route first.</div>
+
+      {% if not can_run %}<div class="alert alert-light border small">Approve the route first. You can set the checkpoint criteria now.</div>{{ criteria_form(true) }}
       {% elif st.data is none and st.state != 'working' %}{{ criteria_form(true) }}{{ run_card('Checkpoints and the day budget', "The agent picks the overnight cities (with hotels of your standard on record, and dining), the nights in each, and lays the tour's days out against your maximum driving per day. It tells you if the plan doesn't fit the tour length. Usually 1–2 minutes, about 10–25 cents.") }}
       {% elif st.data %}
         {% set c = st.data %}
