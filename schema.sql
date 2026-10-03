@@ -3002,3 +3002,41 @@ CREATE TABLE IF NOT EXISTS image_agent_runs (
     finished_at     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_image_agent_runs_tenant ON image_agent_runs(tenant_id);
+
+-- ============================================================================
+-- TMS Agents (platform_agents.py): platform-level research agents and the
+-- proposals they make for SystemAdmin review. GLOBAL.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS platform_agent_runs (
+    run_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_key       TEXT NOT NULL,          -- geography / distances / pois
+    scope_label     TEXT NOT NULL,
+    params          TEXT,                   -- JSON: what the run covers
+    status          TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','done','failed')),
+    progress        TEXT,
+    error           TEXT,
+    proposals       INTEGER NOT NULL DEFAULT 0,
+    created_by      INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at      TEXT,
+    finished_at     TEXT
+);
+CREATE TABLE IF NOT EXISTS platform_agent_proposals (
+    proposal_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id          INTEGER NOT NULL REFERENCES platform_agent_runs(run_id),
+    entity          TEXT NOT NULL,          -- cities / city_distances / platform_pois
+    record_key      TEXT NOT NULL,          -- city_id, poi_id, or 'a:b' city pair (smaller id first)
+    record_label    TEXT,
+    field           TEXT NOT NULL,
+    current_value   TEXT,
+    proposed_value  TEXT NOT NULL,
+    confidence      REAL,
+    source_url      TEXT,
+    note            TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+    decided_by      INTEGER REFERENCES users(user_id),
+    decided_at      TEXT,
+    error           TEXT                    -- why an approval couldn't be applied
+);
+CREATE INDEX IF NOT EXISTS idx_platform_agent_proposals_run ON platform_agent_proposals(run_id);
+CREATE INDEX IF NOT EXISTS idx_platform_agent_proposals_status ON platform_agent_proposals(status);

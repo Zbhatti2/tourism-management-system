@@ -1,0 +1,183 @@
+"""
+TMS Agents screens (SystemAdmin) -- logic in platform_agents.py.
+
+* /platform/agents/            Start a run of one of the platform agents
+                               (Geography, Distances & Drive Times, POI
+                               Enrichment) and see recent runs.
+* /platform/agents/run/<id>    A run's progress, cost and the values it proposes.
+* /platform/agents/review      Every proposal still waiting, across runs.
+* POST .../decide              Approve (write to the catalog) or reject proposals.
+"""
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+
+import platform_agents as pa
+from auth.decorators import system_admin_required
+from db import get_db, log_action
+
+platform_agents_bp = Blueprint("platform_agents", __name__)
+
+
+def _int(v):
+    try:
+        return int(v) if v not in (None, "") else None
+    except ValueError:
+        return None
+
+
+@platform_agents_bp.route("/")
+@system_admin_required
+def index():
+    db = get_db()
+    pa.mark_stale(db)
+    runs = db.execute("""SELECT r.*, (SELECT COUNT(*) FROM platform_agent_proposals p WHERE p.run_id = r.run_id
+                                      AND p.status = 'pending') AS waiting
+                         FROM platform_agent_runs r ORDER BY r.run_id DESC LIMIT 20""").fetchall()
+    countries = db.execute("""SELECT DISTINCT co.country_id, co.label FROM countries co JOIN states s ON s.country_id = co.country_id
+                              JOIN cities ci ON ci.state_id = s.state_id ORDER BY co.label""").fetchall()
+    states = db.execute("""SELECT s.state_id, s.label, co.label AS country FROM states s JOIN countries co ON co.country_id = s.country_id
+                           WHERE EXISTS (SELECT 1 FROM cities ci WHERE ci.state_id = s.state_id) ORDER BY co.label, s.label""").fetchall()
+    cities = db.execute("""SELECT ci.city_id, ci.label, s.label AS state, co.label AS country FROM cities ci
+                           JOIN states s ON s.state_id = ci.state_id JOIN countries co ON co.country_id = s.country_id
+                           WHERE ci.is_active = 1 ORDER BY co.label = 'Pakistan' DESC, co.label, ci.label""").fetchall()
+    poi_cities = db.execute("""SELECT DISTINCT ci.city_id, ci.label FROM platform_pois p JOIN cities ci ON ci.city_id = p.city_id
+                               ORDER BY ci.label""").fetchall()
+    poi_types = db.execute("""SELECT DISTINCT pt.poi_type_id, pt.label FROM platform_pois p JOIN poi_types pt ON pt.poi_type_id = p.poi_type_id
+                              ORDER BY pt.label""").fetchall()
+    gaps = {
+        "geography": db.execute("SELECT COUNT(*) FROM cities WHERE is_active = 1 AND (latitude IS NULL OR longitude IS NULL "
+                                "OR timezone IS NULL OR altitude_m IS NULL)").fetchone()[0],
+        "distances": db.execute("SELECT COUNT(*) FROM city_distances WHERE road_km IS NULL OR drive_minutes IS NULL "
+                                "OR route_name IS NULL OR rail_available IS NULL").fetchone()[0],
+        "pois": db.execute("SELECT COUNT(*) FROM platform_pois WHERE is_active = 1 AND (" +
+                           " OR ".join(f"{f} IS NULL OR {f} = ''" for f in pa.FIELDS["platform_pois"]) + ")").fetchone()[0],
+    }
+    return render_template("platform_agents/index.html", agents=pa.AGENTS, runs=runs, countries=countries, states=states,
+                           cities=cities, poi_cities=poi_cities, poi_types=poi_types, gaps=gaps,
+                           pending=pa.pending_count(db))
+
+
+@platform_agents_bp.route("/start/<agent_key>", methods=["POST"])
+@system_admin_required
+def start(agent_key):
+    if agent_key not in pa.AGENTS:
+        abort(404)
+    db = get_db()
+    f = request.form
+    params = {"limit": _int(f.get("limit")) or pa.AGENTS[agent_key]["max"], "only_missing": bool(f.get("only_missing"))}
+    parts = []
+    if agent_key == "geography":
+        params.update(country_id=_int(f.get("country_id")), state_id=_int(f.get("state_id")))
+        for key, table, pk in (("state_id", "states", "state_id"), ("country_id", "countries", "country_id")):
+            if params[key]:
+                r = db.execute(f"SELECT label FROM {table} WHERE {pk} = ?", (params[key],)).fetchone()
+                parts.append(r[0] if r else "")
+                break
+        label = "Cities" + (f" in {parts[0]}" if parts else "")
+    elif agent_key == "distances":
+        if f.get("mode") == "gaps":
+            params.update(from_city_id=None, to_city_ids=[])
+            label = "Gaps in existing distances"
+        else:
+            params.update(from_city_id=_int(f.get("from_city_id")),
+                          to_city_ids=[int(x) for x in f.getlist("to_city_ids") if x.isdigit()])
+            if not params["from_city_id"] or not params["to_city_ids"]:
+                flash("Choose a starting city and at least one destination.", "error")
+                return redirect(url_for("platform_agents.index"))
+            r = db.execute("SELECT label FROM cities WHERE city_id = ?", (params["from_city_id"],)).fetchone()
+            label = f"From {r[0] if r else '?'}"
+    else:
+        params.update(country_id=_int(f.get("country_id")), city_id=_int(f.get("city_id")),
+                      poi_type_id=_int(f.get("poi_type_id")))
+        if params["city_id"]:
+            r = db.execute("SELECT label FROM cities WHERE city_id = ?", (params["city_id"],)).fetchone()
+            parts.append(f"in {r[0]}" if r else "")
+        if params["poi_type_id"]:
+            r = db.execute("SELECT label FROM poi_types WHERE poi_type_id = ?", (params["poi_type_id"],)).fetchone()
+            parts.insert(0, r[0] if r else "")
+        label = " ".join(["POIs"] + [p for p in parts if p])
+    try:
+        run_id = pa.start_run(db, agent_key, params, g.user_id, label)
+    except pa.AgentError as e:
+        flash(str(e), "error")
+        return redirect(url_for("platform_agents.index"))
+    log_action("TMSAgent", "platform_agent_runs", run_id, f"Started TMS Agent {pa.AGENTS[agent_key]['label']}: {label}")
+    return redirect(url_for("platform_agents.run_page", run_id=run_id))
+
+
+def _grouped(rows):
+    groups = {}
+    for p in rows:
+        groups.setdefault((p["entity"], p["record_key"]), {"label": p["record_label"], "entity": p["entity"],
+                                                            "items": []})["items"].append(p)
+    return list(groups.values())
+
+
+@platform_agents_bp.route("/run/<int:run_id>")
+@system_admin_required
+def run_page(run_id):
+    db = get_db()
+    pa.mark_stale(db)
+    run = db.execute("SELECT * FROM platform_agent_runs WHERE run_id = ?", (run_id,)).fetchone()
+    if run is None:
+        abort(404)
+    show = request.args.get("show", "pending")
+    sql = "SELECT * FROM platform_agent_proposals WHERE run_id = ?"
+    if show in pa.PROPOSAL_STATUSES:
+        sql += f" AND status = '{show}'"
+    rows = db.execute(sql + " ORDER BY record_label, proposal_id", (run_id,)).fetchall()
+    counts = dict(db.execute("SELECT status, COUNT(*) FROM platform_agent_proposals WHERE run_id = ? GROUP BY status",
+                             (run_id,)).fetchall())
+    cost, calls, searches = pa.run_cost(db, run_id)
+    return render_template("platform_agents/run.html", run=run, agent=pa.AGENTS[run["agent_key"]], groups=_grouped(rows),
+                           counts=counts, show=show, cost=cost, calls=calls, searches=searches, fields=pa.FIELDS,
+                           entity_labels=pa.ENTITY_LABELS)
+
+
+@platform_agents_bp.route("/review")
+@system_admin_required
+def review():
+    db = get_db()
+    agent_key = request.args.get("agent")
+    sql = """SELECT p.*, r.agent_key FROM platform_agent_proposals p JOIN platform_agent_runs r ON r.run_id = p.run_id
+             WHERE p.status = 'pending'"""
+    args = []
+    if agent_key in pa.AGENTS:
+        sql += " AND r.agent_key = ?"
+        args.append(agent_key)
+    rows = db.execute(sql + " ORDER BY p.entity, p.record_label, p.proposal_id LIMIT 600", args).fetchall()
+    return render_template("platform_agents/review.html", groups=_grouped(rows), agents=pa.AGENTS, agent_key=agent_key,
+                           fields=pa.FIELDS, entity_labels=pa.ENTITY_LABELS, total=pa.pending_count(db))
+
+
+@platform_agents_bp.route("/decide", methods=["POST"])
+@system_admin_required
+def decide():
+    db = get_db()
+    action = request.form.get("action")
+    back = request.form.get("next") or url_for("platform_agents.review")
+    if not back.startswith("/") or back.startswith("//"):
+        back = url_for("platform_agents.review")
+    if action == "approve_confident":
+        ids = [int(x) for x in request.form.getlist("all_ids") if x.isdigit()]
+        ids = [r[0] for r in db.execute(
+            f"SELECT proposal_id FROM platform_agent_proposals WHERE status = 'pending' AND COALESCE(confidence, 0) >= 0.8 "
+            f"AND proposal_id IN ({','.join('?' * len(ids)) or 'NULL'})", ids)]
+        approve = True
+    else:
+        ids = [int(x) for x in request.form.getlist("ids") if x.isdigit()]
+        approve = action == "approve"
+    if not ids:
+        flash("Tick the values to approve or reject first." if action != "approve_confident"
+              else "No values here have a confidence of 0.8 or more.", "error")
+        return redirect(back)
+    applied, rejected, errors = pa.decide(db, ids, approve, g.user_id)
+    for e in errors[:8]:
+        flash(f"Not applied: {e}", "error")
+    if applied:
+        log_action("TMSAgentApprove", "platform_agent_proposals", None, f"Approved {applied} TMS Agent value(s)")
+        flash(f"Approved and saved {applied} value{'s' if applied != 1 else ''}. Points of Interest changes are synced to tenants.", "success")
+    if rejected:
+        log_action("TMSAgentReject", "platform_agent_proposals", None, f"Rejected {rejected} TMS Agent value(s)")
+        flash(f"Rejected {rejected} value{'s' if rejected != 1 else ''}.", "success")
+    return redirect(back)
+

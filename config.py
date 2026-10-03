@@ -100,6 +100,9 @@ class Config:
     # The AI Image Collector (image_collector.py) reviews and captions photos
     # with this cheaper vision model; the web search step uses ANTHROPIC_MODEL.
     ANTHROPIC_VISION_MODEL = os.environ.get("ANTHROPIC_VISION_MODEL", "claude-haiku-4-5")
+    # Key for the platform-level TMS Agents (platform_agents.py), so their cost
+    # is billed separately from tenants' agents. Unset = use ANTHROPIC_API_KEY.
+    PLATFORM_ANTHROPIC_API_KEY = os.environ.get("PLATFORM_ANTHROPIC_API_KEY")
 
     # Whether the session cookie requires HTTPS. Must stay False for local
     # use (Start_TMS.bat serves plain http://127.0.0.1, where a Secure cookie

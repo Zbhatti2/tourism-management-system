@@ -112,6 +112,9 @@ MODULES = [
     # Pushes the catalogs into each tenant's own POIs / Suppliers (catalog_sync.py).
     {"key": "catalog_sync", "label": "Catalog Sync", "icon": "arrow-repeat", "endpoint": "catalog_sync.index",
      "roles": ["SystemAdmin"]},
+    # Platform-level research agents with a review queue (platform_agents.py).
+    {"key": "platform_agents", "label": "TMS Agents", "icon": "robot", "endpoint": "platform_agents.index",
+     "roles": ["SystemAdmin"]},
     # AI spend per tenant and monthly allowances (ai_usage.py).
     {"key": "platform_ai_usage", "label": "AI Usage", "icon": "cpu", "endpoint": "platform_ai_usage.platform_usage",
      "roles": ["SystemAdmin"]},
@@ -178,6 +181,7 @@ def create_app():
     from blueprints.catalog_sync import catalog_sync_bp, catalog_updates_bp
     from blueprints.images import images_bp
     from blueprints.ai_usage_admin import ai_usage_bp, platform_ai_usage_bp
+    from blueprints.platform_agents import platform_agents_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -219,6 +223,7 @@ def create_app():
     app.register_blueprint(images_bp, url_prefix="/images")
     app.register_blueprint(ai_usage_bp, url_prefix="/ai-usage")
     app.register_blueprint(platform_ai_usage_bp, url_prefix="/platform/ai-usage")
+    app.register_blueprint(platform_agents_bp, url_prefix="/platform/agents")
 
     app.jinja_env.globals["modules"] = MODULES
 
