@@ -1,0 +1,93 @@
+{# Live timer, progress bar, last activity and Stop for an agent run (agent_runs.py).
+   Needs: run (status, created_at, started_at, finished_at, heartbeat_at, items_total, items_done),
+          status_url, stop_url, unit (plural noun, e.g. 'POIs'). The page's progress <pre> may have id="run-progress-text". #}
+{% set working = run.status in ('queued', 'running') %}
+<div class="card shadow-sm border-0 mb-3" id="run-live"
+     data-status-url="{{ status_url }}" data-status="{{ run.status }}"
+     data-started="{{ run.started_at or run.created_at }}" data-finished="{{ run.finished_at or '' }}"
+     data-heartbeat="{{ run.heartbeat_at or run.started_at or run.created_at }}" data-now="{{ now_utc }}"
+     data-total="{{ run.items_total or 0 }}" data-done="{{ run.items_done or 0 }}" data-unit="{{ unit }}">
+  <div class="card-body py-2">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small">
+      <span><i class="bi bi-stopwatch"></i> <span class="text-muted">{{ 'Running for' if working else 'Took' }}</span> <strong id="rl-elapsed" class="font-monospace">—</strong></span>
+      <span id="rl-count" class="text-muted"></span>
+      <span id="rl-beat" class="text-muted"></span>
+      {% if working %}
+      <details class="position-relative">
+        <summary class="btn btn-sm btn-outline-danger list-unstyled py-0"><i class="bi bi-stop-circle"></i> Stop</summary>
+        <div class="card shadow position-absolute end-0 mt-1 p-2 small" style="width: 260px; z-index: 10;">
+          <p class="mb-2">Stop this run? Anything it has already found is kept.</p>
+          <form method="post" action="{{ stop_url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-danger" type="submit">Stop the run</button>
+          </form>
+        </div>
+      </details>
+      {% endif %}
+    </div>
+    <div class="progress mt-2" style="height: 10px;" role="progressbar" aria-label="Run progress">
+      <div id="rl-bar" class="progress-bar {{ 'progress-bar-striped progress-bar-animated' if working else ('bg-success' if run.status == 'done' else 'bg-danger') }}" style="width: 0%;"></div>
+    </div>
+    <div id="rl-warn" class="small text-warning-emphasis mt-1 d-none"></div>
+  </div>
+</div>
+<script>
+(function () {
+  var box = document.getElementById('run-live');
+  if (!box) return;
+  function t(s) { return s ? new Date(s.replace(' ', 'T') + 'Z').getTime() : null; }
+  var d = box.dataset, offset = Date.now() - t(d.now), state = {
+    status: d.status, started: t(d.started), finished: t(d.finished), heartbeat: t(d.heartbeat),
+    total: +d.total, done: +d.done };
+  var working = function () { return state.status === 'queued' || state.status === 'running'; };
+  function fmt(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  }
+  function ago(ms) { var s = Math.floor(ms / 1000); return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min'; }
+  function draw() {
+    var now = Date.now() - offset;
+    document.getElementById('rl-elapsed').textContent = fmt((state.finished || now) - state.started);
+    var pct = 0, count = '';
+    if (state.total) {
+      if (working()) {
+        pct = Math.min(99, Math.round(100 * (state.done + 0.5) / state.total));
+        count = 'Working on ' + Math.min(state.done + 1, state.total) + ' of ' + state.total + ' ' + d.unit;
+      } else {
+        pct = state.status === 'done' ? 100 : Math.round(100 * state.done / state.total);
+        count = (state.status === 'done' ? state.total : state.done) + ' of ' + state.total + ' ' + d.unit + ' done';
+      }
+    } else if (!working()) { pct = 100; }
+    var bar = document.getElementById('rl-bar'); bar.style.width = pct + '%';
+    document.getElementById('rl-count').textContent = count;
+    var beat = document.getElementById('rl-beat'), warn = document.getElementById('rl-warn');
+    if (working() && state.heartbeat) {
+      var quiet = now - state.heartbeat;
+      beat.textContent = 'Last activity ' + ago(quiet) + ' ago';
+      if (quiet > 3 * 60 * 1000) {
+        warn.textContent = 'No activity for ' + ago(quiet) + '. It may be waiting on a slow web page; after 10 minutes it is stopped automatically, or you can Stop it now.';
+        warn.classList.remove('d-none');
+      } else { warn.classList.add('d-none'); }
+    } else { beat.textContent = ''; warn.classList.add('d-none'); }
+  }
+  function poll() {
+    if (!working()) return;
+    fetch(d.statusUrl, {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j) return;
+        offset = Date.now() - t(j.now);
+        state.total = j.items_total || 0; state.done = j.items_done || 0;
+        state.heartbeat = t(j.heartbeat_at || j.started_at || j.created_at);
+        state.started = t(j.started_at || j.created_at);
+        var pre = document.getElementById('run-progress-text');
+        if (pre && j.progress) pre.textContent = j.progress;
+        if (j.status !== 'queued' && j.status !== 'running') { location.reload(); return; }
+        state.status = j.status;
+      }).catch(function () {});
+  }
+  draw();
+  setInterval(draw, 1000);
+  if (working()) setInterval(poll, 4000);
+})();
+</script>

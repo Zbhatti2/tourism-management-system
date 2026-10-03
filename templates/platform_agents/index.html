@@ -101,7 +101,7 @@
         {% for r in runs %}
         <tr>
           <td>{{ r.created_at[:16] }}</td><td>{{ agents[r.agent_key].label }}</td><td>{{ r.scope_label }}</td>
-          <td>{% if r.status in ('queued', 'running') %}<span class="badge bg-primary-subtle text-primary">Working</span>{% elif r.status == 'done' %}<span class="badge bg-success-subtle text-success">Finished</span>{% else %}<span class="badge bg-danger-subtle text-danger">Failed</span>{% endif %}</td>
+          <td>{% if r.status in ('queued', 'running') %}<span class="badge bg-primary-subtle text-primary">Working{% if r.items_total %} {{ r.items_done }}/{{ r.items_total }}{% endif %}</span>{% elif r.status == 'done' %}<span class="badge bg-success-subtle text-success">Finished</span>{% else %}<span class="badge bg-danger-subtle text-danger">Failed</span>{% endif %}</td>
           <td class="text-end">{{ r.proposals }}</td><td class="text-end">{% if r.waiting %}<strong>{{ r.waiting }}</strong>{% else %}0{% endif %}</td>
           <td class="text-end"><a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('platform_agents.run_page', run_id=r.run_id) }}">Open</a></td>
         </tr>

@@ -25,6 +25,7 @@ import threading
 import traceback
 from datetime import date
 
+import agent_runs
 import ai_usage
 
 PROPOSAL_STATUSES = ("pending", "approved", "rejected")
@@ -144,7 +145,8 @@ def anthropic_client():
         import anthropic
     except ImportError as e:
         raise AgentError("The 'anthropic' package isn't installed on the server.") from e
-    return anthropic.Anthropic(api_key=key)
+    return anthropic.Anthropic(api_key=key, timeout=agent_runs.API_TIMEOUT_SECONDS,
+                               max_retries=agent_runs.API_MAX_RETRIES)
 
 
 def model():
@@ -290,8 +292,8 @@ def start_run(db, agent_key, params, user_id, label, background=True):
     found = targets(db, agent_key, params)
     if not found:
         raise AgentError("Nothing to research for that choice: everything is already filled in, or nothing matches.")
-    cur = db.execute("INSERT INTO platform_agent_runs (agent_key, scope_label, params, created_by) VALUES (?, ?, ?, ?)",
-                     (agent_key, f"{label} ({len(found)})", json.dumps(params), user_id))
+    cur = db.execute("INSERT INTO platform_agent_runs (agent_key, scope_label, params, created_by, items_total) "
+                     "VALUES (?, ?, ?, ?, ?)", (agent_key, f"{label} ({len(found)})", json.dumps(params), user_id, len(found)))
     db.commit()
     run_id = cur.lastrowid
     if background:
@@ -326,14 +328,16 @@ def run(db, run_id):
 
     def log(text):
         lines.append(text)
-        db.execute("UPDATE platform_agent_runs SET progress = ? WHERE run_id = ?", ("\n".join(lines)[-8000:], run_id))
+        db.execute("UPDATE platform_agent_runs SET progress = ?, heartbeat_at = datetime('now') WHERE run_id = ?",
+                   ("\n".join(lines)[-8000:], run_id))
         db.commit()
 
     def meter(usage):
         ai_usage.record(db, None, f"TMS Agent: {AGENTS[agent_key]['label']}", model(), usage,
                         user_id=r["created_by"], ref_type="platform_agent_runs", ref_id=run_id, note=r["scope_label"])
 
-    db.execute("UPDATE platform_agent_runs SET status = 'running', started_at = datetime('now') WHERE run_id = ?", (run_id,))
+    db.execute("UPDATE platform_agent_runs SET status = 'running', started_at = datetime('now'), heartbeat_at = datetime('now') "
+               "WHERE run_id = ? AND status = 'queued'", (run_id,))
     db.commit()
     total = 0
     try:
@@ -341,7 +345,13 @@ def run(db, run_id):
         found = targets(db, agent_key, json.loads(r["params"] or "{}"))
         by_key = {t["key"]: t for t in found}
         size = AGENTS[agent_key]["batch"]
+        db.execute("UPDATE platform_agent_runs SET items_total = ? WHERE run_id = ?", (len(found), run_id))
         for i in range(0, len(found), size):
+            db.execute("UPDATE platform_agent_runs SET items_done = ?, heartbeat_at = datetime('now') WHERE run_id = ?",
+                       (i, run_id))
+            db.commit()
+            if agent_runs.cancelled(db, "platform_agent_runs", run_id):
+                return
             batch = found[i:i + size]
             log(f"Batch {i // size + 1}: " + "; ".join(t["label"] for t in batch))
             try:
@@ -372,21 +382,24 @@ def run(db, run_id):
             db.execute("UPDATE platform_agent_runs SET proposals = ? WHERE run_id = ?", (total, run_id))
             db.commit()
             log(f"   {n} value(s) proposed")
+        if agent_runs.cancelled(db, "platform_agent_runs", run_id):
+            return
         log(f"Done: {total} value(s) to review." if total else "Done: nothing new was found.")
-        db.execute("UPDATE platform_agent_runs SET status = 'done', finished_at = datetime('now') WHERE run_id = ?", (run_id,))
+        db.execute("UPDATE platform_agent_runs SET status = 'done', items_done = items_total, finished_at = datetime('now') "
+                   "WHERE run_id = ? AND status = 'running'", (run_id,))
         db.commit()
     except Exception as e:
         msg = explain_api_error(e) or str(e) or traceback.format_exc()[-800:]
         log(f"Stopped: {msg}")
-        db.execute("UPDATE platform_agent_runs SET status = 'failed', error = ?, finished_at = datetime('now') WHERE run_id = ?",
-                   (msg[:1000], run_id))
+        db.execute("UPDATE platform_agent_runs SET status = 'failed', error = ?, finished_at = datetime('now') "
+                   "WHERE run_id = ? AND status = 'running'", (msg[:1000], run_id))
         db.commit()
 
 
 def mark_stale(db):
-    db.execute("UPDATE platform_agent_runs SET status = 'failed', error = 'Stopped (the server restarted).', "
-               "finished_at = datetime('now') WHERE status IN ('queued','running') AND created_at < datetime('now', '-45 minutes')")
-    db.commit()
+    """Runs that stopped responding (a hung request, or a server restart)
+    are marked failed -- see agent_runs.py."""
+    agent_runs.mark_stale(db, "platform_agent_runs")
 
 
 def run_cost(db, run_id):

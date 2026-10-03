@@ -84,5 +84,9 @@ The photos arrive as an upload to curate, with Source *AI Agent*. Each
 shows the page it was found on. **Check you may use a photo before you
 publish it.**
 
-The run's page shows progress and what the run cost. Runs are charged to
+The run's page shows a timer, a progress bar (how many hotels or
+restaurants are done), when it last did something, and what the run
+cost. **Stop** ends a run; photos it already found are kept. A run that
+does nothing for 10 minutes (for example, waiting on a web page that
+never finishes) is stopped automatically. Runs are charged to
 your organisation's AI Usage.

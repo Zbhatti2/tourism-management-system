@@ -8,8 +8,9 @@ TMS Agents screens (SystemAdmin) -- logic in platform_agents.py.
 * /platform/agents/review      Every proposal still waiting, across runs.
 * POST .../decide              Approve (write to the catalog) or reject proposals.
 """
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
+import agent_runs
 import platform_agents as pa
 from auth.decorators import system_admin_required
 from db import get_db, log_action
@@ -112,6 +113,27 @@ def _grouped(rows):
     return list(groups.values())
 
 
+@platform_agents_bp.route("/run/<int:run_id>/status.json")
+@system_admin_required
+def run_status(run_id):
+    db = get_db()
+    pa.mark_stale(db)
+    st = agent_runs.status_json(db, "platform_agent_runs", run_id, extra_cols=("proposals",))
+    if st is None:
+        abort(404)
+    return jsonify(st)
+
+
+@platform_agents_bp.route("/run/<int:run_id>/stop", methods=["POST"])
+@system_admin_required
+def stop_run(run_id):
+    db = get_db()
+    if agent_runs.stop(db, "platform_agent_runs", run_id, g.get("display_name") or g.get("username")):
+        log_action("PlatformAgent", "platform_agent_runs", run_id, "Stopped a TMS Agent run")
+        flash("Run stopped. Values it already found are kept for review.", "success")
+    return redirect(url_for("platform_agents.run_page", run_id=run_id))
+
+
 @platform_agents_bp.route("/run/<int:run_id>")
 @system_admin_required
 def run_page(run_id):
@@ -130,7 +152,13 @@ def run_page(run_id):
     cost, calls, searches = pa.run_cost(db, run_id)
     return render_template("platform_agents/run.html", run=run, agent=pa.AGENTS[run["agent_key"]], groups=_grouped(rows),
                            counts=counts, show=show, cost=cost, calls=calls, searches=searches, fields=pa.FIELDS,
-                           entity_labels=pa.ENTITY_LABELS)
+                           entity_labels=pa.ENTITY_LABELS, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
+                           status_url=url_for("platform_agents.run_status", run_id=run_id),
+                           stop_url=url_for("platform_agents.stop_run", run_id=run_id),
+                           unit=RUN_UNITS.get(run["agent_key"], "records"))
+
+
+RUN_UNITS = {"geography": "cities", "distances": "city pairs", "pois": "POIs"}
 
 
 @platform_agents_bp.route("/review")
