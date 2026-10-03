@@ -5,6 +5,7 @@
                 'waiting': ('bg-light text-muted border', 'Waiting'), 'failed': ('bg-danger-subtle text-danger', 'Failed'),
                 'later': ('bg-light text-muted border', 'Later phase')} %}
 {% macro run_card(label, what) %}
+{% if st.broken %}<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> The agent's last report for this stage came back empty or cut off, so there is nothing to review. Run the agent again.</div>{% endif %}
 <div class="card shadow-sm border-0 mb-3"><div class="card-body">
   <h2 class="h6">{{ label }}</h2>
   <p class="small text-muted mb-2">{{ what }} Runs are charged to your organisation's AI usage{% if allowance.limit is not none %} (this month ${{ '%.2f'|format(allowance.spent) }} of ${{ '%.2f'|format(allowance.limit) }}){% endif %}.</p>
@@ -304,7 +305,7 @@
         {% set c = st.data %}
         {% if c.summary %}<p class="mb-2">{{ c.summary }}</p>{% endif %}
         <p class="mb-3">{% if c.fits %}<span class="badge bg-success-subtle text-success">Fits {{ brief.tour_days }} days</span>{% else %}<span class="badge bg-danger-subtle text-danger">Doesn't fit {{ brief.tour_days }} days — see flags</span>{% endif %}
-          <span class="small text-muted ms-1">{{ c.days|length }} days planned · {{ c.checkpoints|sum(attribute='nights') }} nights</span></p>
+          <span class="small text-muted ms-1">{{ c.days|length }} days planned · {{ c.checkpoints|map(attribute='nights')|map('int')|sum }} nights</span></p>
         {{ flags_list(c.flags) }}
         {{ criteria_summary() }}
         <form method="post" action="{{ url_for('tour_planner.edit_stage', plan_id=plan.plan_id, key='checkpoints') }}">
