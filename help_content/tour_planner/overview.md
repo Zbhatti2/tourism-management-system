@@ -28,10 +28,19 @@ Each stage shows its status on the left: *Ready*, *Working…*, *To review*,
 2. **Route and POIs**: the main route city by city, with distances and drive
    times, the attractions on and near it, and the detours they need. TMS's
    own distances are used wherever they exist; anything from the web shows
-   its source. Untick the points of interest you don't want to plan for.
+   its source. The cumulative km and drive time from the start are shown
+   beside each leg. Cities TMS flags as overnight checkpoints are marked.
+   Untick the points of interest you don't want to plan for.
 3. **Checkpoints**: the overnight cities, nights in each, and the day budget
    against your maximum driving per day. A day over the limit is
    highlighted. If the plan doesn't fit the tour length, it says so.
+   Before running, set the **Checkpoint criteria**: the most (and least) km
+   between checkpoints, hotel/stay requirements, food and meals, points of
+   interest, and anything else. The agent says how each stop meets them and
+   lists the other cities it considered. It may pick a city TMS doesn't flag
+   as a checkpoint; when you approve the stage, those cities are suggested
+   to the platform (TMS Agents review queue) to be flagged. Saving new
+   criteria clears the checkpoints so the agent can choose again.
 4. **Journey grid**: worked out from the route and checkpoints, with the drive
    times between every pair of checkpoints and city by city along the
    route.

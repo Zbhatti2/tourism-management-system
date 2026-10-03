@@ -119,7 +119,8 @@ def workspace(plan_id):
         run=run, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
         status_url=url_for("tour_planner.run_status", plan_id=plan_id, run_id=run["run_id"]) if run else None,
         stop_url=url_for("tour_planner.run_stop", plan_id=plan_id, run_id=run["run_id"]) if run else None,
-        unit="step", allowance=_allowance(db),
+        unit="step", allowance=_allowance(db), criteria=tp.criteria_of(brief),
+        journey=tp.journey_grid(smap["route"]["data"], None) if key in ("route", "checkpoints") and smap["route"]["data"] else None,
         budget=tp.lodging_budget(brief, smap["lodging"]["data"]) if key == "lodging" and smap["lodging"]["data"] else None)
 
 
@@ -282,6 +283,30 @@ def edit_stage(plan_id, key):
     return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=key))
 
 
+@tour_planner_bp.route("/<int:plan_id>/criteria", methods=["POST"])
+@login_required
+def save_criteria(plan_id):
+    _tenant()
+    db = get_db()
+    _plan(db, plan_id)
+    f = request.form
+
+    def num(name):
+        try:
+            v = float(f.get(name) or "")
+            return int(v) if v.is_integer() else v
+        except ValueError:
+            return None
+    criteria = {"max_km": num("max_km"), "min_km": num("min_km"),
+                "hotel": (f.get("hotel") or "").strip()[:1000], "food": (f.get("food") or "").strip()[:1000],
+                "pois": (f.get("pois") or "").strip()[:1000], "other": (f.get("other") or "").strip()[:1000],
+                "prefer_flagged": bool(f.get("prefer_flagged"))}
+    tp.save_criteria(db, plan_id, criteria)
+    log_action("Update", "tour_plans", plan_id, "Set Tour Planner checkpoint criteria")
+    flash("Checkpoint criteria saved. Run the agent to choose checkpoints with them.", "success")
+    return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="checkpoints"))
+
+
 @tour_planner_bp.route("/<int:plan_id>/stage/<key>/approve", methods=["POST"])
 @login_required
 def approve_stage(plan_id, key):
@@ -292,7 +317,18 @@ def approve_stage(plan_id, key):
     if key not in smap or smap[key]["data"] is None or not tp.previous_approved(smap, key):
         flash("Nothing to approve yet.", "error")
         return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=key))
+    proposed = 0
+    if key == "checkpoints":
+        plan = _plan(db, plan_id)
+        data = smap[key]["data"]
+        proposed = tp.propose_checkpoint_flags(db, plan["name"], data)
+        if proposed:  # remember what was sent, without redoing later stages
+            db.execute("UPDATE tour_plan_stages SET result = ? WHERE plan_id = ? AND stage_key = 'checkpoints'",
+                       (json.dumps(data, ensure_ascii=False), plan_id))
     tp.approve(db, plan_id, key, g.user_id)
+    if proposed:
+        flash(f"{proposed} new checkpoint cit{'y' if proposed == 1 else 'ies'} suggested to TMS for flagging "
+              "as overnight checkpoints.", "info")
     log_action("Update", "tour_plans", plan_id, f"Approved Tour Planner stage: {tp.STAGE[key]['label']}")
     nxt = next((k for k in tp.STAGE_KEYS[tp.STAGE_KEYS.index(key) + 1:] if tp.STAGE[k]["phase"] in tp.BUILT_PHASES), None)
     flash(f"{tp.STAGE[key]['label']} approved." + (f" Next: {tp.STAGE[nxt]['label'].lower()}." if nxt else ""), "success")

@@ -85,7 +85,8 @@ FIELDS = {
                       "website": ("Website", "url"), "phone": ("Phone", "text"), "address": ("Address / landmark", "text"),
                       "latitude": ("Latitude", "lat"), "longitude": ("Longitude", "lon")},
 }
-ENTITY_LABELS = {"cities": "City", "city_distances": "Distance", "platform_pois": "Point of Interest"}
+FIELDS["city_flags"] = {"is_checkpoint": ("Overnight checkpoint", "yesno")}
+ENTITY_LABELS = {"city_flags": "City (overnight checkpoint)", "cities": "City", "city_distances": "Distance", "platform_pois": "Point of Interest"}
 
 AGENTS = {
     "geography": {"label": "Geography", "icon": "globe-americas", "entity": "cities", "batch": 10, "max": 40,
@@ -468,6 +469,9 @@ def decide(db, proposal_ids, approve, user_id):
                                  (value, int(p["record_key"])))
                 if not cur.rowcount:
                     raise AgentError("the POI no longer exists")
+            elif p["entity"] == "city_flags":
+                db.execute("UPDATE cities SET is_checkpoint = ? WHERE city_id = ?",
+                           (1 if value == "Yes" else 0, int(p["record_key"])))
             elif p["entity"] == "cities":
                 db.execute(f"UPDATE cities SET {p['field']} = ? WHERE city_id = ?", (value, int(p["record_key"])))
             elif p["entity"] == "platform_pois":

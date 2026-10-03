@@ -112,8 +112,18 @@ DEFAULT_BRIEF = {
     "route_note": "", "return_mode": "overland", "fly_home": True, "tour_days": 10, "weather_days": 0,
     "max_drive_hours": 8, "parties": [], "guides": 2, "guide_seating": "one_per_minibus",
     "vehicle_type": "Minibus", "vehicle_seats": 14, "drivers_included": True, "currency": "USD",
-    "interests": "", "notes": "",
+    "interests": "", "notes": "", "checkpoint_criteria": {},
 }
+
+# What makes a city a good overnight checkpoint (set on the Checkpoints stage).
+DEFAULT_CRITERIA = {"max_km": None, "min_km": None, "hotel": "", "food": "", "pois": "", "prefer_flagged": True,
+                    "other": ""}
+
+
+def criteria_of(brief):
+    c = dict(DEFAULT_CRITERIA)
+    c.update(brief.get("checkpoint_criteria") or {})
+    return c
 RETURN_MODES = {"overland": "Overland, the same way back", "fly": "Fly back from the destination",
                 "one_way": "One way (tour ends at the destination)"}
 GUIDE_SEATING = {"one_per_minibus": "One guide in each minibus", "suv": "Guides in a separate SUV",
@@ -306,7 +316,8 @@ def _city_row(db, city_id):
 def tool_find_cities(db, tenant_id, args):
     from fuzzy import compare, split_alt_names
     out = []
-    rows = db.execute("""SELECT ci.city_id, ci.label, ci.alt_names, ci.latitude, ci.longitude, s.label AS state, co.label AS country
+    rows = db.execute("""SELECT ci.city_id, ci.label, ci.alt_names, ci.latitude, ci.longitude, ci.is_checkpoint,
+                                s.label AS state, co.label AS country
                          FROM cities ci JOIN states s ON s.state_id = ci.state_id JOIN countries co ON co.country_id = s.country_id
                          WHERE ci.is_active = 1""").fetchall()
     for name in (args.get("names") or [])[:30]:
@@ -318,7 +329,8 @@ def tool_find_cities(db, tenant_id, args):
         hits.sort(key=lambda x: x[0])
         out.append({"name": name, "matches": [
             {"city_id": r["city_id"], "city": r["label"], "province": r["state"], "country": r["country"],
-             "lat": r["latitude"], "lon": r["longitude"]} for _, r in hits[:3]]})
+             "lat": r["latitude"], "lon": r["longitude"], "tms_overnight_checkpoint": bool(r["is_checkpoint"])}
+            for _, r in hits[:3]]})
     return out
 
 
@@ -411,7 +423,8 @@ def tool_lodging(db, tenant_id, args):
                           (tenant_id, cid)).fetchall()
         plat = db.execute("SELECT name, star_rating, property_type FROM platform_accommodation WHERE city_id = ? AND is_active = 1",
                           (cid,)).fetchall()
-        out.append({"city_id": cid, "city": c["label"],
+        flagged = db.execute("SELECT is_checkpoint FROM cities WHERE city_id = ?", (cid,)).fetchone()
+        out.append({"city_id": cid, "city": c["label"], "tms_overnight_checkpoint": bool(flagged and flagged[0]),
                     "tenant_hotels": [f"{r['supplier_name']}{' (' + r['subtype'] + ')' if r['subtype'] else ''}" for r in mine][:15],
                     "catalog_hotels": [f"{r['name']}{' ' + str(r['star_rating']) + '*' if r['star_rating'] else ''}" for r in plat][:15],
                     "four_star_or_better": sum(1 for r in plat if (r["star_rating"] or 0) >= 4)})
@@ -687,7 +700,7 @@ ROUTE_TOOL = {"name": "report_route", "description": "The tour's route, its poin
 
 def _brief_text(brief):
     fig = group_figures(brief)
-    b = {k: v for k, v in brief.items() if k not in ("parties",) and v not in (None, "", [])}
+    b = {k: v for k, v in brief.items() if k not in ("parties", "checkpoint_criteria") and v not in (None, "", [])}
     b["group"] = fig
     b["parties"] = brief.get("parties")
     return json.dumps(b, ensure_ascii=False, indent=1)
@@ -734,6 +747,9 @@ def tidy_route(db, r):
         prev = None
         for leg in r.get(leg_list) or []:
             leg["city_id"] = cid_for(leg.get("city"), leg.get("city_id"))
+            if leg["city_id"]:
+                f = db.execute("SELECT is_checkpoint FROM cities WHERE city_id = ?", (leg["city_id"],)).fetchone()
+                leg["tms_checkpoint"] = bool(f and f[0])
             if prev and leg["city_id"] and prev.get("city_id"):
                 a, b = sorted((prev["city_id"], leg["city_id"]))
                 d = db.execute("SELECT * FROM city_distances WHERE city_a_id = ? AND city_b_id = ?", (a, b)).fetchone()
@@ -791,7 +807,12 @@ CHECKPOINT_TOOL = {"name": "report_checkpoints", "description": "Overnight check
                        "checkpoints": {"type": "array", "items": {"type": "object", "properties": {
                            "city": {"type": "string"}, "city_id": {"type": "integer"}, "nights": {"type": "integer"},
                            "why": {"type": "string"}, "lodging_note": {"type": "string"},
-                           "dining_note": {"type": "string"}, "airport": {"type": "string"}},
+                           "dining_note": {"type": "string"}, "airport": {"type": "string"},
+                           "km_from_previous_checkpoint": {"type": "number"},
+                           "criteria_check": {"type": "string",
+                                              "description": "How this stop meets each checkpoint criterion (or which it misses)"},
+                           "suggest_flag": {"type": "boolean",
+                                            "description": "Not a TMS checkpoint yet, but should be flagged as one"}},
                            "required": ["city", "nights"]}},
                        "days": {"type": "array", "items": {"type": "object", "properties": {
                            "day": {"type": "integer"}, "date": {"type": "string"}, "from": {"type": "string"},
@@ -799,8 +820,85 @@ CHECKPOINT_TOOL = {"name": "report_checkpoints", "description": "Overnight check
                            "visits": {"type": "array", "items": {"type": "string"}}, "overnight": {"type": "string"},
                            "note": {"type": "string"}}, "required": ["day", "overnight"]}},
                        "fits": {"type": "boolean", "description": "Whether the plan fits the brief's tour length"},
+                       "considered": {"type": "array", "description": "Other candidate overnight cities and why not",
+                                      "items": {"type": "object", "properties": {
+                                          "city": {"type": "string"}, "why_not": {"type": "string"}}, "required": ["city"]}},
                        "flags": {"type": "array", "items": {"type": "string"}}},
                        "required": ["checkpoints", "days", "fits", "flags"]}}
+
+
+def criteria_text(brief):
+    c = criteria_of(brief)
+    fig = group_figures(brief)
+    lines = [f"- Driving between checkpoints: at most {brief.get('max_drive_hours') or 8} hours a day"
+             + (f" and at most {c['max_km']} km" if c.get("max_km") else "")
+             + (f"; at least {c['min_km']} km between checkpoints" if c.get("min_km") else "") + ".",
+             f"- Accommodation: one hotel that takes the whole group ({fig['guest_rooms']} guest rooms: {fig['doubles']} doubles, "
+             f"{fig['singles']} singles; plus {fig['guide_rooms']} guide and {fig['driver_rooms']} driver rooms), standard "
+             f"{brief.get('standard') or 'any'}." + (f" Also: {c['hotel']}" if c.get("hotel") else ""),
+             "- Food and meals: " + (c["food"] or "a restaurant or hotel dining room that can serve the group dinner and breakfast."),
+             "- Points of interest: " + (c["pois"] or "prefer stops near the major attractions on the route, so visits fit the days."),
+             "- Prefer cities TMS already flags as overnight checkpoints." if c.get("prefer_flagged", True) else
+             "- TMS checkpoint flags don't matter; choose on the criteria alone."]
+    if c.get("other"):
+        lines.append(f"- Also: {c['other']}")
+    return "\n".join(lines)
+
+
+def save_criteria(db, plan_id, criteria):
+    """Store the checkpoint criteria; the checkpoints and everything after
+    them need redoing."""
+    plan = db.execute("SELECT brief FROM tour_plans WHERE plan_id = ?", (plan_id,)).fetchone()
+    b = dict(DEFAULT_BRIEF, **json.loads(plan["brief"] or "{}"))
+    b["checkpoint_criteria"] = criteria
+    db.execute("UPDATE tour_plans SET brief = ?, updated_at = datetime('now') WHERE plan_id = ?",
+               (json.dumps(b, ensure_ascii=False), plan_id))
+    reset_after(db, plan_id, "route")
+    db.commit()
+
+
+def mark_checkpoints(db, result):
+    """Which chosen checkpoints TMS already flags as overnight stops."""
+    from fuzzy import compare
+    cities = db.execute("SELECT city_id, label, is_checkpoint FROM cities").fetchall()
+    for cp in result.get("checkpoints") or []:
+        c = None
+        if cp.get("city_id"):
+            c = next((x for x in cities if x["city_id"] == cp["city_id"]), None)
+        if c is None:
+            c = next((x for x in cities if compare(cp.get("city") or "", x["label"]) == "same"), None)
+        cp["city_id"] = c["city_id"] if c else None
+        cp["tms_checkpoint"] = bool(c and c["is_checkpoint"])
+        if cp["tms_checkpoint"]:
+            cp["suggest_flag"] = False
+    return result
+
+
+def propose_checkpoint_flags(db, plan_name, result):
+    """Checkpoints the planner approved that TMS doesn't flag yet: proposed to
+    the platform (TMS Agents review queue) as overnight checkpoints."""
+    todo = [cp for cp in result.get("checkpoints") or []
+            if cp.get("city_id") and not cp.get("tms_checkpoint") and int(cp.get("nights") or 0) > 0
+            and not cp.get("flag_proposed")]
+    todo = [cp for cp in todo if not db.execute(
+        "SELECT 1 FROM platform_agent_proposals WHERE entity = 'city_flags' AND record_key = ? AND status = 'pending'",
+        (str(cp["city_id"]),)).fetchone()]
+    if not todo:
+        return 0
+    cur = db.execute("INSERT INTO platform_agent_runs (agent_key, scope_label, params, status, progress, started_at, finished_at, "
+                     "items_total, items_done) VALUES ('geography', ?, '{}', 'done', ?, datetime('now'), datetime('now'), 1, 1)",
+                     (f"Checkpoints from a tenant's Tour Planner: {plan_name}",
+                      "Overnight checkpoints a tenant's planner approved, for review."))
+    run_id = cur.lastrowid
+    for cp in todo:
+        db.execute("""INSERT INTO platform_agent_proposals (run_id, entity, record_key, record_label, field, current_value,
+                          proposed_value, confidence, source_url, note)
+                      VALUES (?, 'city_flags', ?, ?, 'is_checkpoint', 'No', 'Yes', 0.7, 'Tour Planner', ?)""",
+                   (run_id, str(cp["city_id"]), cp["city"],
+                    (cp.get("criteria_check") or cp.get("why") or "Chosen as an overnight stop")[:500]))
+        cp["flag_proposed"] = True
+    db.execute("UPDATE platform_agent_runs SET proposals = ? WHERE run_id = ?", (len(todo), run_id))
+    return len(todo)
 
 
 def run_checkpoints(db, tenant_id, client, brief, route, instructions, prior, meter, log):
@@ -809,6 +907,12 @@ def run_checkpoints(db, tenant_id, client, brief, route, instructions, prior, me
         "stays overnight, which need reasonable accommodation and dining for the group -- and lay out the day-by-day "
         "driving budget.\n\n"
         f"Tour Brief:\n{_brief_text(brief)}\n\nApproved route:\n{json.dumps(route, ensure_ascii=False)[:14000]}\n\n"
+        f"CHECKPOINT CRITERIA set by the planner (apply every one; say in criteria_check how each stop meets them):\n"
+        f"{criteria_text(brief)}\n\n"
+        "Cities marked tms_overnight_checkpoint are known good overnight stops; prefer them when the criteria allow. Any "
+        "city on the route may be a checkpoint, though: when one that is not flagged in TMS suits the criteria better, "
+        "recommend it and set suggest_flag = true so TMS can flag it. List the other candidate cities you weighed and "
+        "why not (considered).\n\n"
         "Rules: day 1 is the assembly date in the assembly city's morning (travel to the assembly city is not part of "
         "the tour length); the tour length is the brief's tour_days; keep each day's driving under the brief's "
         "max_drive_hours, and add the time of the visits on that day; include the major POIs where they fit; plan the "
@@ -821,8 +925,9 @@ def run_checkpoints(db, tenant_id, client, brief, route, instructions, prior, me
            f"Previous answer:\n{json.dumps(prior, ensure_ascii=False)[:12000]}\n" if instructions and prior else "")
         + "\nCall report_checkpoints when done.")
     log("Choosing checkpoints and the day budget…")
-    return agent_loop(db, tenant_id, client, prompt, ["find_cities", "get_distances", "lodging_at", "find_hubs"],
-                      CHECKPOINT_TOOL, meter, log, web_searches=3)
+    report = agent_loop(db, tenant_id, client, prompt, ["find_cities", "get_distances", "lodging_at", "find_hubs", "find_pois"],
+                        CHECKPOINT_TOOL, meter, log, web_searches=3)
+    return mark_checkpoints(db, report)
 
 
 # ---- stage: hotels and dining -------------------------------------------------------------------------------------

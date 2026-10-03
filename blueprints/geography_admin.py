@@ -181,6 +181,7 @@ def _row_values(form, cfg):
         values["latitude"] = round(parsed[0], 6) if parsed else None
         values["longitude"] = round(parsed[1], 6) if parsed else None
         values["timezone"] = form.get("timezone", "").strip() or None
+        values["is_checkpoint"] = 1 if form.get("is_checkpoint") else 0
     return label, values
 
 
