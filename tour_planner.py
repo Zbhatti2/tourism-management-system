@@ -50,7 +50,7 @@ STAGES = [
 ]
 STAGE_KEYS = [s[0] for s in STAGES]
 STAGE = {s[0]: {"key": s[0], "label": s[1], "blurb": s[2], "phase": s[3], "kind": s[4]} for s in STAGES}
-BUILT_PHASES = {1}
+BUILT_PHASES = {1, 2}
 
 DDL = """
 CREATE TABLE IF NOT EXISTS tour_plans (
@@ -380,7 +380,7 @@ def tool_find_pois(db, tenant_id, args):
         out.append({"source": f"tenant POI #{r['poi_id']}", "name": r["name"], "type": r["type_label"], "near": city,
                     "km_from_city": km, "about": (r["historical_significance"] or "")[:200]})
     for r in db.execute("""SELECT p.poi_id, p.name, p.city_id, p.latitude, p.longitude, p.description, p.significance,
-                                  pt.label AS type_label FROM platform_pois p LEFT JOIN poi_types pt ON pt.poi_type_id = p.poi_type_id
+                                  p.opening_hours, p.entry_fee, pt.label AS type_label FROM platform_pois p LEFT JOIN poi_types pt ON pt.poi_type_id = p.poi_type_id
                            WHERE p.is_active = 1"""):
         if r["name"].lower() in seen:
             continue
@@ -389,7 +389,8 @@ def tool_find_pois(db, tenant_id, args):
         if city is None:
             continue
         out.append({"source": f"platform POI #{r['poi_id']}", "name": r["name"], "type": r["type_label"], "near": city,
-                    "km_from_city": km, "about": (r["description"] or r["significance"] or "")[:200]})
+                    "km_from_city": km, "about": (r["description"] or r["significance"] or "")[:200],
+                    "opening_hours": r["opening_hours"], "entry_fee": r["entry_fee"]})
     return out[:150]
 
 
@@ -429,6 +430,64 @@ def tool_find_hubs(db, tenant_id, args):
                                     WHERE h.is_active = 1 AND h.city_id IN ({q})""", ids)]
 
 
+def tool_hotels(db, tenant_id, args):
+    """Hotels per city with what TMS knows about them: the tenant's own
+    Accommodation suppliers with their room types and latest prices, then
+    the platform catalog's hotels (the tenant may not have them yet)."""
+    ids = [int(x) for x in (args.get("city_ids") or []) if str(x).isdigit()][:20]
+    out = []
+    for cid in ids:
+        c = _city_row(db, cid)
+        if not c:
+            continue
+        mine = []
+        for s_ in db.execute("""SELECT s.supplier_id, s.supplier_name, s.preference, t.label AS type_label, st.label AS subtype
+                                FROM suppliers s JOIN supplier_groups g ON g.supplier_group_id = s.supplier_group_id AND g.code = 'ACCOMMODATION'
+                                LEFT JOIN supplier_types t ON t.supplier_type_id = s.supplier_type_id
+                                LEFT JOIN supplier_subtypes st ON st.supplier_subtype_id = s.supplier_subtype_id
+                                WHERE s.tenant_id = ? AND s.is_deleted = 0 AND EXISTS (
+                                    SELECT 1 FROM supplier_addresses a WHERE a.supplier_id = s.supplier_id AND a.city_id = ?)""",
+                             (tenant_id, cid)).fetchall():
+            rooms = [{"room_type": r["label"], "price_per_night_usd": r["price_per_night"], "price_as_of": r["price_as_of"],
+                      "rooms_in_hotel": r["number_of_rooms"]}
+                     for r in db.execute("""SELECT rt.label, sr.price_per_night, sr.price_as_of, sr.number_of_rooms
+                                            FROM supplier_rooms sr JOIN hotel_room_types rt ON rt.room_type_id = sr.room_type_id
+                                            WHERE sr.supplier_id = ? AND sr.tenant_id = ?""", (s_["supplier_id"], tenant_id))]
+            mine.append({"supplier_id": s_["supplier_id"], "name": s_["supplier_name"], "type": s_["type_label"],
+                         "grade": s_["subtype"], "preference": s_["preference"], "rooms": rooms})
+        names = {m["name"].lower() for m in mine}
+        plat = [{"accommodation_id": r["accommodation_id"], "name": r["name"], "stars": r["star_rating"],
+                 "type": r["property_type"], "rooms": r["rooms"], "dining": bool(r["amen_dining"])}
+                for r in db.execute("SELECT * FROM platform_accommodation WHERE city_id = ? AND is_active = 1", (cid,))
+                if r["name"].lower() not in names]
+        out.append({"city_id": cid, "city": c["label"], "tenant_suppliers": mine[:12], "platform_catalog": plat[:12]})
+    return out
+
+
+def tool_restaurants(db, tenant_id, args):
+    ids = [int(x) for x in (args.get("city_ids") or []) if str(x).isdigit()][:20]
+    out = []
+    for cid in ids:
+        c = _city_row(db, cid)
+        if not c:
+            continue
+        mine = [{"supplier_id": r["supplier_id"], "name": r["supplier_name"], "type": r["type_label"]}
+                for r in db.execute("""SELECT s.supplier_id, s.supplier_name, t.label AS type_label FROM suppliers s
+                                       JOIN supplier_groups g ON g.supplier_group_id = s.supplier_group_id AND g.code = 'FOOD_BEVERAGE'
+                                       LEFT JOIN supplier_types t ON t.supplier_type_id = s.supplier_type_id
+                                       WHERE s.tenant_id = ? AND s.is_deleted = 0 AND EXISTS (
+                                           SELECT 1 FROM supplier_addresses a WHERE a.supplier_id = s.supplier_id AND a.city_id = ?)""",
+                                    (tenant_id, cid))]
+        names = {m["name"].lower() for m in mine}
+        plat = [{"restaurant_id": r["restaurant_id"], "name": r["name"], "cuisine": r["cuisine"], "class": r["class"],
+                 "price_from": r["price_from"], "price_to": r["price_to"], "currency": r["currency"],
+                 "group_suitable": r["group_suitable"]}
+                for r in db.execute("SELECT * FROM platform_restaurants WHERE city_id = ? AND is_active = 1", (cid,))
+                if r["name"].lower() not in names]
+        out.append({"city_id": cid, "city": c["label"], "tenant_suppliers": mine[:12], "platform_catalog": plat[:12]})
+    return out
+
+
 TOOLS = {
     "find_cities": (tool_find_cities, "Look up cities in TMS by name (returns ids, province, country, coordinates).",
                     {"names": {"type": "array", "items": {"type": "string"}}}),
@@ -438,6 +497,12 @@ TOOLS = {
                   {"city_ids": {"type": "array", "items": {"type": "integer"}}, "radius_km": {"type": "number"}}),
     "lodging_at": (tool_lodging, "Hotels TMS knows in these cities (tenant suppliers, platform catalog, 4-star count).",
                    {"city_ids": {"type": "array", "items": {"type": "integer"}}}),
+    "hotels_at": (tool_hotels, "Hotels in these cities: the tenant's own suppliers with room types and latest prices (USD), "
+                  "then the platform catalog's hotels with star ratings.",
+                  {"city_ids": {"type": "array", "items": {"type": "integer"}}}),
+    "restaurants_at": (tool_restaurants, "Restaurants in these cities: the tenant's own F&B suppliers, then the platform catalog "
+                       "(cuisine, price range, group suitability).",
+                       {"city_ids": {"type": "array", "items": {"type": "integer"}}}),
     "find_hubs": (tool_find_hubs, "Airports, railway stations and border posts in these cities.",
                   {"city_ids": {"type": "array", "items": {"type": "integer"}}}),
 }
@@ -709,6 +774,156 @@ def run_checkpoints(db, tenant_id, client, brief, route, instructions, prior, me
                       CHECKPOINT_TOOL, meter, log, web_searches=3)
 
 
+# ---- stage: hotels and dining -------------------------------------------------------------------------------------
+
+LODGING_TOOL = {"name": "report_lodging", "description": "Hotel options and restaurants for each checkpoint.",
+                "input_schema": {"type": "object", "properties": {
+                    "summary": {"type": "string"},
+                    "checkpoints": {"type": "array", "items": {"type": "object", "properties": {
+                        "city": {"type": "string"}, "nights": {"type": "integer"},
+                        "hotels": {"type": "array", "items": {"type": "object", "properties": {
+                            "name": {"type": "string"}, "supplier_id": {"type": "integer"},
+                            "accommodation_id": {"type": "integer"}, "stars": {"type": "number"},
+                            "double_usd": {"type": "number", "description": "per room per night"},
+                            "single_usd": {"type": "number"},
+                            "price_basis": {"type": "string", "description": "'TMS price as of <date>', a URL, or 'estimate'"},
+                            "source": {"type": "string", "description": "'tenant supplier', 'platform catalog' or a URL"},
+                            "meets_standard": {"type": "boolean"}, "why": {"type": "string"},
+                            "recommended": {"type": "boolean"}}, "required": ["name"]}},
+                        "restaurants": {"type": "array", "items": {"type": "object", "properties": {
+                            "name": {"type": "string"}, "supplier_id": {"type": "integer"},
+                            "restaurant_id": {"type": "integer"}, "cuisine": {"type": "string"},
+                            "lunch_usd_pp": {"type": "number"}, "dinner_usd_pp": {"type": "number"},
+                            "group_ok": {"type": "boolean"}, "source": {"type": "string"}, "note": {"type": "string"}},
+                            "required": ["name"]}},
+                        "meals_note": {"type": "string", "description": "e.g. breakfast and dinner at the hotel"}},
+                        "required": ["city", "hotels"]}},
+                    "flags": {"type": "array", "items": {"type": "string"}}},
+                    "required": ["checkpoints", "flags"]}}
+
+
+def run_lodging(db, tenant_id, client, brief, route, checkpoints, instructions, prior, meter, log):
+    city_ids = {}
+    for leg in (route.get("outbound") or []) + (route.get("return_route") or []):
+        if leg.get("city_id"):
+            city_ids[leg["city"]] = leg["city_id"]
+    cps = [{"city": cp["city"], "city_id": city_ids.get(cp["city"]), "nights": cp.get("nights")}
+           for cp in checkpoints.get("checkpoints") or []]
+    prompt = (
+        "You are planning a group tour. The route and the overnight checkpoints are approved. Now find the HOTELS and "
+        "RESTAURANTS at each checkpoint.\n\n"
+        f"Tour Brief:\n{_brief_text(brief)}\n\nCheckpoints (with TMS city ids):\n{json.dumps(cps, ensure_ascii=False)}\n\n"
+        "For each checkpoint, use hotels_at and restaurants_at. Offer 2-3 hotel options, best first, and mark ONE as "
+        "recommended. Prefer, in this order: the tenant's own suppliers (they have contracts and prices; a 'Primary' "
+        "preference is their top choice), then hotels in the platform catalog, then hotels you find on the web. The "
+        "hotel must take the whole group in one place (the brief's guest rooms plus guide and driver rooms) and meet "
+        "the brief's standard; where nothing of that standard exists, say so (meets_standard = false) and offer the best "
+        "available. Give per-night prices in USD for a double room and a single room: the tenant's TMS price where it "
+        "has one (price_basis 'TMS price as of <date>'), otherwise a web rate (price_basis = URL) or a careful estimate "
+        "(price_basis 'estimate'). For restaurants, give 1-3 places that can seat the group, with a typical lunch and "
+        "dinner cost per person in USD; say where meals are better taken at the hotel. Flag anything uncertain.\n"
+        + (f"\nThe planner reviewed your previous answer and asks for these changes:\n{instructions}\n"
+           f"Previous answer:\n{json.dumps(prior, ensure_ascii=False)[:12000]}\n" if instructions and prior else "")
+        + "\nCall report_lodging when done.")
+    log("Looking for hotels and restaurants at each checkpoint…")
+    report = agent_loop(db, tenant_id, client, prompt, ["hotels_at", "restaurants_at", "find_cities"], LODGING_TOOL,
+                        meter, log, web_searches=6, max_turns=18)
+    nights = {cp["city"]: cp.get("nights") for cp in checkpoints.get("checkpoints") or []}
+    for cp in report.get("checkpoints") or []:
+        cp["nights"] = nights.get(cp.get("city"), cp.get("nights"))
+        hotels = cp.get("hotels") or []
+        picked = [h for h in hotels if h.get("recommended")]
+        for i, h in enumerate(hotels):
+            h["recommended"] = bool(picked and h is picked[0]) or (not picked and i == 0)
+    return report
+
+
+def lodging_budget(brief, lodging):
+    """Rooms x nights x price at each checkpoint's chosen hotel. Guide and
+    driver rooms are priced as singles."""
+    fig = group_figures(brief)
+    rows, total, unknown = [], 0.0, False
+    for cp in (lodging or {}).get("checkpoints") or []:
+        h = next((x for x in cp.get("hotels") or [] if x.get("recommended")), None)
+        n = int(cp.get("nights") or 0)
+        if not h or not n:
+            continue
+        dbl, sgl = h.get("double_usd"), h.get("single_usd") or h.get("double_usd")
+        singles = fig["singles"] + fig["guide_rooms"] + fig["driver_rooms"]
+        if dbl is None or sgl is None:
+            unknown = True
+            cost = None
+        else:
+            cost = n * (fig["doubles"] * dbl + singles * sgl)
+            total += cost
+        rows.append({"city": cp["city"], "hotel": h["name"], "nights": n, "doubles": fig["doubles"], "singles": singles,
+                     "double_usd": dbl, "single_usd": sgl, "cost": cost, "basis": h.get("price_basis")})
+    per_guest = round(total / fig["guests"], 2) if fig["guests"] else None
+    return {"rows": rows, "total": round(total, 2), "per_guest": per_guest, "partial": unknown}
+
+
+# ---- stage: day by day ---------------------------------------------------------------------------------------------
+
+DAYS_TOOL = {"name": "report_days", "description": "The day-by-day itinerary.",
+             "input_schema": {"type": "object", "properties": {
+                 "summary": {"type": "string"},
+                 "days": {"type": "array", "items": {"type": "object", "properties": {
+                     "day": {"type": "integer"}, "date": {"type": "string"}, "title": {"type": "string"},
+                     "from": {"type": "string"}, "to": {"type": "string"}, "km": {"type": "number"},
+                     "drive_hours": {"type": "number"},
+                     "schedule": {"type": "array", "items": {"type": "object", "properties": {
+                         "time": {"type": "string"}, "item": {"type": "string"}}, "required": ["item"]}},
+                     "visits": {"type": "array", "items": {"type": "string"}},
+                     "breakfast": {"type": "string"}, "lunch": {"type": "string"}, "dinner": {"type": "string"},
+                     "overnight": {"type": "string"}, "hotel": {"type": "string"},
+                     "description": {"type": "string", "description": "2-4 sentences for the guest-facing itinerary"},
+                     "notes": {"type": "string", "description": "operational notes for the tour team"}},
+                     "required": ["day", "title", "overnight"]}},
+                 "flags": {"type": "array", "items": {"type": "string"}}},
+                 "required": ["days", "flags"]}}
+
+
+def run_days(db, tenant_id, client, brief, route, checkpoints, lodging, instructions, prior, meter, log):
+    pois = [p for p in route.get("pois") or [] if p.get("include")]
+    picks = [{"city": cp["city"], "nights": cp.get("nights"),
+              "hotel": next((h["name"] for h in cp.get("hotels") or [] if h.get("recommended")), None),
+              "restaurants": [r["name"] for r in cp.get("restaurants") or []], "meals_note": cp.get("meals_note")}
+             for cp in (lodging or {}).get("checkpoints") or []]
+    prompt = (
+        "You are writing the DAY-BY-DAY itinerary of a group tour. The route, checkpoints, day budget and hotels are "
+        "approved; follow them (same days, same overnights, same hotels).\n\n"
+        f"Tour Brief:\n{_brief_text(brief)}\n\nDay budget (approved):\n"
+        f"{json.dumps(checkpoints.get('days'), ensure_ascii=False)[:8000]}\n\nPoints of interest to include:\n"
+        f"{json.dumps(pois, ensure_ascii=False)[:6000]}\n\nHotels and restaurants (approved):\n"
+        f"{json.dumps(picks, ensure_ascii=False)[:6000]}\n\n"
+        "For each day give: a short title; a timed schedule (departure, drives with comfort and fuel stops, visits with "
+        "their length, meals, arrival); the visits; where breakfast, lunch and dinner are taken; the overnight city and "
+        "hotel; a 2-4 sentence description written for the guests; and operational notes for the tour team (permits "
+        "to show, border formalities, escorts, early starts). Use find_pois for opening hours and entry fees where it "
+        "helps; respect opening days. Keep driving within the brief's max_drive_hours. Flag anything that doesn't fit.\n"
+        + (f"\nThe planner reviewed your previous answer and asks for these changes:\n{instructions}\n"
+           f"Previous answer:\n{json.dumps(prior, ensure_ascii=False)[:12000]}\n" if instructions and prior else "")
+        + "\nCall report_days when done.")
+    log("Writing the day-by-day itinerary…")
+    report = agent_loop(db, tenant_id, client, prompt, ["find_pois", "find_cities"], DAYS_TOOL, meter, log,
+                        web_searches=3, max_turns=12)
+    return fill_dates(brief, report)
+
+
+def fill_dates(brief, report):
+    from datetime import date, timedelta
+    try:
+        start = date.fromisoformat(brief.get("start_date") or "")
+    except ValueError:
+        return report
+    for d in report.get("days") or []:
+        try:
+            d["date"] = (start + timedelta(days=int(d.get("day") or 1) - 1)).isoformat()
+        except (TypeError, ValueError):
+            pass
+    return report
+
+
 # ---- stage: journey grid (computed) ------------------------------------------------------------------------------------
 
 def journey_grid(route, checkpoints):
@@ -853,6 +1068,26 @@ def run(db, run_id):
             set_result(db, plan_id, key, result, run_id)
             log(f"{len(result.get('checkpoints') or [])} checkpoints over {len(result.get('days') or [])} days"
                 + ("" if result.get("fits", True) else " -- does NOT fit the tour length; see flags"))
+        elif key == "lodging":
+            if not (smap["route"]["data"] and smap["checkpoints"]["data"]):
+                raise PlannerError("Approve the route and checkpoints first.")
+            result = run_lodging(db, tenant_id, client, brief, smap["route"]["data"], smap["checkpoints"]["data"],
+                                 r["instructions"], prior, meter, log)
+            if agent_runs.cancelled(db, "tour_plan_runs", run_id):
+                return
+            set_result(db, plan_id, key, result, run_id)
+            b = lodging_budget(brief, result)
+            log(f"Hotels for {len(result.get('checkpoints') or [])} checkpoints; accommodation about USD {b['total']:,.0f}"
+                + (" (some prices missing)" if b["partial"] else ""))
+        elif key == "days":
+            if not smap["lodging"]["data"]:
+                raise PlannerError("Approve the hotels first.")
+            result = run_days(db, tenant_id, client, brief, smap["route"]["data"], smap["checkpoints"]["data"],
+                              smap["lodging"]["data"], r["instructions"], prior, meter, log)
+            if agent_runs.cancelled(db, "tour_plan_runs", run_id):
+                return
+            set_result(db, plan_id, key, result, run_id)
+            log(f"{len(result.get('days') or [])} days written")
         else:
             raise PlannerError("That stage isn't built yet.")
         db.execute("UPDATE tour_plan_runs SET status = 'done', items_done = 1, finished_at = datetime('now'), result = COALESCE(result, ?) "

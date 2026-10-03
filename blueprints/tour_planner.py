@@ -119,7 +119,8 @@ def workspace(plan_id):
         run=run, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
         status_url=url_for("tour_planner.run_status", plan_id=plan_id, run_id=run["run_id"]) if run else None,
         stop_url=url_for("tour_planner.run_stop", plan_id=plan_id, run_id=run["run_id"]) if run else None,
-        unit="step", allowance=_allowance(db))
+        unit="step", allowance=_allowance(db),
+        budget=tp.lodging_budget(brief, smap["lodging"]["data"]) if key == "lodging" and smap["lodging"]["data"] else None)
 
 
 def _brief_from_form(form, brief):
@@ -218,6 +219,28 @@ def edit_stage(plan_id, key):
             v = request.form.get(f"nights_{i}")
             if v is not None:
                 cp["nights"] = max(0, _int(v, cp.get("nights") or 0))
+    elif key == "lodging":
+        for i, cp in enumerate(data.get("checkpoints") or []):
+            pick = request.form.get(f"pick_{i}")
+            for j, h in enumerate(cp.get("hotels") or []):
+                if pick is not None:
+                    h["recommended"] = str(j) == pick
+                for f in ("double_usd", "single_usd"):
+                    v = (request.form.get(f"{f}_{i}_{j}") or "").replace(",", "").strip()
+                    if v == "":
+                        continue
+                    try:
+                        new = round(float(v), 2)
+                    except ValueError:
+                        continue
+                    if new != h.get(f):
+                        h[f] = new
+                        h["price_basis"] = "entered by the planner"
+    elif key == "days":
+        for i, d in enumerate(data.get("days") or []):
+            for f in ("title", "description", "notes"):
+                if f"{f}_{i}" in request.form:
+                    d[f] = request.form[f"{f}_{i}"].strip()
     tp.set_result(db, plan_id, key, data)
     db.commit()
     flash("Saved. Stages after this one will be redone.", "success")

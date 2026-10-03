@@ -36,8 +36,23 @@ Each stage shows its status on the left: *Ready*, *Working…*, *To review*,
    times between every pair of checkpoints and city by city along the
    route.
 
-Hotels, transport, arrivals, the day-by-day itinerary, costs and the draft
-Package are later phases.
+5. **Hotels and dining**: for each checkpoint, 2–3 hotels that can take the
+   whole group, with one recommended:
+   - your own Suppliers come first, with their prices from TMS, then the
+     platform catalog, then the web;
+   - hotels below your standard are marked;
+   - choose a different hotel with the **Use** button, or type a price;
+   - restaurants that can seat the group are listed with typical lunch and
+     dinner costs;
+   - the **Accommodation budget** totals rooms × nights × price for the
+     chosen hotels, with guide and driver rooms priced as singles.
+6. **Day by day**: each day's timed schedule, where breakfast, lunch and
+   dinner are taken, the overnight hotel, a short description for the
+   guests and notes for your team. You can edit the titles, descriptions
+   and notes.
+
+Arrivals, transport, Pre-Tour planning, costs and the draft Package are
+later phases.
 
 ## Changing a stage
 
