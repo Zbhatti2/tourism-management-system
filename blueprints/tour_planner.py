@@ -304,7 +304,8 @@ def save_criteria(plan_id):
     tp.save_criteria(db, plan_id, criteria)
     log_action("Update", "tour_plans", plan_id, "Set Tour Planner checkpoint criteria")
     flash("Checkpoint criteria saved. Run the agent to choose checkpoints with them.", "success")
-    return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="checkpoints"))
+    back = f.get("back") if f.get("back") in ("route", "checkpoints") else "checkpoints"
+    return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=back))
 
 
 @tour_planner_bp.route("/<int:plan_id>/stage/<key>/approve", methods=["POST"])
