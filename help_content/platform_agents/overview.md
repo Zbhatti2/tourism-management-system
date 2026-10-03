@@ -42,6 +42,29 @@ Approved values are written straight to the catalog. They're dated
 record had none. Points of Interest changes then reach tenants through
 **Catalog Sync**.
 
+## POIs from a PDF
+
+Upload a PDF, such as a brochure, guidebook or heritage report, on the **POIs
+from a PDF** card. The agent reads it in parts of 30 pages. Scanned pages
+work too.
+
+- **A place already in the catalog:** each value the PDF gives that is new
+  or different is proposed, like the POI Enrichment agent's.
+- **A new place:** it is proposed as a **New Point of Interest**, with its
+  Name, City, POI Type and the other values. The POI is created when you
+  approve any of its values. If the PDF doesn't state a type, the POI Type
+  you chose on the upload form is used.
+- **Sources:** each value shows the PDF page it came from. **Open the PDF**
+  on the run's page opens the file.
+- **Photos:** the PDF's photos are staged for the Master Image Catalog.
+  **Curate the photos** on the run's page opens them. A photo on a page
+  about a known POI is already assigned to it. A photo of a new place is
+  assigned once you approve that place. Logos and decorations that repeat
+  on many pages are left out.
+
+Up to 300 pages and 40 MB per PDF. It costs roughly 1 to 2 cents a page, as a
+platform cost.
+
 ## POI Image Collector
 
 The **POI Image Collector** card opens the POI Master Image Catalog's

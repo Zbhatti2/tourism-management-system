@@ -94,7 +94,15 @@ AGENTS = {
                   "max": 30, "blurb": "Finds road distance, typical drive time, main route and rail for city pairs."},
     "pois": {"label": "POI Enrichment", "icon": "geo-alt", "entity": "platform_pois", "batch": 4, "max": 24,
              "blurb": "Fills in descriptions, opening hours, entry fees, year founded, website, phone and coordinates."},
+    "pdf": {"label": "POIs from a PDF", "icon": "file-earmark-pdf", "entity": "platform_pois", "batch": 1, "max": 1,
+            "blurb": "Reads a PDF (brochure, guidebook, report): proposes new Points of Interest and updates to known "
+                     "ones, and stages its photos for the Master Image Catalog."},
 }
+
+# New Points of Interest proposed by the PDF agent (pdf_poi_agent.py): created when approved.
+FIELDS["platform_pois_new"] = {"name": ("Name", "text"), "city": ("City", "text"), "poi_type": ("POI Type", "text"),
+                               **FIELDS["platform_pois"]}
+ENTITY_LABELS["platform_pois_new"] = "New Point of Interest"
 
 
 def _number(v):
@@ -296,11 +304,15 @@ def start_run(db, agent_key, params, user_id, label, background=True):
                      "VALUES (?, ?, ?, ?, ?)", (agent_key, f"{label} ({len(found)})", json.dumps(params), user_id, len(found)))
     db.commit()
     run_id = cur.lastrowid
+    launch(run_id, background)
+    return run_id
+
+
+def launch(run_id, background=True):
     if background:
         threading.Thread(target=_run_in_thread, args=(run_id,), daemon=True).start()
     else:
         _run_in_thread(run_id)
-    return run_id
 
 
 def _connect():
@@ -342,6 +354,17 @@ def run(db, run_id):
     total = 0
     try:
         client = anthropic_client()
+        if agent_key == "pdf":
+            import pdf_poi_agent
+            total = pdf_poi_agent.run(db, run_id, client, log, meter,
+                                      lambda: agent_runs.cancelled(db, "platform_agent_runs", run_id))
+            if agent_runs.cancelled(db, "platform_agent_runs", run_id):
+                return
+            log(f"Done: {total} value(s) to review." if total else "Done: nothing new was found.")
+            db.execute("UPDATE platform_agent_runs SET status = 'done', items_done = items_total, finished_at = datetime('now') "
+                       "WHERE run_id = ? AND status = 'running'", (run_id,))
+            db.commit()
+            return
         found = targets(db, agent_key, json.loads(r["params"] or "{}"))
         by_key = {t["key"]: t for t in found}
         size = AGENTS[agent_key]["batch"]
@@ -429,7 +452,23 @@ def decide(db, proposal_ids, approve, user_id):
         try:
             if err:
                 raise AgentError(err)
-            if p["entity"] == "cities":
+            if p["entity"] == "platform_pois_new":
+                import pdf_poi_agent
+                if p["record_key"].startswith("new:"):
+                    pdf_poi_agent.create_new_poi(db, p["record_key"], user_id)
+                    p = db.execute("SELECT * FROM platform_agent_proposals WHERE proposal_id = ?", (pid,)).fetchone()
+                touched_pois.add(int(p["record_key"]))
+                if p["field"] in pdf_poi_agent.NEW_FIELDS:  # went into the record when it was created
+                    if p["status"] == "pending":
+                        db.execute("UPDATE platform_agent_proposals SET status = 'approved', decided_by = ?, "
+                                   "decided_at = datetime('now'), error = NULL WHERE proposal_id = ?", (user_id, pid))
+                    applied += 1
+                    continue
+                cur = db.execute(f"UPDATE platform_pois SET {p['field']} = ?, updated_at = datetime('now') WHERE poi_id = ?",
+                                 (value, int(p["record_key"])))
+                if not cur.rowcount:
+                    raise AgentError("the POI no longer exists")
+            elif p["entity"] == "cities":
                 db.execute(f"UPDATE cities SET {p['field']} = ? WHERE city_id = ?", (value, int(p["record_key"])))
             elif p["entity"] == "platform_pois":
                 cur = db.execute(f"UPDATE platform_pois SET {p['field']} = ?, checked_on = ?, updated_at = datetime('now'), "

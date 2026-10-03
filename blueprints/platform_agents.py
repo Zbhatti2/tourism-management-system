@@ -52,9 +52,50 @@ def index():
         "pois": db.execute("SELECT COUNT(*) FROM platform_pois WHERE is_active = 1 AND (" +
                            " OR ".join(f"{f} IS NULL OR {f} = ''" for f in pa.FIELDS["platform_pois"]) + ")").fetchone()[0],
     }
+    all_poi_types = db.execute("""SELECT pt.poi_type_id, pt.label FROM poi_types pt JOIN tenants t ON t.tenant_id = pt.tenant_id
+                                  WHERE t.is_platform = 1 AND pt.is_active = 1 ORDER BY pt.label""").fetchall()
     return render_template("platform_agents/index.html", agents=pa.AGENTS, runs=runs, countries=countries, states=states,
                            cities=cities, poi_cities=poi_cities, poi_types=poi_types, gaps=gaps,
-                           pending=pa.pending_count(db))
+                           pending=pa.pending_count(db), all_poi_types=all_poi_types)
+
+
+@platform_agents_bp.route("/start-pdf", methods=["POST"])
+@system_admin_required
+def start_pdf():
+    """POIs from a PDF (pdf_poi_agent.py): upload, then the run reads it."""
+    import pdf_poi_agent
+    db = get_db()
+    f = request.files.get("pdf")
+    if f is None or not f.filename:
+        flash("Choose a PDF file.", "error")
+        return redirect(url_for("platform_agents.index"))
+    data = f.read()
+    params = {"poi_type_id": _int(request.form.get("poi_type_id"))}
+    if params["poi_type_id"]:
+        r = db.execute("SELECT label FROM poi_types WHERE poi_type_id = ?", (params["poi_type_id"],)).fetchone()
+        params["poi_type_label"] = r[0] if r else None
+    name = f.filename.replace("\\", "/").split("/")[-1][:150]
+    try:
+        run_id = pdf_poi_agent.start(db, name, data, params, g.user_id)
+    except (pdf_poi_agent.PdfError, pa.AgentError) as e:
+        flash(str(e), "error")
+        return redirect(url_for("platform_agents.index"))
+    pa.launch(run_id)
+    log_action("TMSAgent", "platform_agent_runs", run_id, f"Started TMS Agent POIs from a PDF: {name}")
+    return redirect(url_for("platform_agents.run_page", run_id=run_id))
+
+
+@platform_agents_bp.route("/run/<int:run_id>/pdf")
+@system_admin_required
+def run_pdf(run_id):
+    """The PDF a run read -- proposals link to it at their page (#page=N)."""
+    import pdf_poi_agent
+    from io import BytesIO
+    from flask import send_file
+    up = pdf_poi_agent.upload(get_db(), run_id)
+    if up is None:
+        abort(404)
+    return send_file(BytesIO(up["file_data"]), mimetype="application/pdf", download_name=up["file_name"])
 
 
 @platform_agents_bp.route("/start/<agent_key>", methods=["POST"])
@@ -150,7 +191,14 @@ def run_page(run_id):
     counts = dict(db.execute("SELECT status, COUNT(*) FROM platform_agent_proposals WHERE run_id = ? GROUP BY status",
                              (run_id,)).fetchall())
     cost, calls, searches = pa.run_cost(db, run_id)
-    return render_template("platform_agents/run.html", run=run, agent=pa.AGENTS[run["agent_key"]], groups=_grouped(rows),
+    batch = None
+    if run["batch_id"]:
+        batch = db.execute("""SELECT b.batch_id, b.status,
+                                     (SELECT COUNT(*) FROM image_import_items i WHERE i.batch_id = b.batch_id) AS total,
+                                     (SELECT COUNT(*) FROM image_import_items i WHERE i.batch_id = b.batch_id
+                                      AND i.status = 'pending') AS pending
+                              FROM image_import_batches b WHERE b.batch_id = ?""", (run["batch_id"],)).fetchone()
+    return render_template("platform_agents/run.html", photo_batch=batch, run=run, agent=pa.AGENTS[run["agent_key"]], groups=_grouped(rows),
                            counts=counts, show=show, cost=cost, calls=calls, searches=searches, fields=pa.FIELDS,
                            entity_labels=pa.ENTITY_LABELS, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
                            status_url=url_for("platform_agents.run_status", run_id=run_id),
@@ -158,7 +206,7 @@ def run_page(run_id):
                            unit=RUN_UNITS.get(run["agent_key"], "records"))
 
 
-RUN_UNITS = {"geography": "cities", "distances": "city pairs", "pois": "POIs"}
+RUN_UNITS = {"geography": "cities", "distances": "city pairs", "pois": "POIs", "pdf": "steps"}
 
 
 @platform_agents_bp.route("/review")

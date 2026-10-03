@@ -482,7 +482,8 @@ def save_album(kind, owner_id):
     owner = _owner(db, kind, scope, owner_id)
     ids = [int(x) for x in request.form.getlist("ids") if x.isdigit()]
     owned = kind.owns(db, scope, owner_id, ids)
-    back = _album_url(kind, owner_id, view="list", q=request.form.get("q") or None, sort=request.form.get("sort") or None)
+    back = _album_url(kind, owner_id, view="slider" if request.form.get("back") == "slider" else "list",
+                      q=request.form.get("q") or None, sort=request.form.get("sort") or None)
     tenant_for_log = None if kind.platform else scope
     if request.form.get("action") == "delete":
         chosen = [int(x) for x in request.form.getlist("selected") if x.isdigit() and int(x) in owned]

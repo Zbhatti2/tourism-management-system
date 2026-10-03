@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ "Edit" if supplier else "New" }} Supplier{% endblock %}
 {% block content %}
-<h1 class="h4 mb-2">{{ "Edit" if supplier else "New" }} Supplier</h1>
+<h1 class="h4 mb-2">{{ "Edit" if supplier else "New" }} Supplier{% if group %} <span class="text-muted fw-normal">· {{ group.label }}</span>{% endif %}</h1>
 {% if not supplier %}
 <p class="text-muted small mb-4">Looking to add a contracted person instead of a vendor company? Use <a href="{{ url_for('suppliers.new_external_resource') }}">New External Resource</a>.</p>
 {% endif %}
@@ -15,10 +15,15 @@
     <div class="row g-2 mb-3">
       <div class="col-6">
         <label class="form-label">Supplier Type</label>
+        {% if group %}<div class="form-text mt-0 mb-1">Showing {{ group.label }} types — the group you're working in. Choose All Suppliers in the menu to see every type.</div>{% endif %}
         <select class="form-select" id="supplier_type_id" name="supplier_type_id">
           <option value="">— None —</option>
-          {% for t in supplier_types %}
-          <option value="{{ t.supplier_type_id }}" {{ "selected" if supplier and supplier.supplier_type_id == t.supplier_type_id else "" }}>{{ t.label }}</option>
+          {% for grp, types in supplier_types | groupby('group_sort', default=99) %}
+          <optgroup label="{{ types[0].group_label or 'Other' }}">
+            {% for t in types %}
+            <option value="{{ t.supplier_type_id }}" {{ "selected" if supplier and supplier.supplier_type_id == t.supplier_type_id else "" }}>{{ t.label }}</option>
+            {% endfor %}
+          </optgroup>
           {% endfor %}
         </select>
       </div>
@@ -56,7 +61,7 @@
     {% endif %}
   </div>
   <div class="card-footer bg-white d-flex gap-2 justify-content-end">
-    <a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) if supplier else url_for('suppliers.list_suppliers') }}" class="btn btn-outline-secondary">Cancel</a>
+    <a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) if supplier else supplier_list_url() }}" class="btn btn-outline-secondary">Cancel</a>
     <button class="btn btn-primary" type="submit">Save</button>
   </div>
 </form>

@@ -46,10 +46,11 @@ import os
 from datetime import date
 from io import BytesIO
 
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from auth.decorators import login_required
 import catalog_sync
+import supplier_groups
 from db import get_db, log_action
 from utils import (UPLOAD_IMAGE_EXTENSIONS, basename, open_local_path, pick_file_dialog, pick_files_dialog,
                    read_uploaded_file)
@@ -57,10 +58,44 @@ from utils import (UPLOAD_IMAGE_EXTENSIONS, basename, open_local_path, pick_file
 suppliers_bp = Blueprint("suppliers", __name__)
 
 
-def _supplier_types(db):
-    return db.execute(
-        "SELECT * FROM supplier_types WHERE is_active = 1 AND tenant_id = ? ORDER BY label COLLATE NOCASE", (g.tenant_id,)
-    ).fetchall()
+def _supplier_types(db, group=None, keep_type_id=None):
+    """Active Supplier Types with their group; group (a supplier_groups row)
+    limits them to that group. keep_type_id keeps a supplier's current Type
+    in the list even when it belongs to another group."""
+    sql = """SELECT t.*, sg.label AS group_label, sg.code AS group_code, sg.sort_order AS group_sort
+             FROM supplier_types t LEFT JOIN supplier_groups sg ON sg.supplier_group_id = t.supplier_group_id
+             WHERE t.is_active = 1 AND t.tenant_id = ?"""
+    params = [g.tenant_id]
+    if group is not None:
+        sql += " AND (t.supplier_group_id = ? OR t.supplier_type_id = ?)"
+        params += [group["supplier_group_id"], keep_type_id or -1]
+    return db.execute(sql + " ORDER BY sg.sort_order, t.label COLLATE NOCASE", params).fetchall()
+
+
+# ---- Supplier Groups: the list remembers which group (and filters) you're in --------------------
+
+def _current_group(db):
+    """The supplier_groups row the user is working in, or None for All
+    Suppliers. ?group=<key> on the list sets it; other pages use the one
+    remembered in the session."""
+    key = request.args.get("group") if request.endpoint == "suppliers.list_suppliers" else None
+    if key is None:
+        key = session.get("supplier_group", "all")
+    return supplier_groups.by_url_key(db, key)
+
+
+def _list_url():
+    """Back to the Suppliers list exactly as the user left it (group,
+    search and filters)."""
+    args = session.get("supplier_list_args") or {}
+    if "group" not in args:
+        args = dict(args, group=session.get("supplier_group", "all"))
+    return url_for("suppliers.list_suppliers", **args)
+
+
+@suppliers_bp.context_processor
+def _supplier_list_context():
+    return {"supplier_list_url": _list_url}
 
 
 def _supplier_subtypes(db):
@@ -226,8 +261,16 @@ def _get_supplier_document(db, supplier_id, document_id):
 @login_required
 def list_suppliers():
     db = get_db()
+    if request.args.get("is_external_resource") and "group" not in request.args:
+        # Older links ("External Resources only") open the External Resources group.
+        return redirect(url_for("suppliers.list_suppliers", group="external"))
+    if not request.args and session.get("supplier_list_args"):
+        return redirect(_list_url())
+    group = _current_group(db)
+    session["supplier_group"] = supplier_groups.URL_KEYS[group["code"]] if group else "all"
+    session["supplier_list_args"] = {k: v for k, v in request.args.items() if v and k != "hl"}
     q = request.args.get("q", "").strip()
-    is_external_resource = request.args.get("is_external_resource", "").strip()
+    is_external_resource = "1" if group and group["code"] == "EXTERNAL_RESOURCES" else ""
     type_id = request.args.get("type_id", "").strip()
     subtype_id = request.args.get("subtype_id", "").strip()
     city = request.args.get("city", "").strip()
@@ -253,11 +296,12 @@ def list_suppliers():
         WHERE s.is_deleted = 0 AND s.tenant_id = ?
     """
     params = [g.tenant_id]
+    if group:
+        sql += " AND s.supplier_group_id = ?"
+        params.append(group["supplier_group_id"])
     if q:
         sql += " AND s.supplier_name LIKE ?"
         params.append(f"%{q}%")
-    if is_external_resource:
-        sql += " AND s.is_external_resource = 1"
     if type_id:
         sql += " AND s.supplier_type_id = ?"
         params.append(type_id)
@@ -282,8 +326,10 @@ def list_suppliers():
         catalog_ids=catalog_sync.linked_local_ids(db, g.tenant_id, "suppliers"),
         catalog_pending=catalog_sync.pending_count(db, g.tenant_id),
         type_id=type_id, subtype_id=subtype_id, city=city, preference=preference,
-        supplier_types=_supplier_types(db), subtypes_json=_subtypes_for_type_json(db),
-        city_options=_city_options(db),
+        supplier_types=_supplier_types(db, group), subtypes_json=_subtypes_for_type_json(db),
+        city_options=_city_options(db), group=group, groups=supplier_groups.all_groups(db),
+        group_counts=supplier_groups.counts(db, g.tenant_id), url_keys=supplier_groups.URL_KEYS,
+        group_key=session["supplier_group"], highlight=request.args.get("hl", type=int),
     )
 
 
@@ -492,8 +538,8 @@ def new_supplier():
         if not f["supplier_name"]:
             flash("Supplier name is required.", "error")
             return render_template(
-                "suppliers/form.html", supplier=None, supplier_types=_supplier_types(db),
-                subtypes_json=_subtypes_for_type_json(db),
+                "suppliers/form.html", supplier=None, supplier_types=_supplier_types(db, _current_group(db)),
+                subtypes_json=_subtypes_for_type_json(db), group=_current_group(db),
             )
         db.execute(
             """INSERT INTO suppliers
@@ -508,11 +554,13 @@ def new_supplier():
         db.commit()
         supplier_id = db.execute("SELECT last_insert_rowid() id").fetchone()["id"]
         log_action("Create", "supplier", supplier_id, f"Created supplier {f['supplier_name']}")
-        flash("Supplier created.", "success")
+        flash("Supplier created. Add its addresses, contacts and images here, then use Back to return to the list.",
+              "success")
         return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+    group = _current_group(db)
     return render_template(
-        "suppliers/form.html", supplier=None, supplier_types=_supplier_types(db),
-        subtypes_json=_subtypes_for_type_json(db),
+        "suppliers/form.html", supplier=None, supplier_types=_supplier_types(db, group),
+        subtypes_json=_subtypes_for_type_json(db), group=group,
     )
 
 
@@ -529,7 +577,7 @@ def new_external_resource():
         if not f["supplier_name"]:
             flash("Name is required.", "error")
             return render_template(
-                "suppliers/resource_form.html", supplier=None, supplier_types=_supplier_types(db),
+                "suppliers/resource_form.html", supplier=None, supplier_types=_supplier_types(db, _external_group(db)),
                 subtypes_json=_subtypes_for_type_json(db),
             )
         db.execute(
@@ -548,7 +596,7 @@ def new_external_resource():
         flash("External Resource created.", "success")
         return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
     return render_template(
-        "suppliers/resource_form.html", supplier=None, supplier_types=_supplier_types(db),
+        "suppliers/resource_form.html", supplier=None, supplier_types=_supplier_types(db, _external_group(db)),
         subtypes_json=_subtypes_for_type_json(db),
     )
 
@@ -565,7 +613,8 @@ def edit_supplier(supplier_id):
             if not f["supplier_name"]:
                 flash("Name is required.", "error")
                 return render_template(
-                    "suppliers/resource_form.html", supplier=supplier, supplier_types=_supplier_types(db),
+                    "suppliers/resource_form.html", supplier=supplier,
+                    supplier_types=_supplier_types(db, _external_group(db), supplier["supplier_type_id"]),
                     subtypes_json=_subtypes_for_type_json(db),
                 )
             db.execute(
@@ -580,10 +629,11 @@ def edit_supplier(supplier_id):
             )
             db.commit()
             log_action("Update", "supplier", supplier_id, f"Updated external resource {f['supplier_name']}")
-            flash("External Resource updated.", "success")
-            return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+            flash(f"External Resource '{f['supplier_name']}' updated.", "success")
+            return _back_to_list(supplier_id)
         return render_template(
-            "suppliers/resource_form.html", supplier=supplier, supplier_types=_supplier_types(db),
+            "suppliers/resource_form.html", supplier=supplier,
+            supplier_types=_supplier_types(db, _external_group(db), supplier["supplier_type_id"]),
             subtypes_json=_subtypes_for_type_json(db),
         )
 
@@ -592,8 +642,9 @@ def edit_supplier(supplier_id):
         if not f["supplier_name"]:
             flash("Supplier name is required.", "error")
             return render_template(
-                "suppliers/form.html", supplier=supplier, supplier_types=_supplier_types(db),
-                subtypes_json=_subtypes_for_type_json(db),
+                "suppliers/form.html", supplier=supplier,
+                supplier_types=_supplier_types(db, _current_group(db), supplier["supplier_type_id"]),
+                subtypes_json=_subtypes_for_type_json(db), group=_current_group(db),
             )
         db.execute(
             """UPDATE suppliers SET supplier_name=?, supplier_type_id=?, supplier_subtype_id=?,
@@ -606,12 +657,27 @@ def edit_supplier(supplier_id):
         )
         db.commit()
         log_action("Update", "supplier", supplier_id, f"Updated supplier {f['supplier_name']}")
-        flash("Supplier updated.", "success")
-        return redirect(url_for("suppliers.view_supplier", supplier_id=supplier_id))
+        flash(f"'{f['supplier_name']}' updated.", "success")
+        return _back_to_list(supplier_id)
+    group = _current_group(db)
     return render_template(
-        "suppliers/form.html", supplier=supplier, supplier_types=_supplier_types(db),
-        subtypes_json=_subtypes_for_type_json(db),
+        "suppliers/form.html", supplier=supplier,
+        supplier_types=_supplier_types(db, group, supplier["supplier_type_id"]),
+        subtypes_json=_subtypes_for_type_json(db), group=group,
     )
+
+
+def _external_group(db):
+    return db.execute("SELECT * FROM supplier_groups WHERE code = 'EXTERNAL_RESOURCES'").fetchone()
+
+
+def _back_to_list(supplier_id=None):
+    """After a save or delete: back to the Suppliers list the user came
+    from, with the supplier just changed highlighted."""
+    url = _list_url()
+    if supplier_id:
+        url += ("&" if "?" in url else "?") + f"hl={supplier_id}#s{supplier_id}"
+    return redirect(url)
 
 
 @suppliers_bp.route("/<int:supplier_id>/delete", methods=["POST"])
@@ -626,7 +692,7 @@ def delete_supplier(supplier_id):
     db.commit()
     log_action("Delete", "supplier", supplier_id, f"Deleted supplier {supplier['supplier_name']}")
     flash(f"'{supplier['supplier_name']}' deleted.", "success")
-    return redirect(url_for("suppliers.list_suppliers"))
+    return _back_to_list()
 
 
 # --------------------------------------------------------------- addresses

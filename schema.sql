@@ -497,6 +497,23 @@ CREATE INDEX idx_phone_types_tenant ON phone_types(tenant_id);
 -- Lookup for suppliers.supplier_type_id (see MODULE C below). Deliberately
 -- separate from organization_types — Organizations and Suppliers keep
 -- distinct type/sub-type tables at every level, per that module's design note.
+-- Supplier Groups (supplier_groups.py, Oct 2026) -- GLOBAL: Accommodation,
+-- F&B, Transport, External Resources, All Others. Each Supplier Type belongs
+-- to one; each Supplier carries its Type's group (triggers below).
+CREATE TABLE IF NOT EXISTS supplier_groups (
+    supplier_group_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code            TEXT NOT NULL UNIQUE,
+    label           TEXT NOT NULL,
+    description     TEXT,
+    icon            TEXT,
+    sort_order      INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO supplier_groups (code, label, description, icon, sort_order) VALUES ('ACCOMMODATION', 'Accommodation', 'Hotels, Resorts, guest houses', 'building', 1);
+INSERT INTO supplier_groups (code, label, description, icon, sort_order) VALUES ('FOOD_BEVERAGE', 'F&B', 'Restaurants, fast food, cafés, catering', 'cup-hot', 2);
+INSERT INTO supplier_groups (code, label, description, icon, sort_order) VALUES ('TRANSPORT', 'Transport', 'Airlines, car rental, bus services, trains', 'bus-front', 3);
+INSERT INTO supplier_groups (code, label, description, icon, sort_order) VALUES ('EXTERNAL_RESOURCES', 'External Resources', 'Agents, helpers, consultants, guides', 'person-badge', 4);
+INSERT INTO supplier_groups (code, label, description, icon, sort_order) VALUES ('OTHER', 'All Others', 'Every other supplier', 'three-dots', 5);
+
 CREATE TABLE supplier_types (
     supplier_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
@@ -507,6 +524,7 @@ CREATE TABLE supplier_types (
     is_active       INTEGER NOT NULL DEFAULT 1,
     template_key    TEXT,                   -- e.g. 'hotel'; NULL = no specialized Template (most types). Per Zeb's "Template linked to the Supplier" request (Sept 2026) -- tells the Supplier view/edit UI which extra Type-specific sections to show (Amenities & Facilities / Rooms for 'hotel'; a future Type gets its own key + sections). See hotel_amenity_options/hotel_room_types below.
     is_system       INTEGER NOT NULL DEFAULT 0,  -- 1 = locked platform code (Platform Lookups, platform_lookups.py): tenants can't edit, deactivate or delete it
+    supplier_group_id INTEGER REFERENCES supplier_groups(supplier_group_id),  -- Accommodation / F&B / Transport / External Resources / All Others
     UNIQUE (tenant_id, code)
 );
 CREATE INDEX idx_supplier_types_tenant ON supplier_types(tenant_id);
@@ -925,9 +943,11 @@ CREATE TABLE suppliers (
     preference      TEXT CHECK (preference IN ('Primary','Secondary')),  -- per Zeb's request: lets a Top choice and a Secondary choice be marked among many suppliers of the same Type in the same City (e.g. 100+ Hotels in Lahore) -- NULL for every supplier with no preference set, which is the normal/default case
     is_deleted      INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    supplier_group_id INTEGER REFERENCES supplier_groups(supplier_group_id)  -- from the Type (triggers in supplier_groups.py); External Resources always External Resources
 );
 CREATE INDEX idx_suppliers_tenant ON suppliers(tenant_id);
+CREATE INDEX idx_suppliers_group ON suppliers(tenant_id, supplier_group_id);
 CREATE INDEX idx_suppliers_type ON suppliers(supplier_type_id);
 CREATE INDEX idx_suppliers_subtype ON suppliers(supplier_subtype_id);
 CREATE INDEX idx_suppliers_is_external_resource ON suppliers(is_external_resource);
@@ -3049,7 +3069,8 @@ CREATE TABLE IF NOT EXISTS platform_agent_runs (
     heartbeat_at    TEXT,                   -- last sign of life (agent_runs.py)
     items_total     INTEGER,                -- for the progress bar
     items_done      INTEGER NOT NULL DEFAULT 0,
-    cancel_requested INTEGER NOT NULL DEFAULT 0
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    batch_id        INTEGER REFERENCES image_import_batches(batch_id)  -- photos a PDF run staged for curation
 );
 CREATE TABLE IF NOT EXISTS platform_agent_proposals (
     proposal_id     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3070,6 +3091,18 @@ CREATE TABLE IF NOT EXISTS platform_agent_proposals (
 );
 CREATE INDEX IF NOT EXISTS idx_platform_agent_proposals_run ON platform_agent_proposals(run_id);
 CREATE INDEX IF NOT EXISTS idx_platform_agent_proposals_status ON platform_agent_proposals(status);
+-- The PDF a "POIs from a PDF" run reads (pdf_poi_agent.py).
+CREATE TABLE IF NOT EXISTS platform_agent_uploads (
+    upload_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id          INTEGER NOT NULL REFERENCES platform_agent_runs(run_id),
+    file_name       TEXT NOT NULL,
+    mime_type       TEXT,
+    file_size       INTEGER,
+    page_count      INTEGER,
+    file_data       BLOB NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_platform_agent_uploads_run ON platform_agent_uploads(run_id);
 
 -- ============================================================================
 -- POI Master Image Catalog (image_owners.py, poi_image_sync.py): the
@@ -3113,3 +3146,34 @@ CREATE TABLE IF NOT EXISTS poi_image_updates (
     decided_at      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_poi_image_updates_tenant ON poi_image_updates(tenant_id, status);
+
+-- Supplier Groups: keep suppliers.supplier_group_id in step with the Type (supplier_groups.py).
+DROP TRIGGER IF EXISTS trg_suppliers_group_insert;
+CREATE TRIGGER trg_suppliers_group_insert AFTER INSERT ON suppliers
+BEGIN
+    UPDATE suppliers SET supplier_group_id = (CASE WHEN NEW.is_external_resource = 1
+        THEN (SELECT supplier_group_id FROM supplier_groups WHERE code = 'EXTERNAL_RESOURCES')
+        ELSE COALESCE((SELECT supplier_group_id FROM supplier_types WHERE supplier_type_id = NEW.supplier_type_id),
+                      (SELECT supplier_group_id FROM supplier_groups WHERE code = 'OTHER')) END) WHERE supplier_id = NEW.supplier_id;
+END;
+DROP TRIGGER IF EXISTS trg_suppliers_group_update;
+CREATE TRIGGER trg_suppliers_group_update AFTER UPDATE OF supplier_type_id, is_external_resource ON suppliers
+BEGIN
+    UPDATE suppliers SET supplier_group_id = (CASE WHEN NEW.is_external_resource = 1
+        THEN (SELECT supplier_group_id FROM supplier_groups WHERE code = 'EXTERNAL_RESOURCES')
+        ELSE COALESCE((SELECT supplier_group_id FROM supplier_types WHERE supplier_type_id = NEW.supplier_type_id),
+                      (SELECT supplier_group_id FROM supplier_groups WHERE code = 'OTHER')) END) WHERE supplier_id = NEW.supplier_id;
+END;
+DROP TRIGGER IF EXISTS trg_supplier_types_group_insert;
+CREATE TRIGGER trg_supplier_types_group_insert AFTER INSERT ON supplier_types
+WHEN NEW.supplier_group_id IS NULL
+BEGIN
+    UPDATE supplier_types SET supplier_group_id = (SELECT supplier_group_id FROM supplier_groups WHERE code = (CASE WHEN lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%hotel%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%resort%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%motel%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%guest house%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%guesthouse%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%lodge%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%hostel%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%accommodation%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%homestay%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%villa%' THEN 'ACCOMMODATION' WHEN lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%restaurant%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%food%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%cafe%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%café%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%coffee%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%catering%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%bakery%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%dhaba%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%eatery%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%beverage%' THEN 'FOOD_BEVERAGE' WHEN lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%airline%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%aviation%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%transport%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%car rental%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%bus%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%coach%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%train%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%rail%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%taxi%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%ferry%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%boat%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%jeep%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%rental%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%limousine%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%vehicle%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%cruise%' THEN 'TRANSPORT' WHEN lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%guide%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%agent%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%consultant%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%helper%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%porter%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%interpreter%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%translator%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%photographer%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%freelanc%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%escort%' OR lower(replace(COALESCE(NEW.code, ''), '_', ' ') || ' ' || COALESCE(NEW.label, '')) LIKE '%driver%' THEN 'EXTERNAL_RESOURCES' ELSE 'OTHER' END))
+    WHERE supplier_type_id = NEW.supplier_type_id;
+END;
+DROP TRIGGER IF EXISTS trg_supplier_types_group_update;
+CREATE TRIGGER trg_supplier_types_group_update AFTER UPDATE OF supplier_group_id ON supplier_types
+BEGIN
+    UPDATE suppliers SET supplier_group_id = NEW.supplier_group_id
+    WHERE supplier_type_id = NEW.supplier_type_id AND is_external_resource = 0;
+END;

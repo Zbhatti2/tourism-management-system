@@ -16,6 +16,16 @@
   </div>
 </div>
 {% include "_run_progress.html" %}
+{% if run.agent_key == 'pdf' %}
+<div class="card shadow-sm border-0 mb-3"><div class="card-body py-2 small d-flex flex-wrap gap-3 align-items-center">
+  <a href="{{ url_for('platform_agents.run_pdf', run_id=run.run_id) }}" target="_blank"><i class="bi bi-file-earmark-pdf"></i> Open the PDF</a>
+  {% if photo_batch %}
+  <span>{{ photo_batch.total }} photo{{ 's' if photo_batch.total != 1 }} from the PDF{% if photo_batch.pending %} · <strong>{{ photo_batch.pending }} waiting</strong>{% endif %}</span>
+  <a class="btn btn-sm btn-primary py-0" href="{{ url_for('images.curate', batch_id=photo_batch.batch_id) }}"><i class="bi bi-check2-square"></i> Curate the photos</a>
+  <span class="text-muted">Photos of new POIs are assigned once you approve the POI here.</span>
+  {% endif %}
+</div></div>
+{% endif %}
 {% if run.error %}<div class="alert alert-danger small">{{ run.error }}</div>{% endif %}
 
 <details class="card shadow-sm border-0 mb-3" {{ 'open' if run.status in ('queued', 'running') else '' }}>

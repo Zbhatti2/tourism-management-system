@@ -18,6 +18,7 @@ from flask import Flask, render_template
 
 import db as db_module
 from security import csrf
+import supplier_groups
 from utils import basename, format_date, format_date_abbrev, format_phone, format_price, linkify, map_coordinates_link, orblank
 
 
@@ -38,7 +39,10 @@ MODULES = [
     {"key": "dashboard", "label": "Dashboard", "icon": "speedometer2", "roles": ["TenantAdmin", "User"], "endpoint": "dashboard.index"},
     {"key": "contacts", "label": "Contacts", "icon": "people", "roles": ["TenantAdmin", "User"], "endpoint": "contacts.list_contacts"},
     {"key": "organizations", "label": "Organizations", "icon": "building", "roles": ["TenantAdmin", "User"], "endpoint": "organizations.list_organizations"},
-    {"key": "suppliers", "label": "Suppliers", "icon": "truck", "roles": ["TenantAdmin", "User"], "endpoint": "suppliers.list_suppliers"},
+    # Suppliers: a drop-down of Supplier Groups (supplier_groups.py, Oct 2026) --
+    # each opens the Suppliers list for that group.
+    {"key": "suppliers", "label": "Suppliers", "icon": "truck", "roles": ["TenantAdmin", "User"], "endpoint": "suppliers.list_suppliers",
+     "children": supplier_groups.menu()},
     {"key": "hr", "label": "Human Resources", "icon": "person-badge", "roles": ["TenantAdmin", "User"], "endpoint": "hr.index"},
     {"key": "inventory", "label": "Inventory Management", "icon": "boxes", "roles": ["TenantAdmin", "User"], "children": [
         {"key": "services", "label": "Services", "icon": "list-check", "endpoint": "services.list_services"},

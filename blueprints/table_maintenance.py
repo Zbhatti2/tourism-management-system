@@ -168,6 +168,12 @@ TABLES = {
         "references": [
             {"table": "suppliers", "fk": "supplier_type_id", "label": "supplier(s)"},
         ],
+        # Which Supplier Group the type belongs to (supplier_groups.py) -- drives the
+        # Suppliers menu, the grouped list and the Type choices on the Supplier form.
+        "extra_fields": [
+            {"name": "supplier_group_id", "label": "Supplier Group", "type": "lookup", "required": True,
+             "table": "supplier_groups", "pk": "supplier_group_id", "label_field": "label", "order": "sort_order"},
+        ],
     },
     "supplier_subtypes": {
         "label": "Supplier Sub-Types",
@@ -480,7 +486,27 @@ def _row_values(form, cfg):
         values[cfg["parent"]["fk"]] = _safe_int(form.get("parent_id"), None)
     for field in cfg.get("extra_fields", []):
         values[field["name"]] = form.get(field["name"], "").strip() or None
+        if field.get("type") == "lookup":
+            values[field["name"]] = _safe_int(values[field["name"]], None)
     return label, values
+
+
+@table_maintenance_bp.context_processor
+def _lookup_helpers():
+    """lookup_options(field): the rows a "lookup" extra field offers (e.g.
+    Supplier Groups); lookup_label(field, value): the label for a stored id."""
+    cache = {}
+
+    def lookup_options(field):
+        if field["name"] not in cache:
+            cache[field["name"]] = get_db().execute(
+                f"SELECT {field['pk']} AS id, {field['label_field']} AS label FROM {field['table']} "
+                f"ORDER BY {field.get('order', field['label_field'])}").fetchall()
+        return cache[field["name"]]
+
+    def lookup_label(field, value):
+        return next((r["label"] for r in lookup_options(field) if r["id"] == value), "")
+    return {"lookup_options": lookup_options, "lookup_label": lookup_label}
 
 
 @table_maintenance_bp.route("/")

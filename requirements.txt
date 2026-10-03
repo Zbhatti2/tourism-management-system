@@ -29,3 +29,6 @@ openpyxl>=3.1
 
 # Images Catalog (image_catalog.py): thumbnails and the date a photo was taken.
 Pillow>=10.0
+
+# TMS Agent "POIs from a PDF" (pdf_poi_agent.py): splitting PDFs and taking out their photos.
+pypdf>=4.0
