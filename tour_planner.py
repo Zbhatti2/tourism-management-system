@@ -547,7 +547,7 @@ def agent_loop(db, tenant_id, client, prompt, tool_names, report_tool, meter, lo
     messages = [{"role": "user", "content": prompt}]
     required = report_tool["input_schema"].get("required") or []
     for _ in range(max_turns):
-        resp = client.messages.create(model=model(), max_tokens=16000, tools=tools, messages=messages)
+        resp = agent_runs.create_message(client, model=model(), max_tokens=16000, tools=tools, messages=messages)
         meter(getattr(resp, "usage", None))
         content = getattr(resp, "content", []) or []
         results, report = [], None
@@ -1273,7 +1273,7 @@ def run(db, run_id):
         db.commit()
     except Exception as e:
         import image_collector
-        msg = image_collector.explain_api_error(e) or str(e) or traceback.format_exc()[-800:]
+        msg = image_collector.friendly_api_error(e) or str(e) or traceback.format_exc()[-800:]
         try:
             log(f"Stopped: {msg}")
         except Exception:

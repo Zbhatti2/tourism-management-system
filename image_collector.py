@@ -104,6 +104,22 @@ def explain_api_error(e):
     return None
 
 
+def friendly_api_error(e):
+    """explain_api_error, plus the passing troubles (a timeout, a busy
+    service) -- for the message a stopped run shows, not for deciding
+    whether to stop."""
+    msg = explain_api_error(e)
+    if msg:
+        return msg
+    text, status = str(e), getattr(e, "status_code", None)
+    if type(e).__name__ in ("APITimeoutError", "APIConnectionError") or "timed out or interrupted" in text:
+        return ("The AI service didn't answer in time (the request timed out). Anything already found is kept; "
+                "run the agent again. If it keeps happening, ask for fewer things at once.")
+    if status in (429, 529) or "overloaded_error" in text or "rate_limit_error" in text:
+        return "The AI service is busy right now (overloaded or rate-limited). Wait a minute and run the agent again."
+    return None
+
+
 # ---- seams (replaced in tests) ------------------------------------------------------------------
 
 def http_get(url, timeout=15, max_bytes=3 * 1024 * 1024, deadline=40):
@@ -594,7 +610,7 @@ def run_collection(db, run_id):
                    "WHERE run_id = ? AND status = 'running'", (run_id,))
         db.commit()
     except Exception as e:
-        msg = explain_api_error(e) or f"{e}"
+        msg = friendly_api_error(e) or f"{e}"
         try:
             log(f"Stopped: {msg}")
         except Exception:
