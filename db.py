@@ -722,6 +722,14 @@ def _migration_drop_platform_hotel_rates(db):
     db.commit()
 
 
+def _migration_platform_agents(db):
+    """TMS Agents (platform_agents.py): runs of the platform-level research
+    agents and the field-by-field proposals waiting for SystemAdmin review."""
+    import platform_agents
+    db.executescript(platform_agents.DDL)
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -744,6 +752,7 @@ MIGRATIONS = [
     ("2026_10_image_catalog", _migration_image_catalog),
     ("2026_10_ai_metering_image_collector", _migration_ai_metering_image_collector),
     ("2026_10_drop_platform_hotel_rates", _migration_drop_platform_hotel_rates),
+    ("2026_10_platform_agents", _migration_platform_agents),
 ]
 
 

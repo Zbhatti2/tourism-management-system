@@ -1,0 +1,60 @@
+{# Proposal groups with approve / reject. Needs: groups, fields, entity_labels, next_url, editable. #}
+{% if groups %}
+<form method="post" action="{{ url_for('platform_agents.decide') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  {% for gr in groups %}
+  <div class="card shadow-sm border-0 mb-2">
+    <div class="card-header bg-white small d-flex justify-content-between">
+      <span><span class="text-muted">{{ entity_labels[gr.entity] }}:</span> <strong>{{ gr.label }}</strong></span>
+      {% if editable %}<a href="#" class="small js-group-all">tick all</a>{% endif %}
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 small align-middle">
+        <tbody>
+          {% for p in gr["items"] %}
+          <tr>
+            {% if editable %}<td style="width: 28px;">{% if p.status == 'pending' %}<input class="form-check-input js-pick" type="checkbox" name="ids" value="{{ p.proposal_id }}"><input type="hidden" name="all_ids" value="{{ p.proposal_id }}">{% endif %}</td>{% endif %}
+            <td style="width: 18%;" class="fw-semibold">{{ fields[p.entity][p.field][0] }}</td>
+            <td style="width: 18%;" class="text-muted">{{ p.current_value if p.current_value is not none else '—' }}</td>
+            <td style="white-space: pre-wrap;">{{ p.proposed_value }}{% if p.note %}<div class="text-muted fst-italic">{{ p.note }}</div>{% endif %}
+              {% if p.error %}<div class="text-danger">Not applied: {{ p.error }}</div>{% endif %}</td>
+            <td style="width: 90px;">
+              {% if p.confidence is not none %}
+              <span class="badge {{ 'bg-success-subtle text-success' if p.confidence >= 0.8 else 'bg-warning-subtle text-warning-emphasis' if p.confidence >= 0.5 else 'bg-danger-subtle text-danger' }}">{{ (p.confidence * 100)|round|int }}%</span>
+              {% endif %}
+            </td>
+            <td style="width: 26%; max-width: 260px;" class="text-truncate" title="{{ p.source_url }}"><a href="{{ p.source_url }}" target="_blank" rel="noopener">{{ p.source_url.split('/')[2] if '//' in p.source_url else p.source_url }}</a></td>
+            {% if not editable or p.status != 'pending' %}<td style="width: 80px;"><span class="badge {{ 'bg-success-subtle text-success' if p.status == 'approved' else 'bg-light text-muted border' if p.status == 'rejected' else 'bg-secondary-subtle text-dark' }}">{{ p.status|capitalize }}</span></td>{% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  {% if editable %}
+  <div class="card shadow border-0 sticky-bottom mt-2" style="bottom: 0.5rem;">
+    <div class="card-body py-2 d-flex flex-wrap gap-2 align-items-center">
+      <button class="btn btn-primary btn-sm" name="action" value="approve" type="submit"><i class="bi bi-check2"></i> Approve ticked</button>
+      <button class="btn btn-outline-secondary btn-sm" name="action" value="reject" type="submit"><i class="bi bi-x"></i> Reject ticked</button>
+      <button class="btn btn-outline-success btn-sm" name="action" value="approve_confident" type="submit" title="Every value on this page with a confidence of 80% or more">Approve all ≥ 80%</button>
+      <span class="small text-muted ms-2"><a href="#" id="pick-all">Tick all</a> · <a href="#" id="pick-none">none</a> · Approved values are written to the catalog straight away.</span>
+    </div>
+  </div>
+  {% endif %}
+</form>
+<script>
+(function () {
+  function set(list, v) { list.forEach(function (c) { c.checked = v; }); }
+  var all = document.getElementById('pick-all'), none = document.getElementById('pick-none');
+  if (all) all.addEventListener('click', function (e) { e.preventDefault(); set(document.querySelectorAll('.js-pick'), true); });
+  if (none) none.addEventListener('click', function (e) { e.preventDefault(); set(document.querySelectorAll('.js-pick'), false); });
+  document.querySelectorAll('.js-group-all').forEach(function (a) {
+    a.addEventListener('click', function (e) { e.preventDefault(); set(a.closest('.card').querySelectorAll('.js-pick'), true); });
+  });
+})();
+</script>
+{% else %}
+<div class="card shadow-sm border-0"><div class="card-body text-center text-muted py-4">Nothing here.</div></div>
+{% endif %}

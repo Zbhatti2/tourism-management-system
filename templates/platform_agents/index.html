@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}TMS System Admin — TMS Agents{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
+    <h1 class="h3 mb-0">TMS Agents</h1>
+    <div class="small text-muted">Platform-level AI agents that research the shared catalogs on the web. Every value they find waits for your approval, with its source.
+      Their cost is a platform cost (the "Platform agents" line on AI Usage).</div>
+  </div>
+  <a href="{{ url_for('platform_agents.review') }}" class="btn {{ 'btn-warning' if pending else 'btn-outline-secondary' }}"><i class="bi bi-check2-square"></i> Review queue{% if pending %} <span class="badge bg-dark">{{ pending }}</span>{% endif %}</a>
+</div>
+
+<div class="row g-3 mb-3">
+  {# Geography #}
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+      <h2 class="h6"><i class="bi bi-{{ agents.geography.icon }} me-1"></i>{{ agents.geography.label }}</h2>
+      <p class="small text-muted">{{ agents.geography.blurb }} <strong>{{ gaps.geography }}</strong> cities have gaps.</p>
+      <form method="post" action="{{ url_for('platform_agents.start', agent_key='geography') }}" class="mt-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label small text-muted mb-0">Country</label>
+        <select class="form-select form-select-sm mb-2" name="country_id"><option value="">Any</option>
+          {% for c in countries %}<option value="{{ c.country_id }}" {{ 'selected' if c.label == 'Pakistan' else '' }}>{{ c.label }}</option>{% endfor %}</select>
+        <label class="form-label small text-muted mb-0">Province / state (optional)</label>
+        <select class="form-select form-select-sm mb-2" name="state_id"><option value="">Any</option>
+          {% for s in states %}<option value="{{ s.state_id }}">{{ s.label }} · {{ s.country }}</option>{% endfor %}</select>
+        <div class="d-flex gap-2 align-items-end mb-2">
+          <div><label class="form-label small text-muted mb-0">How many (max {{ agents.geography.max }})</label>
+            <input class="form-control form-control-sm" type="number" name="limit" value="20" min="1" max="{{ agents.geography.max }}"></div>
+          <div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="only_missing" value="1" id="g_missing" checked>
+            <label class="form-check-label small" for="g_missing">Only cities with gaps</label></div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
+      </form>
+    </div></div>
+  </div>
+  {# Distances #}
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+      <h2 class="h6"><i class="bi bi-{{ agents.distances.icon }} me-1"></i>{{ agents.distances.label }}</h2>
+      <p class="small text-muted">{{ agents.distances.blurb }} <strong>{{ gaps.distances }}</strong> existing pairs have gaps.</p>
+      <form method="post" action="{{ url_for('platform_agents.start', agent_key='distances') }}" class="mt-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-check"><input class="form-check-input" type="radio" name="mode" value="from" id="d_from" checked>
+          <label class="form-check-label small" for="d_from">From one city to others</label></div>
+        <select class="form-select form-select-sm mb-1" name="from_city_id"><option value="">— from —</option>
+          {% for c in cities %}<option value="{{ c.city_id }}">{{ c.label }} · {{ c.state }}{% if c.country != 'Pakistan' %}, {{ c.country }}{% endif %}</option>{% endfor %}</select>
+        <select class="form-select form-select-sm mb-1" name="to_city_ids" multiple size="5" title="Ctrl/Cmd-click to pick several">
+          {% for c in cities %}<option value="{{ c.city_id }}">{{ c.label }} · {{ c.state }}{% if c.country != 'Pakistan' %}, {{ c.country }}{% endif %}</option>{% endfor %}</select>
+        <div class="form-text mt-0 mb-2">Destinations: Ctrl/Cmd-click to pick several (max {{ agents.distances.max }}).</div>
+        <div class="form-check mb-2"><input class="form-check-input" type="radio" name="mode" value="gaps" id="d_gaps">
+          <label class="form-check-label small" for="d_gaps">Fill the gaps in existing distances</label></div>
+        <input type="hidden" name="limit" value="{{ agents.distances.max }}">
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
+      </form>
+    </div></div>
+  </div>
+  {# POIs #}
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+      <h2 class="h6"><i class="bi bi-{{ agents.pois.icon }} me-1"></i>{{ agents.pois.label }}</h2>
+      <p class="small text-muted">{{ agents.pois.blurb }} <strong>{{ gaps.pois }}</strong> POIs have gaps. Approved changes reach tenants through Catalog Sync.</p>
+      <form method="post" action="{{ url_for('platform_agents.start', agent_key='pois') }}" class="mt-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label small text-muted mb-0">City</label>
+        <select class="form-select form-select-sm mb-2" name="city_id"><option value="">Any</option>
+          {% for c in poi_cities %}<option value="{{ c.city_id }}">{{ c.label }}</option>{% endfor %}</select>
+        <label class="form-label small text-muted mb-0">POI Type</label>
+        <select class="form-select form-select-sm mb-2" name="poi_type_id"><option value="">Any</option>
+          {% for t in poi_types %}<option value="{{ t.poi_type_id }}">{{ t.label }}</option>{% endfor %}</select>
+        <div class="d-flex gap-2 align-items-end mb-2">
+          <div><label class="form-label small text-muted mb-0">How many (max {{ agents.pois.max }})</label>
+            <input class="form-control form-control-sm" type="number" name="limit" value="8" min="1" max="{{ agents.pois.max }}"></div>
+          <div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="only_missing" value="1" id="p_missing" checked>
+            <label class="form-check-label small" for="p_missing">Only POIs with gaps</label></div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
+      </form>
+    </div></div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white small fw-semibold">Recent runs</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 small align-middle">
+      <thead><tr><th>Started</th><th>Agent</th><th>Covers</th><th>Status</th><th class="text-end">Values found</th><th class="text-end">To review</th><th></th></tr></thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td>{{ r.created_at[:16] }}</td><td>{{ agents[r.agent_key].label }}</td><td>{{ r.scope_label }}</td>
+          <td>{% if r.status in ('queued', 'running') %}<span class="badge bg-primary-subtle text-primary">Working</span>{% elif r.status == 'done' %}<span class="badge bg-success-subtle text-success">Finished</span>{% else %}<span class="badge bg-danger-subtle text-danger">Failed</span>{% endif %}</td>
+          <td class="text-end">{{ r.proposals }}</td><td class="text-end">{% if r.waiting %}<strong>{{ r.waiting }}</strong>{% else %}0{% endif %}</td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('platform_agents.run_page', run_id=r.run_id) }}">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No runs yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

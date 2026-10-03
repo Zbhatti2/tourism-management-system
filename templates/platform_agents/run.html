@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}TMS Agents — {{ agent.label }} — {{ run.scope_label }}{% endblock %}
+{% block head %}{% if run.status in ('queued', 'running') %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('platform_agents.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> TMS Agents</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold"><i class="bi bi-{{ agent.icon }}"></i> {{ agent.label }}</div>
+    <h1 class="h3 mb-0">{{ run.scope_label }}</h1>
+    <div class="small text-muted">Started {{ run.created_at[:16] }}{% if run.finished_at %} · finished {{ run.finished_at[:16] }}{% endif %}
+      · AI cost ${{ '%.2f'|format(cost) }} ({{ calls }} call{{ 's' if calls != 1 }}, {{ searches }} web search{{ 'es' if searches != 1 }}) · platform cost</div>
+  </div>
+  <div>
+    {% if run.status in ('queued', 'running') %}<span class="badge bg-primary-subtle text-primary fs-6"><span class="spinner-border spinner-border-sm me-1"></span>Working…</span>
+    {% elif run.status == 'done' %}<span class="badge bg-success-subtle text-success fs-6">Finished</span>
+    {% else %}<span class="badge bg-danger-subtle text-danger fs-6">Failed</span>{% endif %}
+  </div>
+</div>
+{% if run.error %}<div class="alert alert-danger small">{{ run.error }}</div>{% endif %}
+
+<details class="card shadow-sm border-0 mb-3" {{ 'open' if run.status in ('queued', 'running') else '' }}>
+  <summary class="card-header bg-white small fw-semibold">Progress</summary>
+  <div class="card-body"><pre class="small mb-0" style="white-space: pre-wrap;">{{ run.progress or 'Starting…' }}</pre></div>
+</details>
+
+<ul class="nav nav-pills small mb-2">
+  {% for k, label in [('pending', 'To review'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('all', 'All')] %}
+  <li class="nav-item"><a class="nav-link {{ 'active' if show == k else '' }}" href="{{ url_for('platform_agents.run_page', run_id=run.run_id, show=k) }}">{{ label }}
+    <span class="badge bg-secondary-subtle text-dark">{{ counts.get(k, 0) if k != 'all' else counts.values()|sum }}</span></a></li>
+  {% endfor %}
+</ul>
+<p class="small text-muted mb-2">Each row: the field, what the catalog has now, what the agent found, its confidence, and the page it came from. Open the source before approving anything you're unsure of.</p>
+{% set next_url = request.full_path %}
+{% set editable = show == 'pending' %}
+{% include "platform_agents/_proposals.html" %}
+{% endblock %}
