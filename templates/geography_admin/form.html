@@ -50,6 +50,12 @@
         </datalist>
         <div class="form-text">IANA name, e.g. Asia/Karachi.</div>
       </div>
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="is_checkpoint" id="is_checkpoint" value="1" {{ "checked" if (request.form.get('is_checkpoint') if request.method == 'POST' else (entry and entry.is_checkpoint)) else "" }}>
+          <label class="form-check-label" for="is_checkpoint"><strong>Overnight checkpoint</strong> — a city with accommodation and dining good enough for a group to stop overnight. Tour planning prefers these.</label>
+        </div>
+      </div>
     </div>
     {% endif %}
     <div class="mb-3">

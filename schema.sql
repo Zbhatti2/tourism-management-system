@@ -198,7 +198,8 @@ CREATE TABLE cities (
     longitude       REAL,
     timezone        TEXT,                   -- IANA name, e.g. 'Asia/Karachi'
     altitude_m      INTEGER,
-    alt_names       TEXT                    -- other spellings, one per line (matched on import)
+    alt_names       TEXT,                   -- other spellings, one per line (matched on import)
+    is_checkpoint   INTEGER NOT NULL DEFAULT 0  -- a good overnight stop for tour groups (Tour Planner)
 );
 CREATE INDEX idx_cities_state ON cities(state_id);
 CREATE UNIQUE INDEX idx_cities_state_label ON cities(state_id, label);

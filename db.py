@@ -817,6 +817,14 @@ def _migration_tour_planner(db):
     db.commit()
 
 
+def _migration_city_checkpoint_flag(db):
+    """cities.is_checkpoint: a good overnight stop for tour groups (set by
+    the platform, or proposed by a tenant's Tour Planner)."""
+    if not _column_exists(db, "cities", "is_checkpoint"):
+        db.execute("ALTER TABLE cities ADD COLUMN is_checkpoint INTEGER NOT NULL DEFAULT 0")
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -845,6 +853,7 @@ MIGRATIONS = [
     ("2026_10_supplier_groups", _migration_supplier_groups),
     ("2026_10_pdf_poi_agent", _migration_pdf_poi_agent),
     ("2026_10_tour_planner", _migration_tour_planner),
+    ("2026_10_city_checkpoint_flag", _migration_city_checkpoint_flag),
 ]
 
 
