@@ -28,6 +28,7 @@ import io
 import json
 import re
 
+import agent_runs
 import platform_agents as pa
 
 PART_PAGES = 30
@@ -189,7 +190,7 @@ def read_part(client, part_pdf, first, last, file_name, poi_types, meter):
     content = [{"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
                                                "data": base64.b64encode(part_pdf).decode("ascii")}},
                {"type": "text", "text": prompt}]
-    resp = client.messages.create(model=pa.model(), max_tokens=8000, tools=[_tool()],
+    resp = agent_runs.create_message(client, model=pa.model(), max_tokens=8000, tools=[_tool()],
                                   tool_choice={"type": "tool", "name": "report_places"},
                                   messages=[{"role": "user", "content": content}])
     meter(getattr(resp, "usage", None))

@@ -276,7 +276,7 @@ def research_batch(client, agent_key, batch, meter):
     messages = [{"role": "user", "content": prompt}]
     found = None
     for _ in range(5):
-        resp = client.messages.create(model=model(), max_tokens=4000, tools=tools, messages=messages)
+        resp = agent_runs.create_message(client, model=model(), max_tokens=4000, tools=tools, messages=messages)
         meter(getattr(resp, "usage", None))
         for b in getattr(resp, "content", []) or []:
             if getattr(b, "type", None) == "tool_use" and getattr(b, "name", None) == "report_findings":
@@ -413,7 +413,8 @@ def run(db, run_id):
                    "WHERE run_id = ? AND status = 'running'", (run_id,))
         db.commit()
     except Exception as e:
-        msg = explain_api_error(e) or str(e) or traceback.format_exc()[-800:]
+        from image_collector import friendly_api_error
+        msg = friendly_api_error(e) or str(e) or traceback.format_exc()[-800:]
         log(f"Stopped: {msg}")
         db.execute("UPDATE platform_agent_runs SET status = 'failed', error = ?, finished_at = datetime('now') "
                    "WHERE run_id = ? AND status = 'running'", (msg[:1000], run_id))

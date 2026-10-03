@@ -53,3 +53,16 @@ def status_json(db, table, run_id, extra_cols=()):
             "items_done"] + list(extra_cols)
     r = db.execute(f"SELECT {', '.join(cols)}, datetime('now') AS now FROM {table} WHERE run_id = ?", (run_id,)).fetchone()
     return dict(r) if r else None
+
+
+def create_message(client, **kw):
+    """client.messages.create, streamed when the client can: a long answer
+    (a big report, several web searches) then never hits the HTTP timeout,
+    which applies between streamed events instead of to the whole reply
+    (the Tour Planner's checkpoint runs timed out at 150 s, Oct 2026).
+    Returns the final Message, like create()."""
+    stream = getattr(client.messages, "stream", None)
+    if stream is None:  # test doubles
+        return client.messages.create(**kw)
+    with stream(**kw) as s:
+        return s.get_final_message()
