@@ -41,7 +41,9 @@
           {% if cfg.parent %}<td class="text-muted small">{{ item.row.parent_label or "" }}</td>{% endif %}
           {% for field in cfg.get("extra_fields", []) %}
           <td class="text-muted small">
-            {% if field.type == "icon" and item.row[field.name] %}
+            {% if field.type == "lookup" %}
+            {{ lookup_label(field, item.row[field.name]) }}
+            {% elif field.type == "icon" and item.row[field.name] %}
             <i class="bi {{ item.row[field.name] }}"></i> <span class="small">{{ item.row[field.name] }}</span>
             {% else %}
             {{ item.row[field.name] or "" }}

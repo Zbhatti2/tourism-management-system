@@ -779,6 +779,36 @@ def _migration_agent_run_progress(db):
     db.commit()
 
 
+def _migration_supplier_groups(db):
+    """Supplier Groups (Zeb, Oct 2026): supplier_groups (Accommodation, F&B,
+    Transport, External Resources, All Others -- GLOBAL), each Supplier
+    Type's group (supplier_types.supplier_group_id, first guessed from its
+    code / label) and each Supplier's group (suppliers.supplier_group_id,
+    kept in step with its Type by triggers). See supplier_groups.py."""
+    import supplier_groups
+    db.executescript(supplier_groups.DDL)
+    supplier_groups.seed(db)
+    for table in ("supplier_types", "suppliers"):
+        if not _column_exists(db, table, "supplier_group_id"):
+            db.execute(f"ALTER TABLE {table} ADD COLUMN supplier_group_id INTEGER REFERENCES supplier_groups(supplier_group_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_suppliers_group ON suppliers(tenant_id, supplier_group_id)")
+    supplier_groups.assign_types(db)
+    supplier_groups.refresh_suppliers(db)
+    db.executescript(supplier_groups.TRIGGERS)
+    db.commit()
+
+
+def _migration_pdf_poi_agent(db):
+    """TMS Agent "POIs from a PDF" (pdf_poi_agent.py): the uploaded PDF
+    (platform_agent_uploads) and the photo upload a run stages
+    (platform_agent_runs.batch_id)."""
+    import pdf_poi_agent
+    db.executescript(pdf_poi_agent.DDL)
+    if _table_exists(db, "platform_agent_runs") and not _column_exists(db, "platform_agent_runs", "batch_id"):
+        db.execute("ALTER TABLE platform_agent_runs ADD COLUMN batch_id INTEGER REFERENCES image_import_batches(batch_id)")
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -804,6 +834,8 @@ MIGRATIONS = [
     ("2026_10_platform_agents", _migration_platform_agents),
     ("2026_10_poi_master_images", _migration_poi_master_images),
     ("2026_10_agent_run_progress", _migration_agent_run_progress),
+    ("2026_10_supplier_groups", _migration_supplier_groups),
+    ("2026_10_pdf_poi_agent", _migration_pdf_poi_agent),
 ]
 
 

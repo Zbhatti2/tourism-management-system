@@ -24,7 +24,7 @@
               <span class="badge {{ 'bg-success-subtle text-success' if p.confidence >= 0.8 else 'bg-warning-subtle text-warning-emphasis' if p.confidence >= 0.5 else 'bg-danger-subtle text-danger' }}">{{ (p.confidence * 100)|round|int }}%</span>
               {% endif %}
             </td>
-            <td style="width: 26%; max-width: 260px;" class="text-truncate" title="{{ p.source_url }}"><a href="{{ p.source_url }}" target="_blank" rel="noopener">{{ p.source_url.split('/')[2] if '//' in p.source_url else p.source_url }}</a></td>
+            <td style="width: 26%; max-width: 260px;" class="text-truncate" title="{{ p.source_url }}"><a href="{{ p.source_url }}" target="_blank" rel="noopener">{% if p.source_url.startswith('/platform/agents/run/') %}<i class="bi bi-file-earmark-pdf"></i> PDF, page {{ p.source_url.split('#page=')[-1] }}{% else %}{{ p.source_url.split('/')[2] if '//' in p.source_url else p.source_url }}{% endif %}</a></td>
             {% if not editable or p.status != 'pending' %}<td style="width: 80px;"><span class="badge {{ 'bg-success-subtle text-success' if p.status == 'approved' else 'bg-light text-muted border' if p.status == 'rejected' else 'bg-secondary-subtle text-dark' }}">{{ p.status|capitalize }}</span></td>{% endif %}
           </tr>
           {% endfor %}

@@ -28,6 +28,7 @@ photo.**
 
 ## Editing and removing
 
+To remove one image, use **Delete** under it in the **Album** view.
 In the **List** view, edit Title, Description, Licence, Date and Sort
 order, or delete images.
 

@@ -1,41 +1,48 @@
 {% extends "base.html" %}
-{% block title %}Suppliers{% endblock %}
+{% block title %}Suppliers{% if group %} — {{ group.label }}{% endif %}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h1 class="h3 mb-0">Suppliers</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Suppliers{% if group %} <span class="text-muted fw-normal">· {{ group.label }}</span>{% endif %}</h1>
+    {% if group %}<div class="small text-muted">{{ group.description }}</div>{% endif %}
+  </div>
   <div class="d-flex gap-2">
   {% if catalog_pending %}<a href="{{ url_for('catalog_updates.updates') }}" class="btn btn-outline-warning"><i class="bi bi-cloud-arrow-down"></i> Platform updates <span class="badge bg-warning text-dark">{{ catalog_pending }}</span></a>{% endif %}
   {% if is_external_resource %}
+  <a href="{{ url_for('suppliers.new_supplier') }}" class="btn btn-outline-primary"><i class="bi bi-truck"></i> New Supplier</a>
   <a href="{{ url_for('suppliers.new_external_resource') }}" class="btn btn-primary"><i class="bi bi-person-badge"></i> New External Resource</a>
   {% else %}
-  <a href="{{ url_for('suppliers.new_supplier') }}" class="btn btn-primary"><i class="bi bi-truck"></i> New Supplier</a>
+  <a href="{{ url_for('suppliers.new_supplier') }}" class="btn btn-primary"><i class="bi bi-truck"></i> New {{ group.label ~ ' ' if group and group.code != 'OTHER' else '' }}Supplier</a>
   {% endif %}
   </div>
 </div>
 
+<ul class="nav nav-pills small mb-3 flex-wrap gap-1">
+  <li class="nav-item"><a class="nav-link py-1 {{ 'active' if not group else '' }}" href="{{ url_for('suppliers.list_suppliers', group='all') }}">All <span class="badge {{ 'bg-light text-dark' if not group else 'bg-secondary-subtle text-dark' }}">{{ group_counts.values()|sum }}</span></a></li>
+  {% for gr in groups %}
+  <li class="nav-item"><a class="nav-link py-1 {{ 'active' if group and group.code == gr.code else '' }}" href="{{ url_for('suppliers.list_suppliers', group=url_keys[gr.code]) }}"><i class="bi bi-{{ gr.icon }}"></i> {{ gr.label }} <span class="badge {{ 'bg-light text-dark' if group and group.code == gr.code else 'bg-secondary-subtle text-dark' }}">{{ group_counts.get(gr.code, 0) }}</span></a></li>
+  {% endfor %}
+</ul>
+
 <form method="get" class="mb-3">
+  <input type="hidden" name="group" value="{{ group_key }}">
   <div class="row g-2 mb-2 align-items-center">
     <div class="col-auto flex-grow-1">
       <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search supplier name…">
     </div>
-    <div class="col-auto form-check">
-      <input class="form-check-input" type="checkbox" name="is_external_resource" value="1" id="filter_external_resource"
-             {{ "checked" if is_external_resource else "" }} onchange="this.form.submit()">
-      <label class="form-check-label" for="filter_external_resource">External Resources only</label>
-    </div>
     <div class="col-auto">
       <button class="btn btn-outline-secondary" type="submit">Search</button>
     </div>
-    {% if q or is_external_resource or type_id or subtype_id or city or preference %}
+    {% if q or type_id or subtype_id or city or preference %}
     <div class="col-auto">
-      <a href="{{ url_for('suppliers.list_suppliers') }}" class="btn btn-link">Clear</a>
+      <a href="{{ url_for('suppliers.list_suppliers', group=group_key) }}" class="btn btn-link">Clear</a>
     </div>
     {% endif %}
   </div>
   <div class="row g-2 align-items-center">
     <div class="col-auto">
       <select class="form-select" id="type_id" name="type_id">
-        <option value="">All types</option>
+        <option value="">All {{ group.label ~ ' ' if group else '' }}types</option>
         {% for t in supplier_types %}
         <option value="{{ t.supplier_type_id }}" {{ "selected" if type_id == t.supplier_type_id|string else "" }}>{{ t.label }}</option>
         {% endfor %}
@@ -85,7 +92,7 @@
       </thead>
       <tbody>
         {% for s in suppliers %}
-        <tr onclick="window.location='{{ url_for('suppliers.view_supplier', supplier_id=s.supplier_id) }}'" style="cursor:pointer;">
+        <tr id="s{{ s.supplier_id }}" class="{{ 'table-warning' if highlight == s.supplier_id else '' }}" onclick="window.location='{{ url_for('suppliers.view_supplier', supplier_id=s.supplier_id) }}'" style="cursor:pointer;">
           <td>
             <strong>{{ s.supplier_name }}</strong>{% if s.supplier_id in catalog_ids %} <i class="bi bi-cloud-check text-primary small" title="From the Platform Catalog"></i>{% endif %}
             {% if s.is_external_resource %}<span class="badge bg-info-subtle text-dark border">External Resource</span>{% endif %}
@@ -110,7 +117,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="text-center text-muted py-5">No suppliers yet — <a href="{{ url_for('suppliers.new_external_resource') if is_external_resource else url_for('suppliers.new_supplier') }}">add the first one</a>.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-5">No {{ group.label ~ ' ' if group else '' }}suppliers{{ ' match' if q or type_id or city or preference else ' yet' }} — <a href="{{ url_for('suppliers.new_external_resource') if is_external_resource else url_for('suppliers.new_supplier') }}">add the first one</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

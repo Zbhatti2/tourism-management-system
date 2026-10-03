@@ -102,7 +102,23 @@
     <div class="js-caption {{ '' if loop.first else 'd-none' }}">
       <div class="d-flex justify-content-between align-items-baseline gap-2">
         <div class="fw-semibold">{{ im.title }}{% if im.inherited %} <span class="badge bg-info-subtle text-info-emphasis fw-normal" title="From the platform's Master Image Catalog">Platform</span>{% endif %}</div>
-        <div class="small text-muted text-nowrap">{{ loop.index }} / {{ images|length }}</div>
+        <div class="d-flex align-items-center gap-2">
+          {% if not readonly %}
+          <details class="position-relative">
+            <summary class="btn btn-sm btn-outline-danger list-unstyled py-0" title="Delete this image"><i class="bi bi-trash"></i> Delete</summary>
+            <div class="card shadow position-absolute end-0 mt-1 p-2 small" style="width: 280px; z-index: 20;">
+              <p class="mb-2">{% if kind.platform %}Remove “{{ im.title }}” from the Master Image Catalog? Tenants that have it keep or lose it according to their update setting.{% else %}Delete “{{ im.title }}” from this album?{% endif %}</p>
+              <form method="post" action="{{ url_for('images.save_album', kind=kind.key, owner_id=owner.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="ids" value="{{ im.image_id }}"><input type="hidden" name="selected" value="{{ im.image_id }}">
+                <input type="hidden" name="back" value="slider">
+                <button class="btn btn-sm btn-danger" type="submit" name="action" value="delete">Delete</button>
+              </form>
+            </div>
+          </details>
+          {% endif %}
+          <div class="small text-muted text-nowrap">{{ loop.index }} / {{ images|length }}</div>
+        </div>
       </div>
       {% if im.description %}<div class="small">{{ im.description }}</div>{% endif %}
       <div class="small text-muted">{{ im.shown_date }}{% if im.authors %} · {{ im.authors }}{% endif %}{% if im.licence and im.licence != im.authors %} · {{ im.licence }}{% endif %}{% if im.source == 'AI Agent' %} · found by AI Agent{% endif %}{% if im.source_url %} · <a href="{{ im.source_url }}" target="_blank" rel="noopener">source</a>{% endif %}</div>

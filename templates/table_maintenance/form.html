@@ -39,6 +39,13 @@
         <option value="{{ opt }}" {{ "selected" if entry and entry[field.name] == opt else "" }}>{{ opt }}</option>
         {% endfor %}
       </select>
+      {% elif field.type == "lookup" %}
+      <select class="form-select" name="{{ field.name }}" {{ "required" if field.required else "" }}>
+        <option value="">Choose…</option>
+        {% for opt in lookup_options(field) %}
+        <option value="{{ opt.id }}" {{ "selected" if entry and entry[field.name] == opt.id else "" }}>{{ opt.label }}</option>
+        {% endfor %}
+      </select>
       {% elif field.type == "icon" %}
       <div class="input-group" style="max-width: 320px;">
         <span class="input-group-text" id="icon-preview">
