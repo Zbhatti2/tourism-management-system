@@ -5,6 +5,7 @@
   <h1 class="h3 mb-0">Points of Interest</h1>
   <div class="d-flex gap-2">
     {% if catalog_pending %}<a href="{{ url_for('catalog_updates.updates') }}" class="btn btn-outline-warning"><i class="bi bi-cloud-arrow-down"></i> Platform updates <span class="badge bg-warning text-dark">{{ catalog_pending }}</span></a>{% endif %}
+    {% if image_updates_pending %}<a href="{{ url_for('images.platform_updates') }}" class="btn btn-outline-info"><i class="bi bi-images"></i> Image updates <span class="badge bg-info text-dark">{{ image_updates_pending }}</span></a>{% endif %}
     <a href="{{ url_for('poi.new_poi') }}" class="btn btn-primary"><i class="bi bi-geo-alt"></i> New Point of Interest</a>
   </div>
 </div>

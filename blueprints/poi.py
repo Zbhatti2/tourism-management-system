@@ -20,6 +20,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from auth.decorators import login_required
 import catalog_sync
+import poi_image_sync
 from db import get_db, log_action
 from utils import (UPLOAD_IMAGE_EXTENSIONS, basename, normalize_map_coordinates, open_local_path, pick_file_dialog,
                    pick_files_dialog, read_uploaded_file)
@@ -161,7 +162,8 @@ def _save_poi_links_from_form(db, form, poi_id):
 
 def _poi_images(db, poi_id):
     return db.execute(
-        "SELECT * FROM poi_images WHERE poi_id = ? AND tenant_id = ? ORDER BY sort_order, poi_image_id",
+        "SELECT * FROM poi_images WHERE poi_id = ? AND tenant_id = ? AND COALESCE(is_deleted, 0) = 0 "
+        "ORDER BY COALESCE(NULLIF(sort_order, 0), 999999), poi_image_id",
         (poi_id, g.tenant_id),
     ).fetchall()
 
@@ -179,7 +181,7 @@ def _get_poi(db, poi_id):
 def _get_poi_image(db, poi_id, image_id):
     _get_poi(db, poi_id)
     image = db.execute(
-        "SELECT * FROM poi_images WHERE poi_image_id = ? AND poi_id = ? AND tenant_id = ?",
+        "SELECT * FROM poi_images WHERE poi_image_id = ? AND poi_id = ? AND tenant_id = ? AND COALESCE(is_deleted, 0) = 0",
         (image_id, poi_id, g.tenant_id),
     ).fetchone()
     if image is None:
@@ -272,6 +274,7 @@ def list_pois():
         "poi/list.html", pois=rows, q=q,
         catalog_ids=catalog_sync.linked_local_ids(db, g.tenant_id, "points_of_interest"),
         catalog_pending=catalog_sync.pending_count(db, g.tenant_id),
+        image_updates_pending=poi_image_sync.pending_count(db, g.tenant_id),
         poi_type_id=poi_type_id, city=city, state=state, country_id=country_id,
         poi_types=_poi_types(db), city_options=_poi_city_options(db),
         state_options=_poi_state_options(db), country_options=_poi_country_options(db),
@@ -308,7 +311,7 @@ def view_poi(poi_id):
     poi_images = _poi_images(db, poi_id)
     catalog = catalog_sync.view_context(db, g.tenant_id, "points_of_interest", poi_id)
     return render_template("poi/view.html", poi=poi, kg_edges=kg_edges, poi_links=poi_links, poi_images=poi_images,
-                           catalog=catalog)
+                           catalog=catalog, poi_image_updates=len(poi_image_sync.pending(db, g.tenant_id, poi_id)))
 
 
 def _links_from_form(form):
@@ -470,32 +473,10 @@ def view_poi_images(poi_id):
     Photographs" URL (unchanged since before this redesign) rather than a
     new /catalog path, since this page always was — and now more fully
     is — the one place to see every image on file for a POI."""
-    db = get_db()
-    poi = _get_poi(db, poi_id)
-    q = request.args.get("q", "").strip()
-    sort = request.args.get("sort", "recent").strip()
-    if sort not in IMAGE_CATALOG_SORTS:
-        sort = "recent"
-
-    sql = """
-        SELECT i.*,
-               (SELECT GROUP_CONCAT(term, ', ') FROM poi_image_keywords k
-                WHERE k.poi_image_id = i.poi_image_id) AS keywords_str
-        FROM poi_images i
-        WHERE i.poi_id = ? AND i.tenant_id = ?
-    """
-    params = [poi_id, g.tenant_id]
-    if q:
-        sql += """ AND (
-            i.image_name LIKE ? OR i.authors LIKE ? OR i.description LIKE ?
-            OR EXISTS (SELECT 1 FROM poi_image_keywords k WHERE k.poi_image_id = i.poi_image_id AND k.term LIKE ?)
-        )"""
-        like = f"%{q}%"
-        params += [like, like, like, like]
-    sql = f"SELECT * FROM ({sql}) ORDER BY {IMAGE_CATALOG_SORTS[sort]}"
-    images = db.execute(sql, params).fetchall()
-
-    return render_template("poi/image_catalog.html", poi=poi, images=images, q=q, sort=sort)
+    # Superseded by the Images Catalog album (blueprints/images.py, Oct 2026);
+    # kept as a redirect so old links and bookmarks still land in the right place.
+    _get_poi(get_db(), poi_id)
+    return redirect(url_for("images.album", kind="poi", owner_id=poi_id, view="list", q=request.args.get("q") or None))
 
 
 @poi_bp.route("/<int:poi_id>/images/delete", methods=["POST"])
@@ -512,13 +493,15 @@ def delete_catalog_poi_images(poi_id):
     deleted = 0
     for image_id in image_ids:
         row = db.execute(
-            "SELECT poi_image_id FROM poi_images WHERE poi_image_id = ? AND poi_id = ? AND tenant_id = ?",
+            "SELECT poi_image_id FROM poi_images WHERE poi_image_id = ? AND poi_id = ? AND tenant_id = ? "
+            "AND COALESCE(is_deleted, 0) = 0",
             (image_id, poi_id, g.tenant_id),
         ).fetchone()
         if row is None:
             continue
-        db.execute("DELETE FROM poi_image_keywords WHERE poi_image_id = ? AND tenant_id = ?", (image_id, g.tenant_id))
-        db.execute("DELETE FROM poi_images WHERE poi_image_id = ? AND tenant_id = ?", (image_id, g.tenant_id))
+        # Soft delete: an image inherited from the platform's Master Image
+        # Catalog that the tenant removed must not be inherited again.
+        db.execute("UPDATE poi_images SET is_deleted = 1 WHERE poi_image_id = ? AND tenant_id = ?", (image_id, g.tenant_id))
         deleted += 1
     db.commit()
     if deleted:
@@ -526,7 +509,7 @@ def delete_catalog_poi_images(poi_id):
         flash(f"Deleted {deleted} image{'s' if deleted != 1 else ''}.", "success")
     else:
         flash("Nothing was deleted — select at least one image first.", "error")
-    return redirect(url_for("poi.view_poi_images", poi_id=poi_id))
+    return redirect(url_for("images.album", kind="poi", owner_id=poi_id, view="list"))
 
 
 def _poi_image_keywords(db, image_id):
@@ -682,16 +665,15 @@ def edit_poi_image(poi_id, image_id):
 @login_required
 def delete_poi_image(poi_id, image_id):
     db = get_db()
-    image = _get_poi_image(db, poi_id, image_id)
-    db.execute("DELETE FROM poi_image_keywords WHERE poi_image_id = ? AND tenant_id = ?", (image_id, g.tenant_id))
+    _get_poi_image(db, poi_id, image_id)
     db.execute(
-        "DELETE FROM poi_images WHERE poi_image_id = ? AND poi_id = ? AND tenant_id = ?",
+        "UPDATE poi_images SET is_deleted = 1 WHERE poi_image_id = ? AND poi_id = ? AND tenant_id = ?",
         (image_id, poi_id, g.tenant_id),
     )
     db.commit()
     log_action("Delete", "poi_image", poi_id, f"Deleted image #{image_id}")
     flash("Image deleted.", "success")
-    return redirect(url_for("poi.view_poi_images", poi_id=poi_id))
+    return redirect(url_for("images.album", kind="poi", owner_id=poi_id, view="list"))
 
 
 @poi_bp.route("/<int:poi_id>/images/<int:image_id>/open")
@@ -742,6 +724,8 @@ def poi_image_thumbnail(poi_id, image_id):
     ).fetchone()
     if image is None:
         abort(404)
+    if image["platform_image_id"]:  # inherited: the bytes live in the platform's Master Image Catalog
+        return redirect(url_for("images.album_image", kind="poi", owner_id=poi_id, image_id=image_id, size="full"))
     if image["location_type"] == "Stored in Database":
         if not image["file_data"]:
             abort(404)
@@ -779,6 +763,9 @@ def bulk_import_poi_images(poi_id):
     'Stored in Database'); a file that can no longer be read by the time
     Import is clicked (moved/deleted since it was picked) is skipped
     rather than aborting the whole batch, and reported back by name."""
+    if request.method == "GET":
+        # Superseded by Add images -> curation (blueprints/images.py, Oct 2026).
+        return redirect(url_for("images.add_images", kind="poi", owner_id=poi_id))
     db = get_db()
     poi = _get_poi(db, poi_id)
     if request.method == "POST":
@@ -850,7 +837,7 @@ def bulk_import_poi_images(poi_id):
                 f"(moved, deleted, or not an image file): {', '.join(skipped)}",
                 "error",
             )
-        return redirect(url_for("poi.view_poi_images", poi_id=poi_id))
+        return redirect(url_for("images.album", kind="poi", owner_id=poi_id, view="list"))
     return render_template("poi/bulk_import_images.html", poi=poi, description_max_length=IMAGE_DESCRIPTION_MAX_LENGTH)
 
 

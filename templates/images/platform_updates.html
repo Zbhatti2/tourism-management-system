@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Platform image updates{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('poi.view_poi', poi_id=poi_id) if poi_id else url_for('poi.list_pois') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Points of Interest</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">Points of Interest</div>
+    <h1 class="h3 mb-0">Platform image updates</h1>
+    <div class="small text-muted">Changes to the platform's Master Image Catalog for your Points of Interest. {{ total }} waiting.
+      Your setting: <strong>{{ policies[policy] }}</strong>{% if g.role in ('TenantAdmin', 'SystemAdmin') %} (<a href="{{ url_for('system_mgmt.index') ~ '#poi-image-updates' }}">change</a>){% endif %}.</div>
+  </div>
+  {% if poi_id %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('images.platform_updates') }}">Show all POIs</a>{% endif %}
+</div>
+
+{% if groups %}
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if poi_id %}<input type="hidden" name="poi" value="{{ poi_id }}">{% endif %}
+  {% for (pid, pname), items in groups.items() %}
+  <div class="card shadow-sm border-0 mb-2">
+    <div class="card-header bg-white small d-flex justify-content-between">
+      <a class="fw-semibold text-decoration-none" href="{{ url_for('images.album', kind='poi', owner_id=pid) }}">{{ pname }}</a>
+      <a href="#" class="small js-group-all">tick all</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 small align-middle">
+        <tbody>
+          {% for u in items %}
+          <tr>
+            <td style="width: 28px;"><input class="form-check-input js-pick" type="checkbox" name="ids" value="{{ u.update_id }}"></td>
+            <td style="width: 110px;"><a href="{{ url_for('images.platform_update_image', update_id=u.update_id, size='full') }}" target="_blank">
+              <img src="{{ url_for('images.platform_update_image', update_id=u.update_id, size='thumb') }}" alt="" width="100" height="66" class="rounded" style="object-fit: cover;" loading="lazy"></a></td>
+            <td style="width: 110px;">
+              {% if u.change == 'new' %}<span class="badge bg-success-subtle text-success">New image</span>
+              {% elif u.change == 'changed' %}<span class="badge bg-warning-subtle text-warning-emphasis">Caption changed</span>
+              {% else %}<span class="badge bg-danger-subtle text-danger">Removed</span>{% endif %}</td>
+            <td>
+              <div class="fw-semibold">{{ u.master_title }}</div>
+              {% if u.master_description %}<div>{{ u.master_description }}</div>{% endif %}
+              <div class="text-muted">{{ u.master_date or '' }}{% if u.licence %} · {{ u.licence }}{% endif %}{% if u.source_url %} · <a href="{{ u.source_url }}" target="_blank" rel="noopener">source</a>{% endif %}</div>
+              {% if u.change == 'changed' and u.my_title %}<div class="text-muted mt-1">Yours now: “{{ u.my_title }}”{% if u.local_edited %} — you edited this caption, so Accept keeps your caption{% endif %}</div>{% endif %}
+              {% if u.change == 'removed' %}<div class="text-muted mt-1">Accept removes it from your album; Skip keeps it.</div>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  <div class="card shadow border-0 sticky-bottom mt-2" style="bottom: 0.5rem;">
+    <div class="card-body py-2 d-flex flex-wrap gap-2 align-items-center">
+      <button class="btn btn-primary btn-sm" name="action" value="accept" type="submit"><i class="bi bi-check2"></i> Accept ticked</button>
+      <button class="btn btn-outline-secondary btn-sm" name="action" value="skip" type="submit"><i class="bi bi-x"></i> Skip ticked</button>
+      <span class="small text-muted ms-2"><a href="#" id="pick-all">Tick all</a> · <a href="#" id="pick-none">none</a> · Skipped updates aren't offered again unless the platform changes that image again.</span>
+    </div>
+  </div>
+</form>
+{% else %}
+<div class="card shadow-sm border-0"><div class="card-body text-center text-muted py-4">No updates waiting.</div></div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  function set(list, v) { list.forEach(function (c) { c.checked = v; }); }
+  var all = document.getElementById('pick-all'), none = document.getElementById('pick-none');
+  if (all) all.addEventListener('click', function (e) { e.preventDefault(); set(document.querySelectorAll('.js-pick'), true); });
+  if (none) none.addEventListener('click', function (e) { e.preventDefault(); set(document.querySelectorAll('.js-pick'), false); });
+  document.querySelectorAll('.js-group-all').forEach(function (a) {
+    a.addEventListener('click', function (e) { e.preventDefault(); set(a.closest('.card').querySelectorAll('.js-pick'), true); });
+  });
+})();
+</script>
+{% endblock %}

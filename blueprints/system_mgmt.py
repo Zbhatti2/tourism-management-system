@@ -11,6 +11,7 @@ from auth.decorators import login_required, system_admin_required, tenant_admin_
 from security.passwords import hash_password, verify_password
 from config import Config
 from db import close_db, get_db, log_action
+import poi_image_sync
 
 system_mgmt_bp = Blueprint("system_mgmt", __name__)
 
@@ -89,6 +90,9 @@ def index():
         purge_eligible_count=purge_eligible_count,
         host_org=host_org,
         host_currencies=host_currencies,
+        poi_image_policies=poi_image_sync.POLICIES,
+        poi_image_policy=poi_image_sync.policy(db, g.tenant_id),
+        poi_image_pending=poi_image_sync.pending_count(db, g.tenant_id),
     )
 
 
@@ -323,6 +327,23 @@ def update_host_currency():
     log_action("Update", "tenants", g.tenant_id, f"Host Currency set to {code}")
     flash(f"Host Currency set to {code}.", "success")
     return redirect(url_for("system_mgmt.index"))
+
+
+@system_mgmt_bp.route("/poi-image-updates", methods=["POST"])
+@tenant_admin_required
+def update_poi_image_updates():
+    """How changes to the platform's POI Master Image Catalog reach this
+    tenant: automatically, after review, or not at all (poi_image_sync.py)."""
+    value = request.form.get("poi_image_updates", "")
+    db = get_db()
+    try:
+        poi_image_sync.set_policy(db, g.tenant_id, value)
+    except ValueError:
+        flash("Choose one of the options.", "error")
+        return redirect(url_for("system_mgmt.index"))
+    log_action("Update", "tenants", g.tenant_id, f"Platform POI image updates set to '{value}'")
+    flash(f"Platform POI images: {poi_image_sync.POLICIES[value]}.", "success")
+    return redirect(url_for("system_mgmt.index") + "#poi-image-updates")
 
 
 # --------------------------------------------------------------- purge

@@ -3,12 +3,12 @@
 {% block head %}{% if run.status in ('queued', 'running') %}<meta http-equiv="refresh" content="4">{% endif %}{% endblock %}
 {% block content %}
 <nav class="mb-2">
-  {% if supplier %}<a href="{{ url_for('images.album', supplier_id=supplier.supplier_id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ supplier.supplier_name }} — Images Catalog</a>
-  {% else %}<a href="{{ url_for('images.import_images') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Import Images</a>{% endif %}
+  {% if owner %}<a href="{{ url_for('images.album', kind=kind.key, owner_id=owner.id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ owner.name }} — {{ 'Master Image Catalog' if kind.platform else 'Images Catalog' }}</a>
+  {% else %}<a href="{{ import_url }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Import Images</a>{% endif %}
 </nav>
 <div class="d-flex justify-content-between align-items-start mb-3">
   <div>
-    <div class="text-uppercase small text-muted fw-semibold">AI Image Collector</div>
+    <div class="text-uppercase small text-muted fw-semibold">{{ 'TMS Agent: POI Image Collector' if kind.platform else 'AI Image Collector' }}</div>
     <h1 class="h3 mb-0">{{ run.scope_label }}</h1>
     <div class="small text-muted">Started {{ run.created_at[:16] }}{% if run.finished_at %} · finished {{ run.finished_at[:16] }}{% endif %}</div>
   </div>
@@ -20,7 +20,7 @@
 </div>
 
 {% if run.status in ('queued', 'running') %}
-<div class="alert alert-light border small">Searching the web, reading pages and reviewing photos takes about a minute per {{ 'hotel' if supplier else 'hotel or restaurant' }}.
+<div class="alert alert-light border small">Searching the web, reading pages and reviewing photos takes about a minute per {{ 'point of interest' if kind.platform else ('hotel' if owner else 'hotel or restaurant') }}.
   This page refreshes by itself; you can also leave it and come back from Import Images.</div>
 {% endif %}
 {% if run.error %}<div class="alert alert-danger small">{{ run.error }}</div>{% endif %}
@@ -48,7 +48,7 @@
       <div class="card-body small">
         <div class="d-flex justify-content-between"><span class="text-muted">AI cost of this run</span><strong>${{ '%.2f'|format(cost) }}</strong></div>
         <div class="d-flex justify-content-between"><span class="text-muted">API calls · web searches</span><span>{{ calls }} · {{ searches }}</span></div>
-        <div class="text-muted mt-2">Charged to your organisation's AI usage. Photos keep the page they were found on; check you may use them before publishing.</div>
+        <div class="text-muted mt-2">{% if kind.platform %}A platform cost (the "Platform agents" line on AI Usage). Photos keep the page they were found on and any licence it states; check each licence before approving.{% else %}Charged to your organisation's AI usage. Photos keep the page they were found on; check you may use them before publishing.{% endif %}</div>
       </div>
     </div>
   </div>

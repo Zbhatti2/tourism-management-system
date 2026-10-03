@@ -137,6 +137,27 @@
   </div>
 
   <div class="col-md-6">
+    <div class="card shadow-sm border-0 h-100" id="poi-image-updates">
+      <div class="card-body">
+        <h2 class="h5"><i class="bi bi-images"></i> Platform POI images</h2>
+        <p class="text-muted small">Your Points of Interest inherit images from the platform's Master Image Catalog. When TMS adds, re-captions or removes a master image:</p>
+        <form method="post" action="{{ url_for('system_mgmt.update_poi_image_updates') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% for k, label in poi_image_policies.items() %}
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="poi_image_updates" id="piu_{{ k }}" value="{{ k }}" {{ 'checked' if poi_image_policy == k else '' }}>
+            <label class="form-check-label small" for="piu_{{ k }}"><strong>{{ label }}</strong>
+              {% if k == 'auto' %}— applied straight away (captions you edited are kept){% elif k == 'review' %}— each change waits for you to Accept or Skip{% else %}— your images never change after the first inheritance{% endif %}</label>
+          </div>
+          {% endfor %}
+          <button class="btn btn-outline-primary btn-sm mt-2" type="submit">Save</button>
+          {% if poi_image_pending %}<a class="btn btn-link btn-sm mt-2" href="{{ url_for('images.platform_updates') }}">{{ poi_image_pending }} update{{ 's' if poi_image_pending != 1 }} waiting</a>{% endif %}
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
     <div class="card shadow-sm border-0 h-100">
       <div class="card-body">
         <h2 class="h5"><i class="bi bi-building-gear"></i> Host Organization</h2>

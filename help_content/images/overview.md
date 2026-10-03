@@ -5,7 +5,9 @@ keywords: [images, photos, photographs, album, catalog, zip, import, curate, hot
 ---
 Every Hotel, Resort and Restaurant has an **Images Catalog**: a curated
 photo album you can browse as a slider or as a list. Open it with the
-**Images Catalog** button on the supplier's page.
+**Images Catalog** button on the supplier's page. **View Images** at the
+top of the page opens it to browse only. Points of Interest have the same
+kind of album; see *Point of Interest images*.
 
 ## Adding photos
 
@@ -57,9 +59,6 @@ unticked** and **Discard upload** drop what you don't want.
 - **Search** finds Title, Description or Date (for example `2026-05`).
   **From** and **To** limit the dates, and **Order** sorts by album
   order, date or title.
-
-An **AI Agent** that collects photos from the web will feed the same
-curation step. Its photos show where they were found.
 
 ## Finding photos with AI
 

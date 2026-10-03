@@ -64,7 +64,7 @@ CATALOGS = {
             ("video_url", "Video URL", "url", {}),
         ],
         "list": [("poi_type_label", "Type"), ("city_label", "City"), ("country_label", "Country")],
-        "references": [("tenant_catalog_links", "catalog_id", "entity = 'pois'")],
+        "references": [("tenant_catalog_links", "catalog_id", "entity = 'pois'"), ("platform_poi_images", "poi_id")],
     },
     "accommodation": {
         "table": "platform_accommodation", "pk": "accommodation_id", "label": "Accommodation",

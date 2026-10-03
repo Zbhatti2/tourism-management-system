@@ -135,8 +135,13 @@ def list_records(entity):
 def view_record(entity, rid):
     spec = _spec(entity)
     db = get_db()
+    master_images = None
+    if entity == "pois":
+        master_images = db.execute("SELECT COUNT(*) FROM platform_poi_images WHERE poi_id = ? AND is_active = 1",
+                                   (rid,)).fetchone()[0]
     return render_template("platform_catalog/view.html", entity=entity, spec=spec, row=_get(db, spec, rid),
-                           fields=all_fields(spec), alt_names=split_alt_names(_get(db, spec, rid)["alt_names"]))
+                           fields=all_fields(spec), alt_names=split_alt_names(_get(db, spec, rid)["alt_names"]),
+                           master_images=master_images)
 
 
 # ---- add / edit -------------------------------------------------------------------

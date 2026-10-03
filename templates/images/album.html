@@ -1,30 +1,38 @@
 {% extends "base.html" %}
-{% block title %}Images Catalog — {{ supplier.supplier_name }}{% endblock %}
+{% set catalog_name = 'Master Image Catalog' if kind.platform else 'Images Catalog' %}
+{% block title %}{{ catalog_name }} — {{ owner.name }}{% endblock %}
 {% block content %}
-<nav class="mb-2"><a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier.supplier_id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ supplier.supplier_name }}</a></nav>
+<nav class="mb-2"><a href="{{ page_url }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> {{ owner.name }}</a></nav>
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <div class="text-uppercase small text-muted fw-semibold">Images Catalog</div>
-    <h1 class="h3 mb-0">{{ supplier.supplier_name }}</h1>
-    <div class="small text-muted">{% if supplier.type_label %}{{ supplier.type_label }} · {% endif %}{{ total }} image{{ 's' if total != 1 }}{% if images|length != total %} · {{ images|length }} shown{% endif %}</div>
+    <div class="text-uppercase small text-muted fw-semibold">{{ catalog_name }}{% if readonly %} <span class="badge bg-light text-muted border ms-1">View only</span>{% endif %}</div>
+    <h1 class="h3 mb-0">{{ owner.name }}</h1>
+    <div class="small text-muted">{% if owner.type_label %}{{ owner.type_label }} · {% endif %}{{ total }} image{{ 's' if total != 1 }}{% if images|length != total %} · {{ images|length }} shown{% endif %}
+      {% if kind.platform %} · tenants inherit these images{% elif kind.key == 'poi' and linked %} · includes images from the platform's Master Image Catalog{% endif %}</div>
   </div>
+  {% if not readonly %}
   <div class="d-flex gap-2 align-items-start">
-    {% if has_album %}
+    {% if owner.has_collector %}
     <details class="position-relative">
       <summary class="btn btn-outline-primary list-unstyled" title="AI Image Collector: finds photos on the official website and similar pages"><i class="bi bi-stars"></i> Find photos with AI</summary>
       <div class="card shadow position-absolute end-0 mt-1 p-3 small" style="width: 300px; z-index: 10;">
-        <p class="mb-2">Search the web for photos of <strong>{{ supplier.supplier_name }}</strong>? This uses your organisation's AI allowance (typically around 10 cents per hotel). Nothing is added until you curate it.</p>
-        <form method="post" action="{{ url_for('images.collect_for_supplier', supplier_id=supplier.supplier_id) }}">
+        {% if kind.platform %}
+        <p class="mb-2">Search the web (official site, tourism boards, Wikimedia Commons) for photos of <strong>{{ owner.name }}</strong>? This is a platform AI cost (typically around 10 cents per POI). Nothing is added until you curate it.</p>
+        {% else %}
+        <p class="mb-2">Search the web for photos of <strong>{{ owner.name }}</strong>? This uses your organisation's AI allowance (typically around 10 cents per hotel). Nothing is added until you curate it.</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('images.collect_for_owner', kind=kind.key, owner_id=owner.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-stars"></i> Start</button>
         </form>
       </div>
     </details>
     {% endif %}
-    <a href="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add images</a>
+    <a href="{{ url_for('images.add_images', kind=kind.key, owner_id=owner.id) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add images</a>
   </div>
+  {% endif %}
 </div>
-{% if last_run %}
+{% if last_run and not readonly %}
 <div class="small text-muted mb-2">AI Image Collector last ran {{ last_run.created_at[:16] }}:
   {% if last_run.status in ('queued', 'running') %}<a href="{{ url_for('images.agent_run', run_id=last_run.run_id) }}">still working…</a>
   {% elif last_run.status == 'failed' %}<a href="{{ url_for('images.agent_run', run_id=last_run.run_id) }}">failed</a>
@@ -32,14 +40,19 @@
 </div>
 {% endif %}
 
-{% for p in pending %}
-<div class="alert alert-warning small py-2">{{ p.n }} image{{ 's' if p.n != 1 }} for this {{ (supplier.type_label or 'supplier')|lower }} {{ 'are' if p.n != 1 else 'is' }} waiting to be curated.
+{% for p in pending if not readonly %}
+<div class="alert alert-warning small py-2">{{ p.n }} image{{ 's' if p.n != 1 }} for this {{ (owner.type_label or kind.owner_word)|lower }} {{ 'are' if p.n != 1 else 'is' }} waiting to be curated.
   <a href="{{ url_for('images.curate', batch_id=p.batch_id) }}" class="alert-link">Curate upload #{{ p.batch_id }}</a></div>
 {% endfor %}
+{% if updates and not readonly %}
+<div class="alert alert-info small py-2"><i class="bi bi-cloud-download"></i> {{ updates|length }} update{{ 's' if updates|length != 1 }} from the platform's Master Image Catalog {{ 'are' if updates|length != 1 else 'is' }} waiting for your review.
+  <a href="{{ url_for('images.platform_updates', poi=owner.id) }}" class="alert-link">Review</a></div>
+{% endif %}
 
 <form method="get" class="card shadow-sm border-0 mb-3">
   <div class="card-body py-2 d-flex flex-wrap gap-2 align-items-end">
     <input type="hidden" name="view" value="{{ view }}">
+    {% if readonly %}<input type="hidden" name="mode" value="view">{% endif %}
     <div class="flex-grow-1" style="min-width: 220px;">
       <label class="form-label small text-muted mb-0">Search</label>
       <input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Title, description or date (e.g. 2026-05)">
@@ -51,17 +64,19 @@
         {% for k, label in sorts.items() %}<option value="{{ k }}" {{ 'selected' if sort == k else '' }}>{{ label }}</option>{% endfor %}
       </select></div>
     <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-search"></i> Search</button>
-    {% if q or date_from or date_to %}<a class="btn btn-sm btn-link" href="{{ url_for('images.album', supplier_id=supplier.supplier_id, view=view, sort=sort) }}">Clear</a>{% endif %}
+    {% if q or date_from or date_to %}<a class="btn btn-sm btn-link" href="{{ url_for('images.album', kind=kind.key, owner_id=owner.id, view=view, sort=sort, mode='view' if readonly else None) }}">Clear</a>{% endif %}
+    {% if not readonly %}
     <div class="btn-group btn-group-sm ms-auto" role="group">
-      <a class="btn {{ 'btn-secondary' if view != 'list' else 'btn-outline-secondary' }}" href="{{ url_for('images.album', supplier_id=supplier.supplier_id, view='slider', q=q or None, sort=sort, **{'from': date_from or None, 'to': date_to or None}) }}"><i class="bi bi-images"></i> Album</a>
-      <a class="btn {{ 'btn-secondary' if view == 'list' else 'btn-outline-secondary' }}" href="{{ url_for('images.album', supplier_id=supplier.supplier_id, view='list', q=q or None, sort=sort, **{'from': date_from or None, 'to': date_to or None}) }}"><i class="bi bi-list-ul"></i> List</a>
+      <a class="btn {{ 'btn-secondary' if view != 'list' else 'btn-outline-secondary' }}" href="{{ url_for('images.album', kind=kind.key, owner_id=owner.id, view='slider', q=q or None, sort=sort, **{'from': date_from or None, 'to': date_to or None}) }}"><i class="bi bi-images"></i> Album</a>
+      <a class="btn {{ 'btn-secondary' if view == 'list' else 'btn-outline-secondary' }}" href="{{ url_for('images.album', kind=kind.key, owner_id=owner.id, view='list', q=q or None, sort=sort, **{'from': date_from or None, 'to': date_to or None}) }}"><i class="bi bi-list-ul"></i> List</a>
     </div>
+    {% endif %}
   </div>
 </form>
 
 {% if not images %}
 <div class="card shadow-sm border-0"><div class="card-body text-center text-muted py-5">
-  {% if total %}No images match this search.{% else %}No images yet. <a href="{{ url_for('images.add_to_supplier', supplier_id=supplier.supplier_id) }}">Add the first ones</a>.{% endif %}
+  {% if total %}No images match this search.{% elif readonly %}No images yet.{% else %}No images yet. <a href="{{ url_for('images.add_images', kind=kind.key, owner_id=owner.id) }}">Add the first ones</a>.{% endif %}
 </div></div>
 
 {% elif view != 'list' %}
@@ -69,10 +84,10 @@
   <div id="album" class="carousel slide bg-dark" data-bs-ride="false" data-bs-interval="false">
     <div class="carousel-inner">
       {% for im in images %}
+      {% set full = url_for('images.album_image', kind=kind.key, owner_id=owner.id, image_id=im.image_id, size='full') %}
       <div class="carousel-item {{ 'active' if loop.first else '' }}" style="height: 520px;">
-        <a href="{{ url_for('images.album_image', supplier_id=supplier.supplier_id, document_id=im.supplier_document_id, kind='full') }}" target="_blank" class="d-flex h-100 align-items-center justify-content-center">
-          <img {{ 'src' if loop.index <= 2 else 'data-src' }}="{{ url_for('images.album_image', supplier_id=supplier.supplier_id, document_id=im.supplier_document_id, kind='full') }}"
-               alt="{{ im.document_name }}" style="max-height: 520px; max-width: 100%; object-fit: contain;">
+        <a href="{{ full }}" target="_blank" class="d-flex h-100 align-items-center justify-content-center">
+          <img {{ 'src' if loop.index <= 2 else 'data-src' }}="{{ full }}" alt="{{ im.title }}" style="max-height: 520px; max-width: 100%; object-fit: contain;">
         </a>
       </div>
       {% endfor %}
@@ -86,19 +101,19 @@
     {% for im in images %}
     <div class="js-caption {{ '' if loop.first else 'd-none' }}">
       <div class="d-flex justify-content-between align-items-baseline gap-2">
-        <div class="fw-semibold">{{ im.document_name }}</div>
+        <div class="fw-semibold">{{ im.title }}{% if im.inherited %} <span class="badge bg-info-subtle text-info-emphasis fw-normal" title="From the platform's Master Image Catalog">Platform</span>{% endif %}</div>
         <div class="small text-muted text-nowrap">{{ loop.index }} / {{ images|length }}</div>
       </div>
       {% if im.description %}<div class="small">{{ im.description }}</div>{% endif %}
-      <div class="small text-muted">{{ im.shown_date }}{% if im.authors %} · {{ im.authors }}{% endif %}{% if im.source == 'AI Agent' %} · found by AI Agent{% endif %}{% if im.source_url %} · <a href="{{ im.source_url }}" target="_blank" rel="noopener">source</a>{% endif %}</div>
+      <div class="small text-muted">{{ im.shown_date }}{% if im.authors %} · {{ im.authors }}{% endif %}{% if im.licence and im.licence != im.authors %} · {{ im.licence }}{% endif %}{% if im.source == 'AI Agent' %} · found by AI Agent{% endif %}{% if im.source_url %} · <a href="{{ im.source_url }}" target="_blank" rel="noopener">source</a>{% endif %}</div>
     </div>
     {% endfor %}
   </div>
   {% if images|length > 1 %}
   <div class="d-flex gap-2 overflow-auto px-3 pb-3" id="strip">
     {% for im in images %}
-    <button type="button" class="btn p-0 border-0 flex-shrink-0 js-thumb {{ 'opacity-100' if loop.first else 'opacity-50' }}" data-bs-target="#album" data-bs-slide-to="{{ loop.index0 }}" title="{{ im.document_name }}">
-      <img src="{{ url_for('images.album_image', supplier_id=supplier.supplier_id, document_id=im.supplier_document_id, kind='thumb') }}" alt="" width="96" height="64" class="rounded" style="object-fit: cover;" loading="lazy">
+    <button type="button" class="btn p-0 border-0 flex-shrink-0 js-thumb {{ 'opacity-100' if loop.first else 'opacity-50' }}" data-bs-target="#album" data-bs-slide-to="{{ loop.index0 }}" title="{{ im.title }}">
+      <img src="{{ url_for('images.album_image', kind=kind.key, owner_id=owner.id, image_id=im.image_id, size='thumb') }}" alt="" width="96" height="64" class="rounded" style="object-fit: cover;" loading="lazy">
     </button>
     {% endfor %}
   </div>
@@ -106,26 +121,28 @@
 </div>
 
 {% else %}
-<form method="post" action="{{ url_for('images.save_album', supplier_id=supplier.supplier_id) }}">
+<form method="post" action="{{ url_for('images.save_album', kind=kind.key, owner_id=owner.id) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="sort" value="{{ sort }}">
   <div class="card shadow-sm border-0">
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
         <thead><tr><th style="width: 30px;"><input class="form-check-input" type="checkbox" id="sel-all"></th><th style="width: 110px;"></th>
-          <th>Title</th><th>Description</th><th style="width: 150px;">Date</th><th style="width: 90px;">Sort order</th></tr></thead>
+          <th>Title</th><th>Description</th>{% if kind.platform %}<th style="width: 200px;">Licence / credit</th>{% endif %}<th style="width: 150px;">Date</th><th style="width: 90px;">Sort order</th></tr></thead>
         <tbody>
           {% for im in images %}
+          {% set iid = im.image_id %}
           <tr>
-            <td><input type="hidden" name="ids" value="{{ im.supplier_document_id }}">
-              <input class="form-check-input js-sel" type="checkbox" name="selected" value="{{ im.supplier_document_id }}"></td>
-            <td><a href="{{ url_for('images.album_image', supplier_id=supplier.supplier_id, document_id=im.supplier_document_id, kind='full') }}" target="_blank">
-              <img src="{{ url_for('images.album_image', supplier_id=supplier.supplier_id, document_id=im.supplier_document_id, kind='thumb') }}" alt="" width="100" height="66" class="rounded" style="object-fit: cover;" loading="lazy"></a></td>
-            <td><input class="form-control form-control-sm" name="title_{{ im.supplier_document_id }}" value="{{ im.document_name }}" maxlength="150" required>
-              <div class="small text-muted mt-1">{% if im.authors %}{{ im.authors }} · {% endif %}{{ im.source or 'Added by hand' }}{% if im.keywords %} · {{ im.keywords }}{% endif %}</div></td>
-            <td><textarea class="form-control form-control-sm" name="description_{{ im.supplier_document_id }}" rows="2" maxlength="{{ max_desc }}">{{ im.description or '' }}</textarea></td>
-            <td><input class="form-control form-control-sm" type="date" name="date_{{ im.supplier_document_id }}" value="{{ im.image_date or im.shown_date }}"></td>
-            <td><input class="form-control form-control-sm js-sort" type="number" min="0" name="sort_{{ im.supplier_document_id }}" value="{{ im.sort_order or '' }}"></td>
+            <td><input type="hidden" name="ids" value="{{ iid }}">
+              <input class="form-check-input js-sel" type="checkbox" name="selected" value="{{ iid }}"></td>
+            <td><a href="{{ url_for('images.album_image', kind=kind.key, owner_id=owner.id, image_id=iid, size='full') }}" target="_blank">
+              <img src="{{ url_for('images.album_image', kind=kind.key, owner_id=owner.id, image_id=iid, size='thumb') }}" alt="" width="100" height="66" class="rounded" style="object-fit: cover;" loading="lazy"></a></td>
+            <td><input class="form-control form-control-sm" name="title_{{ iid }}" value="{{ im.title }}" maxlength="150" required>
+              <div class="small text-muted mt-1">{% if im.inherited %}<span class="badge bg-info-subtle text-info-emphasis">Platform</span> {% endif %}{% if im.authors %}{{ im.authors }} · {% endif %}{{ im.source or 'Added by hand' }}{% if im.keywords %} · {{ im.keywords }}{% endif %}</div></td>
+            <td><textarea class="form-control form-control-sm" name="description_{{ iid }}" rows="2" maxlength="{{ max_desc }}">{{ im.description or '' }}</textarea></td>
+            {% if kind.platform %}<td><input class="form-control form-control-sm" name="licence_{{ iid }}" value="{{ im.licence or '' }}" maxlength="200"></td>{% endif %}
+            <td><input class="form-control form-control-sm" type="date" name="date_{{ iid }}" value="{{ im.image_date or im.shown_date }}"></td>
+            <td><input class="form-control form-control-sm js-sort" type="number" min="0" name="sort_{{ iid }}" value="{{ im.sort_order or '' }}"></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -134,7 +151,13 @@
     <div class="card-footer bg-white d-flex flex-wrap gap-2 align-items-center">
       <button class="btn btn-primary btn-sm" type="submit" name="action" value="save"><i class="bi bi-check2"></i> Save changes</button>
       <button class="btn btn-outline-secondary btn-sm" type="button" id="renumber" title="Set Sort order 1, 2, 3 … in the order shown">Number in the order shown</button>
-      <button class="btn btn-outline-danger btn-sm ms-auto" type="submit" name="action" value="delete" onclick="return confirm('Delete the ticked images from this album?');"><i class="bi bi-trash"></i> Delete ticked</button>
+      <details class="d-inline-block position-relative ms-auto">
+        <summary class="btn btn-outline-danger btn-sm list-unstyled"><i class="bi bi-trash"></i> Delete ticked</summary>
+        <div class="card shadow position-absolute end-0 bottom-100 mb-1 p-2 small" style="width: 280px; z-index: 10;">
+          <p class="mb-2">{% if kind.platform %}Remove the ticked images from the Master Image Catalog? Tenants that have them keep or lose them according to their update setting.{% else %}Delete the ticked images from this album?{% endif %}</p>
+          <button class="btn btn-sm btn-danger" type="submit" name="action" value="delete">Delete</button>
+        </div>
+      </details>
     </div>
   </div>
 </form>
