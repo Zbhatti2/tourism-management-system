@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}New tour plan{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('tour_planner.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Tour Planner</a></nav>
+<h1 class="h3 mb-1">New tour plan</h1>
+<p class="text-muted small mb-3">Paste the request as you received it (or as you'd write it to a colleague). The agent reads it into a Tour Brief and lists what it needs to ask. You can also start with an empty brief.</p>
+<form method="post" class="card shadow-sm border-0" style="max-width: 860px;">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3"><label class="form-label fw-semibold">Tour name</label>
+      <input class="form-control" name="name" placeholder="e.g. Karakoram Tour"></div>
+    <div class="mb-2"><label class="form-label fw-semibold">Request</label>
+      <textarea class="form-control" name="request_text" rows="12" placeholder="Group of 24 from Islamabad to Kashgar and back, 4-star, assembling 15 March 2027. 3 couples from Sydney, 2 couples from Los Angeles, 4 individuals from London (single rooms), 5 couples from New York…"></textarea></div>
+    <div class="form-text mb-3">Reading the request is one AI call (about 1–2 cents), charged to your organisation's AI usage.
+      {% if allowance.limit is not none %}This month: ${{ '%.2f'|format(allowance.spent) }} of ${{ '%.2f'|format(allowance.limit) }} used.{% endif %}</div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-end">
+    <button class="btn btn-outline-secondary" type="submit" name="action" value="blank">Start with an empty brief</button>
+    <button class="btn btn-primary" type="submit" name="action" value="fill"><i class="bi bi-stars"></i> Read the request into a brief</button>
+  </div>
+</form>
+{% endblock %}

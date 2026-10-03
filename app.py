@@ -175,6 +175,7 @@ def create_app():
     from blueprints.currency_admin import currency_admin_bp
     from blueprints.help import help_bp
     from blueprints.ai_agents import ai_agents_bp
+    from blueprints.tour_planner import tour_planner_bp
     from blueprints.users import users_bp
     from blueprints.tenants_admin import tenants_admin_bp
     from blueprints.platform_lookups import platform_lookups_bp
@@ -203,6 +204,7 @@ def create_app():
     app.register_blueprint(products_bp, url_prefix="/inventory/products")
     app.register_blueprint(packages_bp, url_prefix="/packages")
     app.register_blueprint(ai_agents_bp, url_prefix="/ai-agents")
+    app.register_blueprint(tour_planner_bp, url_prefix="/tour-planner")
     app.register_blueprint(billing_ar_bp, url_prefix="/accounting/billing-ar")
     app.register_blueprint(purchasing_ap_bp, url_prefix="/accounting/purchasing-ap")
     app.register_blueprint(accounts_gl_bp, url_prefix="/accounting/accounts-gl")

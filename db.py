@@ -809,6 +809,14 @@ def _migration_pdf_poi_agent(db):
     db.commit()
 
 
+def _migration_tour_planner(db):
+    """Tour Planner (tour_planner.py): tour_plans, their stages and the
+    agent's runs."""
+    import tour_planner
+    db.executescript(tour_planner.DDL)
+    db.commit()
+
+
 # Append-only. Each entry is (unique_name, function(db)). Never edit or remove
 # a shipped entry -- add a new one for any further change.
 MIGRATIONS = [
@@ -836,6 +844,7 @@ MIGRATIONS = [
     ("2026_10_agent_run_progress", _migration_agent_run_progress),
     ("2026_10_supplier_groups", _migration_supplier_groups),
     ("2026_10_pdf_poi_agent", _migration_pdf_poi_agent),
+    ("2026_10_tour_planner", _migration_tour_planner),
 ]
 
 
