@@ -8,6 +8,80 @@ body {
   background-color: #f3f4f6;
 }
 
+/* ---------------------------------------------------------------------------
+   Platform vs Tenant palettes (Zeb, Oct 2026): the SystemAdmin's platform
+   screens (body.theme-platform) use plum and amber, so they can never be
+   mistaken for a tenant's screens (body.theme-tenant: the navy and blue
+   above). Everything that reads --pims-* or Bootstrap's primary colour
+   follows the theme.
+   --------------------------------------------------------------------------- */
+body.theme-platform {
+  --pims-navy: #2e1a47;
+  --pims-navy-dark: #1f1033;
+  --pims-accent: #b7791f;
+  --plat-primary: #6a3fb5;
+  --plat-primary-dark: #55309a;
+  --bs-primary: #6a3fb5;
+  --bs-primary-rgb: 106, 63, 181;
+  --bs-primary-text-emphasis: #3f2370;
+  --bs-primary-bg-subtle: #ece4f8;
+  --bs-primary-border-subtle: #cdb8ee;
+  --bs-link-color: #6a3fb5;
+  --bs-link-color-rgb: 106, 63, 181;
+  --bs-link-hover-color: #4a2a85;
+  --bs-link-hover-color-rgb: 74, 42, 133;
+  --bs-focus-ring-color: rgba(106, 63, 181, .25);
+  background-color: #f5f3f8;
+}
+.theme-platform .btn-primary {
+  --bs-btn-bg: var(--plat-primary);
+  --bs-btn-border-color: var(--plat-primary);
+  --bs-btn-hover-bg: var(--plat-primary-dark);
+  --bs-btn-hover-border-color: var(--plat-primary-dark);
+  --bs-btn-active-bg: var(--plat-primary-dark);
+  --bs-btn-active-border-color: var(--plat-primary-dark);
+  --bs-btn-disabled-bg: var(--plat-primary);
+  --bs-btn-disabled-border-color: var(--plat-primary);
+}
+.theme-platform .btn-outline-primary {
+  --bs-btn-color: var(--plat-primary);
+  --bs-btn-border-color: var(--plat-primary);
+  --bs-btn-hover-bg: var(--plat-primary);
+  --bs-btn-hover-border-color: var(--plat-primary);
+  --bs-btn-active-bg: var(--plat-primary-dark);
+  --bs-btn-active-border-color: var(--plat-primary-dark);
+  --bs-btn-disabled-color: var(--plat-primary);
+  --bs-btn-disabled-border-color: var(--plat-primary);
+}
+.theme-platform .btn-link { --bs-btn-color: var(--plat-primary); --bs-btn-hover-color: var(--plat-primary-dark); }
+.theme-platform .nav-pills { --bs-nav-pills-link-active-bg: var(--plat-primary); }
+.theme-platform .nav-link { --bs-nav-link-color: var(--plat-primary); --bs-nav-link-hover-color: var(--plat-primary-dark); }
+.theme-platform .form-check-input:checked { background-color: var(--plat-primary); border-color: var(--plat-primary); }
+.theme-platform .form-control:focus, .theme-platform .form-select:focus, .theme-platform .form-check-input:focus {
+  border-color: #b49ae0;
+  box-shadow: 0 0 0 .25rem rgba(106, 63, 181, .25);
+}
+.theme-platform .progress, .theme-platform .progress-stacked { --bs-progress-bar-bg: var(--plat-primary); }
+.theme-platform .pagination { --bs-pagination-color: var(--plat-primary); --bs-pagination-active-bg: var(--plat-primary); --bs-pagination-active-border-color: var(--plat-primary); }
+.theme-platform .text-primary { color: var(--plat-primary) !important; }
+.theme-platform .bg-primary { background-color: var(--plat-primary) !important; }
+.theme-platform .border-primary { border-color: var(--plat-primary) !important; }
+.theme-platform .pims-sidebar .nav-link.active { background-color: #f0c36a; color: #1f1033; font-weight: 600; }
+.theme-platform .pims-sidebar .nav-link.active i { color: #1f1033; }
+/* A thin amber band along the top of every platform screen. */
+.theme-platform #app-shell { border-top: 4px solid var(--pims-accent); }
+.platform-badge {
+  display: inline-block;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #2e1a47;
+  background: #f0c36a;
+  border-radius: .25rem;
+  padding: .1rem .45rem;
+}
+
 #app-shell {
   min-height: 100vh;
 }

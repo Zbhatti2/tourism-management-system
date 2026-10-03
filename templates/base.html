@@ -9,7 +9,7 @@
   <link href="{{ url_for('static', filename='css/custom.css') }}" rel="stylesheet">
   {% block head %}{% endblock %}
 </head>
-<body>
+<body class="{{ 'theme-platform' if g.get('role') == 'SystemAdmin' else 'theme-tenant' }}">
 {% if session.get('auth_token') %}
 {# Persistent top-right corner of the shell, present on every signed-in
    page. Opens the in-app contextual help drawer (see _help_drawer.html /
@@ -38,7 +38,7 @@
     {% elif g.role == 'SystemAdmin' %}
     {# The SystemAdmin belongs to no tenant -- "TMS System Admin" fills the
        tenant-name spot so it's clear this is the platform level. #}
-    <div class="small text-white-50 mb-3">TMS System Admin</div>
+    <div class="mb-3"><span class="platform-badge"><i class="bi bi-shield-lock"></i> TMS Platform</span> <span class="small text-white-50">System Admin</span></div>
     {% endif %}
     <ul class="nav nav-pills flex-column mb-auto">
       {% for m in modules %}
