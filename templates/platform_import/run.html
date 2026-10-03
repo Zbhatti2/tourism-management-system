@@ -17,6 +17,14 @@
   {% endif %}
 </div>
 
+{% set cols = options.get('columns') or {} %}
+{% if cols.get('ignored') %}
+<div class="alert alert-warning small py-2"><strong>Columns not imported:</strong> {{ cols.ignored|join(', ') }}.
+  They don't match a column of the {{ spec.label }} template, so their contents are left out. Rename them to a template heading (or put the text under Notes) and upload again.</div>
+{% endif %}
+{% if cols.get('renamed') %}
+<div class="alert alert-light border small py-2"><strong>Read under template names:</strong> {{ cols.renamed|join('; ') }}.</div>
+{% endif %}
 {% if result_counts %}
 <div class="alert alert-success small py-2">Result: {% for k, v in result_counts.items() if v %}<strong>{{ v }}</strong> {{ k }}{{ ', ' if not loop.last }}{% endfor %}.</div>
 {% endif %}
