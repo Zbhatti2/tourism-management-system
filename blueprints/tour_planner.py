@@ -248,8 +248,13 @@ def edit_stage(plan_id, key):
         abort(404)
     if key == "route":
         keep = set(request.form.getlist("poi"))
+        before = [bool(p.get("include")) for p in data.get("pois") or []]
         for i, p in enumerate(data.get("pois") or []):
             p["include"] = str(i) in keep
+        if before == [p["include"] for p in data.get("pois") or []]:
+            flash("No changes to the points of interest.", "info")
+            back = request.form.get("back") if request.form.get("back") in tp.STAGE_KEYS else key
+            return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=back))
     elif key == "checkpoints":
         for i, cp in enumerate(data.get("checkpoints") or []):
             v = request.form.get(f"nights_{i}")

@@ -45,11 +45,14 @@
 {% endmacro %}
 {% macro src(s) %}{% if s and s.startswith('http') %}<a href="{{ s }}" target="_blank" rel="noopener">{{ s.split('/')[2] }}</a>{% else %}{{ s or '' }}{% endif %}{% endmacro %}
 
-{% macro criteria_form(open, back='checkpoints') %}
-        <details class="card shadow-sm border-0 mb-3" {{ 'open' if open else '' }}>
-          <summary class="card-header bg-white small fw-semibold">Checkpoint criteria <span class="fw-normal text-muted">— what makes a city a good overnight stop for this tour</span></summary>
-          <form class="card-body" method="post" action="{{ url_for('tour_planner.save_criteria', plan_id=plan.plan_id) }}">
+{% macro criteria_modal(back) %}
+<div class="modal fade" id="criteriaModal" tabindex="-1" aria-labelledby="criteriaModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-header"><h2 class="modal-title h5" id="criteriaModalLabel"><i class="bi bi-moon-stars"></i> Checkpoint criteria</h2>
+      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+          <form method="post" action="{{ url_for('tour_planner.save_criteria', plan_id=plan.plan_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="{{ back }}">
+            <div class="modal-body"><p class="small text-muted">What makes a city a good overnight stop for this tour. The agent applies these when it chooses the checkpoints.</p>
             <div class="row g-2 small">
               <div class="col-md-3"><label class="form-label small text-muted mb-0">Max km from the last checkpoint</label><input class="form-control form-control-sm" type="number" min="0" name="max_km" value="{{ criteria.max_km if criteria.max_km is not none else '' }}" placeholder="no limit"></div>
               <div class="col-md-3"><label class="form-label small text-muted mb-0">Min km between checkpoints</label><input class="form-control form-control-sm" type="number" min="0" name="min_km" value="{{ criteria.min_km if criteria.min_km is not none else '' }}" placeholder="none"></div>
@@ -61,11 +64,29 @@
               <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="prefer_flagged" id="pf" {{ 'checked' if criteria.prefer_flagged else '' }}><label class="form-check-label" for="pf">Prefer cities TMS already flags as overnight checkpoints</label></div>
                 <div class="text-muted">The agent can still pick a city TMS doesn't flag; when you approve, those are suggested to TMS for flagging.</div></div>
             </div>
-            <div class="mt-2"><button class="btn btn-sm btn-primary" type="submit">Save criteria</button>
-              {% if stages.checkpoints.data %}<span class="small text-muted ms-2">Saving clears the checkpoints and later stages; then run the agent again.</span>{% else %}<span class="small text-muted ms-2">Used when the agent chooses the checkpoints (next stage).</span>{% endif %}</div>
+            </div>
+            <div class="modal-footer">{% if stages.checkpoints.data %}<span class="small text-muted me-auto">Saving clears the checkpoints and later stages; then run the agent again.</span>{% endif %}
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button class="btn btn-sm btn-primary" type="submit">Save criteria</button></div>
           </form>
-        </details>
-      {% endmacro %}
+  </div></div>
+</div>
+{% endmacro %}
+
+{% macro criteria_summary() %}
+{% set cs = [] %}
+{% if criteria.max_km %}{% set _ = cs.append('at most ' ~ criteria.max_km ~ ' km between checkpoints') %}{% endif %}
+{% if criteria.min_km %}{% set _ = cs.append('at least ' ~ criteria.min_km ~ ' km') %}{% endif %}
+{% if criteria.hotel %}{% set _ = cs.append('Hotel: ' ~ criteria.hotel) %}{% endif %}
+{% if criteria.food %}{% set _ = cs.append('Food: ' ~ criteria.food) %}{% endif %}
+{% if criteria.pois %}{% set _ = cs.append('POIs: ' ~ criteria.pois) %}{% endif %}
+{% if criteria.other %}{% set _ = cs.append(criteria.other) %}{% endif %}
+<div class="alert alert-light border small d-flex justify-content-between align-items-start gap-2 mb-3">
+  <div><strong><i class="bi bi-moon-stars"></i> Checkpoint criteria:</strong>
+    {% if cs %}{{ cs|join(' · ') }}{% else %}<span class="text-muted">none set — the agent uses the brief ({{ brief.max_drive_hours or 8 }} h driving a day, {{ brief.standard or 'any' }} hotels for the whole group).</span>{% endif %}</div>
+  <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#criteriaModal">{{ 'Edit' if cs else 'Set' }} criteria</button>
+</div>
+{% endmacro %}
 
 {% block content %}
 <nav class="mb-2"><a href="{{ url_for('tour_planner.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Tour Planner</a></nav>
@@ -76,6 +97,12 @@
     <div class="small text-muted">{{ brief.start_city or '?' }} → {{ brief.destination or '?' }}{% if brief.start_date %} · assembles {{ brief.start_date }}{% endif %}
       · {{ fig.guests }} guests · {{ brief.tour_days }} days · {{ brief.standard }} · AI cost so far ${{ '%.2f'|format(cost) }}</div>
   </div>
+  <div class="d-flex gap-2 align-items-start">
+  {% if key in ('route', 'checkpoints') %}
+    {% set rpois = (stages.route.data or {}).get('pois') or [] %}
+    {% if rpois %}<button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#poiModal"><i class="bi bi-geo-alt"></i> Points of Interest <span class="badge bg-primary-subtle text-primary">{{ rpois|selectattr('include')|list|length }}/{{ rpois|length }}</span></button>{% endif %}
+    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#criteriaModal"><i class="bi bi-moon-stars"></i> Checkpoint Criteria</button>
+  {% endif %}
   <details class="position-relative">
     <summary class="btn btn-sm btn-outline-secondary list-unstyled"><i class="bi bi-archive"></i> Archive</summary>
     <div class="card shadow position-absolute end-0 mt-1 p-2 small" style="width: 240px; z-index: 10;">
@@ -84,6 +111,7 @@
         <button class="btn btn-sm btn-secondary" type="submit">Archive</button></form>
     </div>
   </details>
+  </div>
 </div>
 
 <div class="row g-3">
@@ -264,38 +292,21 @@
         <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Return route</div>
           <div class="card-body small">{% for c in r.return_route %}{{ c.city }}{% if not loop.last %} → {% endif %}{% endfor %}</div></div>
         {% endif %}
-        <form method="post" action="{{ url_for('tour_planner.edit_stage', plan_id=plan.plan_id, key='route') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold d-flex justify-content-between">Points of interest <span class="fw-normal text-muted">tick the ones to plan for</span></div>
-            <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
-              <thead><tr><th></th><th>Place</th><th>Near</th><th>On route?</th><th>Detour (round trip)</th><th>Visit</th></tr></thead>
-              <tbody>{% for p in r.pois %}<tr>
-                <td><input class="form-check-input" type="checkbox" name="poi" value="{{ loop.index0 }}" {{ 'checked' if p.include else '' }}></td>
-                <td><strong>{{ p.name }}</strong>{% if p.major %} <span class="badge bg-primary-subtle text-primary">major</span>{% endif %}{% if p.type %} <span class="text-muted">{{ p.type }}</span>{% endif %}{% if p.why %}<div class="text-muted">{{ p.why }}</div>{% endif %}</td>
-                <td>{{ p.near_city }}</td>
-                <td>{{ 'Yes' if p.on_route else 'Detour' }}</td>
-                <td>{% if not p.on_route %}{{ p.detour_km_round_trip or '?' }} km · {{ hours(p.detour_minutes_round_trip) }}{% endif %}</td>
-                <td>{{ hours(p.visit_minutes) if p.visit_minutes else '' }}</td></tr>{% endfor %}</tbody>
-            </table></div>
-            <div class="card-footer bg-white"><button class="btn btn-sm btn-outline-secondary" type="submit">Save the ticks</button></div>
-          </div>
-        </form>
-        {{ criteria_form(not brief.checkpoint_criteria, 'route') }}
         {{ review_bar() }}
       {% endif %}
 
     {# ------------------------------------------------------------------ checkpoints #}
     {% elif key == 'checkpoints' %}
 
-      {% if not can_run %}<div class="alert alert-light border small">Approve the route first. You can set the checkpoint criteria now.</div>{{ criteria_form(true) }}
-      {% elif st.data is none and st.state != 'working' %}{{ criteria_form(true) }}{{ run_card('Checkpoints and the day budget', "The agent picks the overnight cities (with hotels of your standard on record, and dining), the nights in each, and lays the tour's days out against your maximum driving per day. It tells you if the plan doesn't fit the tour length. Usually 1–2 minutes, about 10–25 cents.") }}
+      {% if not can_run %}<div class="alert alert-light border small">Approve the route first. You can set the checkpoint criteria now.</div>{{ criteria_summary() }}
+      {% elif st.data is none and st.state != 'working' %}{{ criteria_summary() }}{{ run_card('Checkpoints and the day budget', "The agent picks the overnight cities (with hotels of your standard on record, and dining), the nights in each, and lays the tour's days out against your maximum driving per day. It tells you if the plan doesn't fit the tour length. Usually 1–2 minutes, about 10–25 cents.") }}
       {% elif st.data %}
         {% set c = st.data %}
         {% if c.summary %}<p class="mb-2">{{ c.summary }}</p>{% endif %}
         <p class="mb-3">{% if c.fits %}<span class="badge bg-success-subtle text-success">Fits {{ brief.tour_days }} days</span>{% else %}<span class="badge bg-danger-subtle text-danger">Doesn't fit {{ brief.tour_days }} days — see flags</span>{% endif %}
           <span class="small text-muted ms-1">{{ c.days|length }} days planned · {{ c.checkpoints|sum(attribute='nights') }} nights</span></p>
         {{ flags_list(c.flags) }}
-        {{ criteria_form(false) }}
+        {{ criteria_summary() }}
         <form method="post" action="{{ url_for('tour_planner.edit_stage', plan_id=plan.plan_id, key='checkpoints') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Checkpoints (overnight cities)</div>
@@ -463,4 +474,32 @@
     {% endif %}
   </div>
 </div>
+{% if key in ('route', 'checkpoints') and rpois %}
+<div class="modal fade" id="poiModal" tabindex="-1" aria-labelledby="poiModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <form class="w-100" method="post" action="{{ url_for('tour_planner.edit_stage', plan_id=plan.plan_id, key='route') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="{{ key }}">
+          <div class="modal-content">
+            <div class="modal-header"><h2 class="modal-title h5" id="poiModalLabel"><i class="bi bi-geo-alt"></i> Points of interest <span class="small fw-normal text-muted">tick the ones to plan for</span></h2>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body p-0">
+            <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
+              <thead><tr><th></th><th>Place</th><th>Near</th><th>On route?</th><th>Detour (round trip)</th><th>Visit</th></tr></thead>
+              <tbody>{% for p in rpois %}<tr>
+                <td class="ps-3"><input class="form-check-input" type="checkbox" name="poi" value="{{ loop.index0 }}" {{ 'checked' if p.include else '' }}></td>
+                <td><strong>{{ p.name }}</strong>{% if p.major %} <span class="badge bg-primary-subtle text-primary">major</span>{% endif %}{% if p.type %} <span class="text-muted">{{ p.type }}</span>{% endif %}{% if p.why %}<div class="text-muted">{{ p.why }}</div>{% endif %}</td>
+                <td>{{ p.near_city }}</td>
+                <td>{{ 'Yes' if p.on_route else 'Detour' }}</td>
+                <td>{% if not p.on_route %}{{ p.detour_km_round_trip or '?' }} km · {{ hours(p.detour_minutes_round_trip) }}{% endif %}</td>
+                <td>{{ hours(p.visit_minutes) if p.visit_minutes else '' }}</td></tr>{% endfor %}</tbody>
+            </table></div></div>
+            <div class="modal-footer">{% if stages.route.approved_at or stages.checkpoints.data %}<span class="small text-muted me-auto">Changing the ticks reopens the route for approval and clears the checkpoints and later stages.</span>{% endif %}
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button class="btn btn-sm btn-primary" type="submit">Save the ticks</button></div>
+          </div>
+        </form>
+  </div>
+</div>
+{% endif %}
+{% if key in ('route', 'checkpoints') %}{{ criteria_modal(key) }}{% endif %}
 {% endblock %}
