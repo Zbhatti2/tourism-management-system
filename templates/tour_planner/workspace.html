@@ -93,10 +93,26 @@
 
     {# ------------------------------------------------------------------ brief #}
     {% if key == 'brief' %}
-      {% if questions and not st.approved_at %}
-      <div class="alert alert-info small"><strong>The agent needs to know:</strong>
-        <ul class="mb-0">{% for q in questions %}<li>{{ q }}</li>{% endfor %}</ul>
-        <div class="mt-1">Answer in the brief below, or add the answer to the request and read it again.</div></div>
+      {% if questions and not st.approved_at and not (run and run.status in ('queued', 'running')) %}
+      <form method="post" action="{{ url_for('tour_planner.answer_questions', plan_id=plan.plan_id) }}" class="card shadow-sm border-0 mb-3 border-start border-info border-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-body">
+          <h2 class="h6 mb-1"><i class="bi bi-chat-left-dots"></i> The agent has {{ questions|length }} question{{ 's' if questions|length != 1 }} about the request</h2>
+          <p class="small text-muted mb-3">Answer the ones that matter and send them back: the agent reads the request again with your answers and updates the brief. Leave a box empty to skip that question.</p>
+          {% for q in questions %}
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1" for="a_{{ loop.index0 }}">{{ loop.index }}. {{ q }}</label>
+            <input type="hidden" name="q" value="{{ q }}">
+            <textarea class="form-control form-control-sm" id="a_{{ loop.index0 }}" name="a_{{ loop.index0 }}" rows="1"></textarea>
+          </div>
+          {% endfor %}
+          <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+            <button class="btn btn-primary btn-sm" type="submit" name="action" value="answer"><i class="bi bi-send"></i> Send answers to the agent</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" name="action" value="dismiss" formnovalidate>Skip — the brief below is fine</button>
+            <span class="small text-muted">Or fill the answers straight into the brief form.</span>
+          </div>
+        </div>
+      </form>
       {% endif %}
       {% if plan.request_text %}
       <details class="card shadow-sm border-0 mb-3">

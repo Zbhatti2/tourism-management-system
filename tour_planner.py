@@ -582,11 +582,21 @@ BRIEF_TOOL = {"name": "report_brief", "description": "The Tour Brief read from t
                   "required": ["parties", "questions"]}}
 
 
-def parse_request(client, text, meter):
-    prompt = ("A tour operator typed this request for a group tour. Read it into a Tour Brief. Couples share a double "
-              "room; individuals who need their own room get a single. Put only what the request states; leave other "
-              "fields out. List as questions anything a planner would need to ask (missing length, return, dates...).\n\n"
-              f"Request:\n{text}\n\nCall report_brief.")
+def parse_request(client, text, meter, brief=None):
+    current = {k: v for k, v in (brief or {}).items() if v not in (None, "", [])}
+    prompt = (
+        "A tour operator typed this request for a group tour (it may end with their answers to earlier questions). "
+        "Read it into a Tour Brief. Couples share a double room; individuals who need their own room get a single. "
+        "Put only what the request states; leave other fields out.\n\n"
+        "The brief already holds these values (form defaults or the planner's own entries); they stand unless the "
+        f"request says otherwise:\n{json.dumps(current, ensure_ascii=False)}\n\n"
+        "Then list QUESTIONS, but only what blocks planning the route, overnight stops and days, and only when neither "
+        "the request nor the brief above answers it: at most 5, the most important first, each one short and specific. "
+        "Do NOT ask about things later planning stages work out or the brief form already covers -- hotels, budgets, "
+        "currency, vehicle counts and seating, drivers, visas, permits, medical or dietary needs, flights, weather "
+        "contingency -- and never ask again about something answered at the end of the request. No questions is a "
+        "good answer.\n\n"
+        f"Request:\n{text}\n\nCall report_brief.")
     resp = client.messages.create(model=model(), max_tokens=3000, tools=[BRIEF_TOOL],
                                   tool_choice={"type": "tool", "name": "report_brief"},
                                   messages=[{"role": "user", "content": prompt}])
@@ -595,6 +605,26 @@ def parse_request(client, text, meter):
         if getattr(b, "type", None) == "tool_use" and b.name == "report_brief":
             return b.input or {}
     raise PlannerError("The request couldn't be read into a brief.")
+
+
+def add_answers(db, plan_id, pairs):
+    """Append the planner's answers to the agent's questions to the request,
+    so the next reading of it takes them in."""
+    plan = db.execute("SELECT request_text FROM tour_plans WHERE plan_id = ?", (plan_id,)).fetchone()
+    lines = "\n".join(f"Q: {q}\nA: {a}" for q, a in pairs)
+    text = ((plan["request_text"] or "").rstrip() + "\n\nAnswers to the planner's questions:\n" + lines).strip()
+    db.execute("UPDATE tour_plans SET request_text = ?, updated_at = datetime('now') WHERE plan_id = ?", (text, plan_id))
+    db.commit()
+
+
+def dismiss_questions(db, plan_id):
+    run = db.execute("SELECT run_id, result FROM tour_plan_runs WHERE plan_id = ? AND stage_key = 'brief' "
+                     "ORDER BY run_id DESC LIMIT 1", (plan_id,)).fetchone()
+    if run and run["result"]:
+        data = json.loads(run["result"])
+        data["questions"] = []
+        db.execute("UPDATE tour_plan_runs SET result = ? WHERE run_id = ?", (json.dumps(data, ensure_ascii=False), run["run_id"]))
+        db.commit()
 
 
 def merge_brief(brief, found):
@@ -1041,7 +1071,7 @@ def run(db, run_id):
         client = anthropic_client()
         if key == "brief":
             log("Reading the request…")
-            found = parse_request(client, plan["request_text"] or r["instructions"] or "", meter)
+            found = parse_request(client, plan["request_text"] or r["instructions"] or "", meter, brief)
             result = {"brief": merge_brief(brief, found), "questions": found.get("questions") or []}
             if agent_runs.cancelled(db, "tour_plan_runs", run_id):
                 return

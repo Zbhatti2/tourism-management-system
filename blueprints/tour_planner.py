@@ -170,6 +170,36 @@ def save_brief(plan_id):
     return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="brief"))
 
 
+@tour_planner_bp.route("/<int:plan_id>/brief/answers", methods=["POST"])
+@login_required
+def answer_questions(plan_id):
+    """The planner answers the agent's questions about the request; the
+    agent reads the request again with the answers."""
+    _tenant()
+    db = get_db()
+    _plan(db, plan_id)
+    if request.form.get("action") == "dismiss":
+        tp.dismiss_questions(db, plan_id)
+        flash("Questions cleared. Check the brief below and approve it when it's right.", "success")
+        return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="brief"))
+    pairs = []
+    for i, q in enumerate(request.form.getlist("q")):
+        a = (request.form.get(f"a_{i}") or "").strip()
+        if a:
+            pairs.append((q, a))
+    if not pairs:
+        flash("Type an answer to at least one question, or click Skip.", "error")
+        return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="brief"))
+    tp.add_answers(db, plan_id, pairs)
+    try:
+        tp.start_run(db, g.tenant_id, g.user_id, plan_id, "brief")
+    except tp.PlannerError as e:
+        flash(f"Your answers were saved with the request, but the agent couldn't read them yet: {e}", "error")
+    else:
+        log_action("TourPlanner", "tour_plans", plan_id, f"Answered {len(pairs)} Tour Planner question(s)")
+    return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="brief"))
+
+
 @tour_planner_bp.route("/<int:plan_id>/stage/<key>/run", methods=["POST"])
 @login_required
 def run_stage(plan_id, key):
