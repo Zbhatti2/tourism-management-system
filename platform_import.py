@@ -200,6 +200,70 @@ def _header(h):
     return re.sub(r"\s*\*\s*$", "", str(h or "")).strip()
 
 
+def _hkey(h):
+    """Heading compared loosely: case, '*', punctuation and spacing ignored
+    ('Address/Landmark', 'address landmark *' -> 'address landmark')."""
+    return re.sub(r"[^a-z0-9]+", " ", _header(h).lower()).strip()
+
+
+# Other headings people use for a template column (compared with _hkey).
+# '@name' is the entity's own name column; '@coords' is a single
+# "lat, long" column that is split into Latitude and Longitude.
+HEADER_ALIASES = {
+    "@name": ["name", "poi", "place", "place name", "name of attraction", "attraction", "hotel name", "hotel",
+              "property", "restaurant", "hub name", "mission name"],
+    "Address / Landmark": ["address", "landmark", "address landmark", "location", "local location", "street address",
+                           "street", "nearby landmark"],
+    "Description": ["historical significance", "about", "summary", "overview"],
+    "Significance / Category": ["significance", "category"],
+    "Year Founded / Era": ["year established", "year founded", "established", "founded", "year", "era"],
+    "Days / Hours Open": ["hours", "opening hours", "open hours", "timings", "timing", "days hours", "visiting hours"],
+    "Entry Fee": ["fee", "fees", "ticket", "ticket price", "admission", "entrance fee"],
+    "Website": ["web", "web page", "webpage", "url", "site", "web site"],
+    "Phone": ["telephone", "tel", "phone number", "contact number", "phone no", "contact"],
+    "Email": ["e mail", "email address", "mail"],
+    "Latitude": ["lat"],
+    "Longitude": ["lon", "long", "lng"],
+    "Province / State": ["province", "state", "province state", "region"],
+    "City": ["town", "locality", "city town"],
+    "City / Locality": ["city", "town", "locality"],
+    "POI Type": ["type", "poi type"],
+    "Notes": ["note", "remarks", "comments"],
+    "Source": ["sources", "reference"],
+    "Checked On": ["checked", "verified on", "date checked", "last checked"],
+    "@coords": ["coordinates", "map coordinates", "lat long", "latitude longitude", "gps", "location coordinates"],
+}
+
+
+def resolve_headers(entity, file_headers):
+    """For each file heading, the template column it fills (or None), using
+    exact names, then the same name written differently, then
+    HEADER_ALIASES. '@coords' marks a combined coordinates column."""
+    spec = ENTITIES[entity]
+    wanted = [c[0] for c in spec["cols"]]
+    by_key = {_hkey(w): w for w in wanted}
+    alias = {}
+    for target, names in HEADER_ALIASES.items():
+        real = spec["name_col"] if target == "@name" else target
+        if real == "@coords":
+            if "Latitude" in wanted:
+                for n in names:
+                    alias.setdefault(n, "@coords")
+        elif real in wanted:
+            for n in names:
+                alias.setdefault(n, real)
+    out, used = [], set()
+    for h in file_headers:
+        k = _hkey(h)
+        col = by_key.get(k) or alias.get(k)
+        if col and col != "@coords" and col in used:
+            col = None  # a second column for the same field is ignored rather than overwriting the first
+        if col:
+            used.add(col)
+        out.append(col)
+    return out
+
+
 def required_headers(entity, mode="normal"):
     """Columns a file must have. Notes-only files need just the name,
     country, city and Notes columns."""
@@ -211,9 +275,11 @@ def required_headers(entity, mode="normal"):
     return [c[0] for c in spec["cols"] if c[1]]
 
 
-def parse_file(entity, filename, data, mode="normal"):
+def parse_file(entity, filename, data, mode="normal", report=None):
     """[(row_num, {template header: cleaned value}), ...] from an .xlsx or .csv.
-    Raises ValueError with a readable message if the columns don't fit."""
+    Raises ValueError with a readable message if the columns don't fit.
+    Headings are matched loosely (see resolve_headers); report, if given,
+    receives 'renamed' and 'ignored' lists for the preview page."""
     spec = ENTITIES[entity]
     wanted = [c[0] for c in spec["cols"]]
     if filename.lower().endswith((".xlsx", ".xlsm")):
@@ -222,7 +288,7 @@ def parse_file(entity, filename, data, mode="normal"):
         sheet = None
         for ws in wb.worksheets:  # the sheet whose first row has the most template headers
             first = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
-            score = len({_header(h) for h in first} & set(wanted))
+            score = len({h for h in resolve_headers(entity, [_header(h) for h in first]) if h} & set(wanted))
             if score and (sheet is None or score > sheet[1]):
                 sheet = (ws, score)
         if sheet is None:
@@ -235,14 +301,33 @@ def parse_file(entity, filename, data, mode="normal"):
         raise ValueError("Upload an Excel (.xlsx) or CSV file.")
     if not rows:
         raise ValueError("The file is empty.")
-    headers = [_header(h) for h in rows[0]]
+    raw_headers = [_header(h) for h in rows[0]]
+    headers = resolve_headers(entity, raw_headers)
     missing = [h for h in required_headers(entity, mode) if h not in headers]
     if missing:
         raise ValueError("These required columns are missing: " + ", ".join(missing) +
                          ". Use the template for this entity.")
+    if report is not None:
+        report["renamed"] = [f"{r} → {h}" for r, h in zip(raw_headers, headers)
+                             if h and h != "@coords" and r != h and r]
+        report["renamed"] += [f"{r} → Latitude / Longitude" for r, h in zip(raw_headers, headers) if h == "@coords"]
+        report["ignored"] = [r for r, h in zip(raw_headers, headers) if not h and r]
     out = []
     for i, r in enumerate(rows[1:], start=2):
-        rec = {h: _clean(v) for h, v in zip(headers, r) if h in wanted}
+        rec = {}
+        for h, v in zip(headers, r):
+            if not h:
+                continue
+            if h == "@coords":
+                from utils import parse_coordinates
+                parsed = parse_coordinates(str(v)) if v not in (None, "") else None
+                if parsed:
+                    rec.setdefault("Latitude", round(parsed[0], 6))
+                    rec.setdefault("Longitude", round(parsed[1], 6))
+                continue
+            val = _clean(v)
+            if val is not None or h not in rec:
+                rec[h] = val
         if any(v is not None for v in rec.values()):
             out.append((i, rec))
     return out

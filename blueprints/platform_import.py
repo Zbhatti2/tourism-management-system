@@ -81,7 +81,8 @@ def upload():
         flash("That file is larger than 15 MB. Split it into smaller files.", "error")
         return redirect(url_for("platform_import.index", entity=entity))
     try:
-        rows = pi.parse_file(entity, f.filename, data, mode)
+        columns = {}
+        rows = pi.parse_file(entity, f.filename, data, mode, report=columns)
     except ValueError as e:
         flash(str(e), "error")
         return redirect(url_for("platform_import.index", entity=entity))
@@ -92,6 +93,7 @@ def upload():
         flash("No data rows found under the header row.", "error")
         return redirect(url_for("platform_import.index", entity=entity))
     staged = pi.evaluate(db, entity, mode, rows, options)
+    options["columns"] = columns  # shown on the preview: headings read under another name, and ignored ones
     run_id = pi.save_run(db, entity, mode, f.filename, options, staged, g.user_id)
     log_action("ImportPreview", TABLES[entity], run_id, f"Previewed {len(rows)} row(s) from '{f.filename}' ({entity}, {mode})")
     return redirect(url_for("platform_import.run", run_id=run_id))
@@ -163,7 +165,8 @@ def recheck(run_id):
     run = _get_run(db, run_id)
     if run["status"] != "previewed":
         abort(400)
-    options = {"create_places": bool(request.form.get("create_places"))}
+    options = {"create_places": bool(request.form.get("create_places")),
+               "columns": json.loads(run["options"] or "{}").get("columns", {})}
     old = {r["row_num"]: r for r in pi.load_rows(db, run_id)}
     raw_rows = [(n, r["data"]["raw"]) for n, r in sorted(old.items())]
     staged = pi.evaluate(db, run["entity"], run["mode"], raw_rows, options)
