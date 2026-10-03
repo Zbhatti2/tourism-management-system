@@ -215,6 +215,10 @@ def stages(db, plan_id):
             st["data"] = json.loads(st["result"]) if st.get("result") else None
         except ValueError:
             st["data"] = None
+        st["broken"] = False
+        need = REPORT_KEYS.get(key)
+        if need and st["data"] is not None and (not isinstance(st["data"], dict) or not all(k in st["data"] for k in need)):
+            st["data"], st["broken"] = None, True  # an empty or cut-off report: run again
         st.update(STAGE[key])
         st["built"] = STAGE[key]["phase"] in BUILT_PHASES
         out[key] = st
@@ -241,6 +245,12 @@ def stages(db, plan_id):
         if not st["approved_at"]:
             blocked = True
     return out
+
+
+# The parts a stage's saved report must have (an earlier run could save a
+# cut-off, empty one).
+REPORT_KEYS = {"route": ["outbound"], "checkpoints": ["checkpoints", "days"], "lodging": ["checkpoints"],
+               "days": ["days"]}
 
 
 def previous_approved(stage_map, key):
@@ -535,8 +545,9 @@ def agent_loop(db, tenant_id, client, prompt, tool_names, report_tool, meter, lo
     if web_searches:
         tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": web_searches}] + tools
     messages = [{"role": "user", "content": prompt}]
+    required = report_tool["input_schema"].get("required") or []
     for _ in range(max_turns):
-        resp = client.messages.create(model=model(), max_tokens=8000, tools=tools, messages=messages)
+        resp = client.messages.create(model=model(), max_tokens=16000, tools=tools, messages=messages)
         meter(getattr(resp, "usage", None))
         content = getattr(resp, "content", []) or []
         results, report = [], None
@@ -553,9 +564,20 @@ def agent_loop(db, tenant_id, client, prompt, tool_names, report_tool, meter, lo
                 data = {"error": str(e)[:200]}
             log(f"   looked up {b.name.replace('_', ' ')}: {_brief_args(b.input)}")
             results.append({"type": "tool_result", "tool_use_id": b.id, "content": json.dumps(data, ensure_ascii=False)[:30000]})
-        if report is not None:
-            return report
         stop = getattr(resp, "stop_reason", None)
+        if report is not None:
+            missing = [k for k in required if k not in report]
+            if not missing and stop != "max_tokens":
+                return report
+            # Cut off (too long) or incomplete: ask again, shorter.
+            log(f"   the report came back incomplete ({', '.join(missing) or 'cut off'}); asking again")
+            messages = messages + [
+                {"role": "assistant", "content": [b for b in content if getattr(b, "type", None) != "tool_use"]
+                 or [{"type": "text", "text": "(report cut off)"}]},
+                {"role": "user", "content": f"Your {report_tool['name']} call was cut off or incomplete"
+                 + (f" (missing: {', '.join(missing)})" if missing else "") + ". Call it again with every required "
+                 "field, keeping each note to one short sentence."}]
+            continue
         if not results and stop != "pause_turn":
             # Answered in prose without reporting: ask once more for the report.
             messages = messages + [{"role": "assistant", "content": content},
