@@ -639,7 +639,12 @@ def list_runs():
     pending_total = db.execute(
         "SELECT COUNT(*) n FROM ai_review_items WHERE tenant_id = ? AND status = 'pending'", (g.tenant_id,)
     ).fetchone()["n"]
-    return render_template("ai_agents/runs_list.html", runs=runs, pending_total=pending_total)
+    import tenant_agents
+    return render_template("ai_agents/runs_list.html", runs=runs, pending_total=pending_total,
+                           agents=tenant_agents.AGENTS, planned=tenant_agents.PLANNED,
+                           stats=tenant_agents.agent_stats(db, g.tenant_id),
+                           recent=tenant_agents.recent_runs(db, g.tenant_id), start_url=tenant_agents.start_url,
+                           agent_labels={a["key"]: a["label"] for a in tenant_agents.AGENTS})
 
 
 @ai_agents_bp.route("/new", methods=["GET", "POST"])
@@ -680,7 +685,8 @@ def new_run():
         flash(f"Agent run logged: “{scope_label}”.", "success")
         return redirect(url_for("ai_agents.view_run", run_id=run_id))
 
-    return render_template("ai_agents/run_form.html", agent_types=AGENT_TYPES, task_types=TASK_TYPES, form_values=None)
+    preset = request.args if request.args.get("agent_type") in dict(AGENT_TYPES) else None
+    return render_template("ai_agents/run_form.html", agent_types=AGENT_TYPES, task_types=TASK_TYPES, form_values=preset)
 
 
 @ai_agents_bp.route("/<int:run_id>")

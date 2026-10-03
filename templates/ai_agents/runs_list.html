@@ -9,58 +9,75 @@
       Review Queue
       {% if pending_total %}<span class="badge bg-danger ms-1">{{ pending_total }}</span>{% endif %}
     </a>
-    <a href="{{ url_for('ai_agents.new_run') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Agent Run</a>
   </div>
 </div>
-<div class="card shadow-sm border-0 mb-3 border-start border-primary border-3">
-  <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
-    <div>
-      <h2 class="h6 mb-1"><i class="bi bi-map"></i> Tour Planner</h2>
-      <div class="small text-muted">Describe a tour; the agent plans the route, attractions, overnight stops and drive times with you, stage by stage, towards a draft Package.</div>
-    </div>
-    <a href="{{ url_for('tour_planner.index') }}" class="btn btn-primary btn-sm">Open the Tour Planner</a>
-  </div>
-</div>
-<p class="text-muted">
-  Every agent run is scoped to a specific target — a named Hotel, a bounded filter like "5-star hotels in Singapore" —
-  never an open-ended crawl. What an agent finds is queued in the Review Queue for approval before it's written
-  into the system (Room Pricing &amp; Availability updates are the one exception — see the Suppliers module).
-</p>
+<p class="text-muted mb-3">Every agent {{ g.tenant_name if g.tenant_name else 'your organisation' }} has, wherever it is started from.
+  Agents work on a specific target, never an open-ended crawl, and what they find waits for a person to approve before
+  it is written into TMS. Runs are charged to your organisation's AI usage.</p>
 
+<div class="d-flex justify-content-between align-items-baseline mb-2">
+  <h2 class="h5 mb-0">Your agents <span class="badge bg-primary-subtle text-primary align-middle">{{ agents|length }}</span></h2>
+  <span class="small text-muted">This month's cost per agent; runs ever</span>
+</div>
+<div class="row g-3 mb-4">
+  {% for a in agents %}{% set s = stats[a.key] %}
+  <div class="col-md-6 col-xl-3">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body d-flex flex-column">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <h3 class="h6 mb-0"><i class="bi bi-{{ a.icon }} text-primary"></i> {{ a.label }}</h3>
+          {% if s.waiting %}<span class="badge bg-warning-subtle text-warning-emphasis" title="Waiting for you to review">{{ s.waiting }} to review</span>{% endif %}
+        </div>
+        <p class="small mb-2">{{ a.what }}</p>
+        <dl class="small text-muted mb-2">
+          <dt class="fw-normal d-inline">Reads:</dt> <dd class="d-inline">{{ a.reads }}</dd><br>
+          <dt class="fw-normal d-inline">Gives you:</dt> <dd class="d-inline">{{ a.writes }}</dd>
+          {% if a.also_from %}<br><dt class="fw-normal d-inline">Also started from:</dt> <dd class="d-inline">{{ a.also_from }}</dd>{% endif %}
+        </dl>
+        <div class="mt-auto d-flex justify-content-between align-items-end">
+          <div class="small text-muted"><span class="text-nowrap">{{ s.runs }} run{{ "" if s.runs == 1 else "s" }}</span>{% if s.last %} · <span class="text-nowrap">last {{ s.last[:10] }}</span>{% endif %}<br>${{ '%.2f'|format(s.month_cost) }} this month</div>
+          <a href="{{ start_url(a) }}" class="btn btn-primary btn-sm">{{ a.start_label }}</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if planned %}
+<h2 class="h6 text-muted mb-2">Planned</h2>
+<div class="row g-2 mb-4">
+  {% for p in planned %}
+  <div class="col-md-6 col-xl-3"><div class="card border-0 bg-transparent border h-100"><div class="card-body py-2 small text-muted border rounded">
+    <i class="bi bi-{{ p.icon }}"></i> <strong>{{ p.label }}</strong> <span class="badge bg-light text-muted border">coming</span><div>{{ p.what }}</div>
+  </div></div></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2 class="h5 mb-2">Recent runs <span class="small text-muted fw-normal">all agents</span></h2>
 <div class="card shadow-sm border-0">
   <div class="table-responsive">
     <table class="table table-hover mb-0 align-middle">
       <thead>
-        <tr>
-          <th>Scope</th>
-          <th>Agent Type</th>
-          <th>Task</th>
-          <th>Status</th>
-          <th class="text-end">Review Items</th>
-          <th>Created</th>
-          <th></th>
-        </tr>
+        <tr><th>Agent</th><th>Scope</th><th>Status</th><th>Result</th><th>Started</th><th></th></tr>
       </thead>
       <tbody>
-        {% for r in runs %}
-        <tr onclick="window.location='{{ url_for('ai_agents.view_run', run_id=r.run_id) }}'" style="cursor:pointer;">
-          <td>{{ r.scope_label }}</td>
-          <td class="text-muted small">{{ r.agent_type }}</td>
-          <td class="text-muted small">{{ r.task_type.replace('_', ' ') | title }}</td>
+        {% for r in recent %}
+        <tr onclick="window.location='{{ r.url }}'" style="cursor:pointer;">
+          <td class="small text-nowrap">{{ agent_labels.get(r.agent, r.agent) }}</td>
+          <td>{{ r.scope }}</td>
           <td>
-            {% if r.status == "completed" %}<span class="badge bg-success-subtle text-success">Completed</span>
+            {% if r.status == "done" %}<span class="badge bg-success-subtle text-success">Completed</span>
             {% elif r.status == "running" %}<span class="badge bg-info-subtle text-info">Running</span>
             {% elif r.status == "failed" %}<span class="badge bg-danger-subtle text-danger">Failed</span>
             {% else %}<span class="badge bg-secondary-subtle text-muted">Pending</span>{% endif %}
           </td>
-          <td class="text-end">
-            {{ r.item_count }}
-            {% if r.pending_count %}<span class="badge bg-warning-subtle text-warning-emphasis ms-1">{{ r.pending_count }} pending</span>{% endif %}
-          </td>
-          <td class="text-muted small">{{ r.created_at }}</td>
+          <td class="small">{{ r.result }}{% if r.pending %} <span class="badge bg-warning-subtle text-warning-emphasis ms-1">{{ r.pending }} pending</span>{% endif %}</td>
+          <td class="text-muted small text-nowrap">{{ r.created_at }}</td>
           <td class="text-end" onclick="event.stopPropagation();">
-            {% if r.item_count == 0 and r.status != "running" %}
-            <form method="post" action="{{ url_for('ai_agents.delete_run', run_id=r.run_id) }}" class="d-inline" onsubmit="return confirm('Delete this run? It has no Review Items, so this can’t be undone.');">
+            {% if r.delete_id %}
+            <form method="post" action="{{ url_for('ai_agents.delete_run', run_id=r.delete_id) }}" class="d-inline" onsubmit="return confirm('Delete this run? It has no Review Items, so this can’t be undone.');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash"></i></button>
             </form>
@@ -68,7 +85,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="text-center text-muted py-5">No agent runs yet — <a href="{{ url_for('ai_agents.new_run') }}">log the first one</a>.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-5">No agent runs yet. Start one from the cards above.</td></tr>
         {% endfor %}
       </tbody>
     </table>
