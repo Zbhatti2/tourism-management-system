@@ -3177,3 +3177,53 @@ BEGIN
     UPDATE suppliers SET supplier_group_id = NEW.supplier_group_id
     WHERE supplier_type_id = NEW.supplier_type_id AND is_external_resource = 0;
 END;
+
+-- ============================================================================
+-- Tour Planner (tour_planner.py): tenant tour plans, their review stages and
+-- the agent's runs.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS tour_plans (
+    plan_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    name            TEXT NOT NULL,
+    request_text    TEXT,                   -- the free-text request, as typed
+    brief           TEXT,                   -- JSON: the Tour Brief
+    status          TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','done','archived')),
+    package_id      INTEGER REFERENCES packages(package_id),
+    created_by      INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tour_plans_tenant ON tour_plans(tenant_id);
+CREATE TABLE IF NOT EXISTS tour_plan_stages (
+    stage_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    plan_id         INTEGER NOT NULL REFERENCES tour_plans(plan_id),
+    stage_key       TEXT NOT NULL,
+    result          TEXT,                   -- JSON: the stage's current result (as edited)
+    run_id          INTEGER,                -- the run that produced it (tour_plan_runs)
+    approved_at     TEXT,
+    approved_by     INTEGER REFERENCES users(user_id),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (plan_id, stage_key)
+);
+CREATE TABLE IF NOT EXISTS tour_plan_runs (
+    run_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    plan_id         INTEGER NOT NULL REFERENCES tour_plans(plan_id),
+    stage_key       TEXT NOT NULL,
+    instructions    TEXT,                   -- "ask for changes" text for a re-run
+    status          TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','done','failed')),
+    progress        TEXT,
+    error           TEXT,
+    result          TEXT,                   -- JSON as the agent returned it
+    created_by      INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at      TEXT,
+    finished_at     TEXT,
+    heartbeat_at    TEXT,
+    items_total     INTEGER,
+    items_done      INTEGER NOT NULL DEFAULT 0,
+    cancel_requested INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_tour_plan_runs_plan ON tour_plan_runs(plan_id);

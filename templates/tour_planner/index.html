@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Tour Planner{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('ai_agents.list_runs') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> AI Agents</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">AI Agents</div>
+    <h1 class="h3 mb-0">Tour Planner</h1>
+    <div class="small text-muted">Turns a tour request into a draft Package, one stage at a time. You review and approve each stage before the next one runs.</div>
+  </div>
+  <a href="{{ url_for('tour_planner.new_plan') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New tour plan</a>
+</div>
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Tour</th><th>Starts</th><th>From → to</th><th>Guests</th><th>Days</th><th>Progress</th><th>Updated</th></tr></thead>
+      <tbody>
+        {% for x in plans %}
+        <tr onclick="window.location='{{ url_for('tour_planner.workspace', plan_id=x.plan.plan_id) }}'" style="cursor:pointer;">
+          <td><strong>{{ x.plan.name }}</strong>{% if x.working %} <span class="badge bg-primary-subtle text-primary">Working…</span>{% endif %}</td>
+          <td>{{ x.brief.start_date or '—' }}</td>
+          <td class="small">{{ x.brief.start_city or '?' }} → {{ x.brief.destination or '?' }}</td>
+          <td>{{ x.brief.parties | sum(attribute='guests') }}</td>
+          <td>{{ x.brief.tour_days }}</td>
+          <td style="min-width: 160px;"><div class="progress" style="height: 8px;"><div class="progress-bar" style="width: {{ (100 * x.approved / x.built) | round | int }}%;"></div></div>
+            <div class="small text-muted">{{ x.approved }} of {{ x.built }} stages approved</div></td>
+          <td class="small text-muted">{{ x.plan.updated_at[:16] }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No tour plans yet — <a href="{{ url_for('tour_planner.new_plan') }}">start one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<p class="small text-muted mt-3 mb-0">This version plans the brief, the route with its points of interest and detours, the overnight checkpoints and the journey-time grid. Hotels, transport, arrivals, the day-by-day itinerary, costs and the draft Package follow in later phases.</p>
+{% endblock %}

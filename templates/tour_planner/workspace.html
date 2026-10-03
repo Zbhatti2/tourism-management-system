@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% block title %}{{ plan.name }} — Tour Planner{% endblock %}
+{% set badge = {'approved': ('bg-success-subtle text-success', 'Approved'), 'review': ('bg-warning-subtle text-warning-emphasis', 'To review'),
+                'working': ('bg-primary-subtle text-primary', 'Working…'), 'ready': ('bg-secondary-subtle text-dark', 'Ready'),
+                'waiting': ('bg-light text-muted border', 'Waiting'), 'failed': ('bg-danger-subtle text-danger', 'Failed'),
+                'later': ('bg-light text-muted border', 'Later phase')} %}
+{% macro run_card(label, what) %}
+<div class="card shadow-sm border-0 mb-3"><div class="card-body">
+  <h2 class="h6">{{ label }}</h2>
+  <p class="small text-muted mb-2">{{ what }} Runs are charged to your organisation's AI usage{% if allowance.limit is not none %} (this month ${{ '%.2f'|format(allowance.spent) }} of ${{ '%.2f'|format(allowance.limit) }}){% endif %}.</p>
+  <form method="post" action="{{ url_for('tour_planner.run_stage', plan_id=plan.plan_id, key=key) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-stars"></i> Run the agent</button>
+  </form>
+</div></div>
+{% endmacro %}
+{% macro review_bar() %}
+<div class="card shadow border-0 sticky-bottom mt-3" style="bottom: .5rem;"><div class="card-body py-2">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-8">
+      <form method="post" action="{{ url_for('tour_planner.run_stage', plan_id=plan.plan_id, key=key) }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="flex-grow-1"><label class="form-label small text-muted mb-0">Ask for changes</label>
+          <input class="form-control form-control-sm" name="instructions" placeholder="e.g. stop at Abbottabad instead of Mansehra; add Taxila on day 1"></div>
+        <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> Re-run</button>
+      </form>
+    </div>
+    <div class="col-md-4 text-md-end">
+      {% if st.approved_at %}<span class="badge bg-success-subtle text-success me-2">Approved {{ st.approved_at[:16] }}</span>{% endif %}
+      <form method="post" action="{{ url_for('tour_planner.approve_stage', plan_id=plan.plan_id, key=key) }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-success btn-sm" type="submit" {{ 'disabled' if st.approved_at else '' }}><i class="bi bi-check2-circle"></i> Approve this stage</button>
+      </form>
+    </div>
+  </div>
+</div></div>
+{% endmacro %}
+{% macro flags_list(flags) %}
+{% if flags %}
+<div class="card shadow-sm border-0 mb-3 border-start border-warning border-3"><div class="card-body py-2">
+  <h3 class="h6 mb-1"><i class="bi bi-flag"></i> Flags</h3>
+  <ul class="small mb-0">{% for f in flags %}<li>{{ f }}</li>{% endfor %}</ul>
+</div></div>
+{% endif %}
+{% endmacro %}
+{% macro src(s) %}{% if s and s.startswith('http') %}<a href="{{ s }}" target="_blank" rel="noopener">{{ s.split('/')[2] }}</a>{% else %}{{ s or '' }}{% endif %}{% endmacro %}
+
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('tour_planner.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Tour Planner</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">Tour Planner</div>
+    <h1 class="h3 mb-0">{{ plan.name }}</h1>
+    <div class="small text-muted">{{ brief.start_city or '?' }} → {{ brief.destination or '?' }}{% if brief.start_date %} · assembles {{ brief.start_date }}{% endif %}
+      · {{ fig.guests }} guests · {{ brief.tour_days }} days · {{ brief.standard }} · AI cost so far ${{ '%.2f'|format(cost) }}</div>
+  </div>
+  <details class="position-relative">
+    <summary class="btn btn-sm btn-outline-secondary list-unstyled"><i class="bi bi-archive"></i> Archive</summary>
+    <div class="card shadow position-absolute end-0 mt-1 p-2 small" style="width: 240px; z-index: 10;">
+      <p class="mb-2">Archive this plan? It disappears from the list.</p>
+      <form method="post" action="{{ url_for('tour_planner.archive', plan_id=plan.plan_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-secondary" type="submit">Archive</button></form>
+    </div>
+  </details>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-3">
+    <div class="list-group shadow-sm">
+      {% for k, s in stages.items() %}
+      <a href="{{ url_for('tour_planner.workspace', plan_id=plan.plan_id, stage=k) }}" class="list-group-item list-group-item-action {{ 'active' if k == key else '' }} {{ 'text-muted' if s.state == 'later' and k != key else '' }}">
+        <div class="d-flex justify-content-between align-items-center gap-2">
+          <span><span class="small opacity-75">{{ loop.index }}.</span> <span class="fw-semibold">{{ s.label }}</span></span>
+          <span class="badge {{ badge[s.state][0] }}">{{ badge[s.state][1] }}</span>
+        </div>
+        <div class="small {{ '' if k == key else 'text-muted' }}">{{ s.blurb }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="col-lg-9">
+    {% if run and key != 'brief' or (run and key == 'brief' and run.status in ('queued', 'running', 'failed')) %}
+      {% if run.status in ('queued', 'running') or (run.status == 'failed' and st.data is none) %}
+        {% include "_run_progress.html" %}
+        {% if run.error %}<div class="alert alert-danger small">{{ run.error }}</div>{% endif %}
+        <details class="card shadow-sm border-0 mb-3" {{ 'open' if run.status in ('queued', 'running') else '' }}>
+          <summary class="card-header bg-white small fw-semibold">What the agent is doing</summary>
+          <div class="card-body"><pre class="small mb-0" style="white-space: pre-wrap;" id="run-progress-text">{{ run.progress or 'Starting…' }}</pre></div>
+        </details>
+      {% endif %}
+    {% endif %}
+
+    {# ------------------------------------------------------------------ brief #}
+    {% if key == 'brief' %}
+      {% if questions and not st.approved_at %}
+      <div class="alert alert-info small"><strong>The agent needs to know:</strong>
+        <ul class="mb-0">{% for q in questions %}<li>{{ q }}</li>{% endfor %}</ul>
+        <div class="mt-1">Answer in the brief below, or add the answer to the request and read it again.</div></div>
+      {% endif %}
+      {% if plan.request_text %}
+      <details class="card shadow-sm border-0 mb-3">
+        <summary class="card-header bg-white small fw-semibold">The request as received</summary>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('tour_planner.run_stage', plan_id=plan.plan_id, key='brief') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <textarea class="form-control form-control-sm mb-2" name="instructions" rows="8">{{ plan.request_text }}</textarea>
+            <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-stars"></i> Read it into the brief again</button>
+            <span class="small text-muted ms-2">Replaces what the request covers; your other brief values stay.</span>
+          </form>
+        </div>
+      </details>
+      {% endif %}
+      <form method="post" action="{{ url_for('tour_planner.save_brief', plan_id=plan.plan_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+          <h2 class="h6">Tour</h2>
+          <div class="row g-2">
+            <div class="col-md-6"><label class="form-label small text-muted mb-0">Tour name</label><input class="form-control form-control-sm" name="name" value="{{ brief.name }}"></div>
+            <div class="col-md-3"><label class="form-label small text-muted mb-0">Standard</label><input class="form-control form-control-sm" name="standard" value="{{ brief.standard }}"></div>
+            <div class="col-md-3"><label class="form-label small text-muted mb-0">Base currency</label><input class="form-control form-control-sm" name="currency" value="{{ brief.currency }}"></div>
+            <div class="col-md-4"><label class="form-label small text-muted mb-0">Assembly city</label><input class="form-control form-control-sm" name="start_city" value="{{ brief.start_city }}"></div>
+            <div class="col-md-4"><label class="form-label small text-muted mb-0">Assembly date</label><input class="form-control form-control-sm" type="date" name="start_date" value="{{ brief.start_date }}"></div>
+            <div class="col-md-4"><label class="form-label small text-muted mb-0">Destination</label><input class="form-control form-control-sm" name="destination" value="{{ brief.destination }}"></div>
+            <div class="col-md-8"><label class="form-label small text-muted mb-0">Route</label><input class="form-control form-control-sm" name="route_note" value="{{ brief.route_note }}" placeholder="e.g. the main route, Karakoram Highway"></div>
+            <div class="col-md-4"><label class="form-label small text-muted mb-0">Return</label>
+              <select class="form-select form-select-sm" name="return_mode">{% for k, v in return_modes.items() %}<option value="{{ k }}" {{ 'selected' if brief.return_mode == k else '' }}>{{ v }}</option>{% endfor %}</select></div>
+            <div class="col-md-2"><label class="form-label small text-muted mb-0">Tour days</label><input class="form-control form-control-sm" type="number" min="1" name="tour_days" value="{{ brief.tour_days }}"></div>
+            <div class="col-md-2"><label class="form-label small text-muted mb-0">Weather days</label><input class="form-control form-control-sm" type="number" min="0" name="weather_days" value="{{ brief.weather_days }}"></div>
+            <div class="col-md-3"><label class="form-label small text-muted mb-0">Max driving / day (h)</label><input class="form-control form-control-sm" type="number" min="2" name="max_drive_hours" value="{{ brief.max_drive_hours }}"></div>
+            <div class="col-md-5 d-flex align-items-end"><div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="fly_home" value="1" id="fly_home" {{ 'checked' if brief.fly_home else '' }}>
+              <label class="form-check-label small" for="fly_home">At the end, each party flies home to its origin</label></div></div>
+          </div>
+          <div class="form-text">Tour days count from the assembly date; travel to the assembly city isn't included.</div>
+        </div></div>
+
+        <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+          <h2 class="h6">Travelling parties</h2>
+          <div class="table-responsive"><table class="table table-sm align-middle mb-1">
+            <thead><tr class="small text-muted"><th>Party</th><th>Arriving from (city)</th><th>Country</th><th style="width: 90px;">Guests</th><th style="width: 90px;">Doubles</th><th style="width: 90px;">Singles</th></tr></thead>
+            <tbody>
+              {% for p in brief.parties + [{}, {}, {}] %}
+              <tr>
+                <td><input class="form-control form-control-sm" name="p_label" value="{{ p.label or '' }}" placeholder="e.g. 3 couples"></td>
+                <td><input class="form-control form-control-sm" name="p_city" value="{{ p.origin_city or '' }}"></td>
+                <td><input class="form-control form-control-sm" name="p_country" value="{{ p.origin_country or '' }}"></td>
+                <td><input class="form-control form-control-sm" type="number" min="0" name="p_guests" value="{{ p.guests or '' }}"></td>
+                <td><input class="form-control form-control-sm" type="number" min="0" name="p_doubles" value="{{ p.doubles or '' }}"></td>
+                <td><input class="form-control form-control-sm" type="number" min="0" name="p_singles" value="{{ p.singles or '' }}"></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table></div>
+          <div class="small text-muted">Three empty rows are added each time you save. Couples share a double; a guest who needs their own room takes a single.</div>
+        </div></div>
+
+        <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+          <h2 class="h6">Guides, vehicles, drivers</h2>
+          <div class="row g-2">
+            <div class="col-md-2"><label class="form-label small text-muted mb-0">Guides</label><input class="form-control form-control-sm" type="number" min="0" name="guides" value="{{ brief.guides }}"></div>
+            <div class="col-md-4"><label class="form-label small text-muted mb-0">Guide seating</label>
+              <select class="form-select form-select-sm" name="guide_seating">{% for k, v in guide_seating.items() %}<option value="{{ k }}" {{ 'selected' if brief.guide_seating == k else '' }}>{{ v }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label small text-muted mb-0">Vehicle</label><input class="form-control form-control-sm" name="vehicle_type" value="{{ brief.vehicle_type }}"></div>
+            <div class="col-md-3"><label class="form-label small text-muted mb-0">Seats per vehicle</label><input class="form-control form-control-sm" type="number" min="4" name="vehicle_seats" value="{{ brief.vehicle_seats }}"></div>
+            <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="drivers_included" value="1" id="drivers" {{ 'checked' if brief.drivers_included else '' }}>
+              <label class="form-check-label small" for="drivers">Drivers come with the vehicles; the tour pays their rooms and meals</label></div></div>
+            <div class="col-md-6"><label class="form-label small text-muted mb-0">Interests</label><input class="form-control form-control-sm" name="interests" value="{{ brief.interests }}" placeholder="e.g. history, mountains, food"></div>
+            <div class="col-md-6"><label class="form-label small text-muted mb-0">Other notes</label><input class="form-control form-control-sm" name="notes" value="{{ brief.notes }}"></div>
+          </div>
+          <div class="mt-3 small">
+            <span class="badge bg-light text-dark border">{{ fig.guests }} guests</span>
+            <span class="badge bg-light text-dark border">{{ fig.doubles }} doubles + {{ fig.singles }} singles = {{ fig.guest_rooms }} guest rooms</span>
+            <span class="badge bg-light text-dark border">{{ fig.guide_rooms }} guide room{{ 's' if fig.guide_rooms != 1 }}</span>
+            {% if fig.driver_rooms %}<span class="badge bg-light text-dark border">{{ fig.driver_rooms }} driver room{{ 's' if fig.driver_rooms != 1 }}</span>{% endif %}
+            <span class="badge bg-light text-dark border">{{ fig.vehicles }} × {{ brief.vehicle_type|lower }}{% if fig.per_vehicle %}: {{ fig.per_vehicle|join(' + ') }} guests{% endif %}{% if brief.guide_seating == 'one_per_minibus' and brief.guides %} + 1 guide each{% endif %}</span>
+            {% if fig.suv %}<span class="badge bg-light text-dark border">1 SUV for the guides</span>{% endif %}
+          </div>
+        </div></div>
+
+        {% if problems %}<div class="alert alert-warning small py-2 mb-2">Before approving: {{ problems|join(' ') }}</div>{% endif %}
+        <div class="d-flex gap-2 justify-content-end mb-4">
+          {% if st.approved_at %}<span class="badge bg-success-subtle text-success align-self-center">Approved {{ st.approved_at[:16] }} — saving changes un-approves it and later stages</span>{% endif %}
+          <button class="btn btn-outline-primary" type="submit" name="action" value="save">Save</button>
+          <button class="btn btn-success" type="submit" name="action" value="approve"><i class="bi bi-check2-circle"></i> Save and approve the brief</button>
+        </div>
+      </form>
+
+    {# ------------------------------------------------------------------ route #}
+    {% elif key == 'route' %}
+      {% if not can_run %}<div class="alert alert-light border small">Approve the Tour Brief first.</div>
+      {% elif st.data is none and st.state != 'working' %}{{ run_card('Route and points of interest', 'The agent lays out the main route city by city with distances and drive times (TMS figures first), lists the attractions on and near it with the detour each needs, and flags border, permit and season issues. Usually 1–3 minutes, about 10–30 cents.') }}
+      {% elif st.data %}
+        {% set r = st.data %}
+        {% if r.summary %}<p class="mb-3">{{ r.summary }}</p>{% endif %}
+        {{ flags_list(r.flags) }}
+        <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Outbound route{% if not r.return_differs %} (the return is the same road){% endif %}</div>
+          <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
+            <thead><tr><th>#</th><th>City</th><th class="text-end">km from previous</th><th>Drive time</th><th>Road</th><th>Figures from</th></tr></thead>
+            <tbody>{% for c in r.outbound %}<tr>
+              <td class="text-muted">{{ loop.index }}</td>
+              <td><strong>{{ c.city }}</strong>{% if c.country %} <span class="text-muted">{{ c.country }}</span>{% endif %}{% if not c.city_id %} <span class="badge bg-light text-muted border" title="Not in TMS geography yet">not in TMS</span>{% endif %}{% if c.note %}<div class="text-muted">{{ c.note }}</div>{% endif %}</td>
+              <td class="text-end">{{ c.km_from_previous if c.km_from_previous is not none else ('' if loop.first else '?') }}</td>
+              <td>{% if not loop.first %}{{ hours(c.minutes_from_previous) }}{% if c.minutes_max_from_previous %}–{{ hours(c.minutes_max_from_previous) }}{% endif %}{% endif %}</td>
+              <td>{{ c.road or '' }}</td><td>{{ src(c.distance_source) }}</td></tr>{% endfor %}</tbody>
+          </table></div></div>
+        {% if r.return_differs and r.return_route %}
+        <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Return route</div>
+          <div class="card-body small">{% for c in r.return_route %}{{ c.city }}{% if not loop.last %} → {% endif %}{% endfor %}</div></div>
+        {% endif %}
+        <form method="post" action="{{ url_for('tour_planner.edit_stage', plan_id=plan.plan_id, key='route') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold d-flex justify-content-between">Points of interest <span class="fw-normal text-muted">tick the ones to plan for</span></div>
+            <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
+              <thead><tr><th></th><th>Place</th><th>Near</th><th>On route?</th><th>Detour (round trip)</th><th>Visit</th><th>From</th></tr></thead>
+              <tbody>{% for p in r.pois %}<tr>
+                <td><input class="form-check-input" type="checkbox" name="poi" value="{{ loop.index0 }}" {{ 'checked' if p.include else '' }}></td>
+                <td><strong>{{ p.name }}</strong>{% if p.major %} <span class="badge bg-primary-subtle text-primary">major</span>{% endif %}{% if p.type %} <span class="text-muted">{{ p.type }}</span>{% endif %}{% if p.why %}<div class="text-muted">{{ p.why }}</div>{% endif %}</td>
+                <td>{{ p.near_city }}</td>
+                <td>{{ 'Yes' if p.on_route else 'Detour' }}</td>
+                <td>{% if not p.on_route %}{{ p.detour_km_round_trip or '?' }} km · {{ hours(p.detour_minutes_round_trip) }}{% endif %}</td>
+                <td>{{ hours(p.visit_minutes) if p.visit_minutes else '' }}</td>
+                <td>{{ src(p.source) }}</td></tr>{% endfor %}</tbody>
+            </table></div>
+            <div class="card-footer bg-white"><button class="btn btn-sm btn-outline-secondary" type="submit">Save the ticks</button></div>
+          </div>
+        </form>
+        {{ review_bar() }}
+      {% endif %}
+
+    {# ------------------------------------------------------------------ checkpoints #}
+    {% elif key == 'checkpoints' %}
+      {% if not can_run %}<div class="alert alert-light border small">Approve the route first.</div>
+      {% elif st.data is none and st.state != 'working' %}{{ run_card('Checkpoints and the day budget', "The agent picks the overnight cities (with hotels of your standard on record, and dining), the nights in each, and lays the tour's days out against your maximum driving per day. It tells you if the plan doesn't fit the tour length. Usually 1–2 minutes, about 10–25 cents.") }}
+      {% elif st.data %}
+        {% set c = st.data %}
+        {% if c.summary %}<p class="mb-2">{{ c.summary }}</p>{% endif %}
+        <p class="mb-3">{% if c.fits %}<span class="badge bg-success-subtle text-success">Fits {{ brief.tour_days }} days</span>{% else %}<span class="badge bg-danger-subtle text-danger">Doesn't fit {{ brief.tour_days }} days — see flags</span>{% endif %}
+          <span class="small text-muted ms-1">{{ c.days|length }} days planned · {{ c.checkpoints|sum(attribute='nights') }} nights</span></p>
+        {{ flags_list(c.flags) }}
+        <form method="post" action="{{ url_for('tour_planner.edit_stage', plan_id=plan.plan_id, key='checkpoints') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Checkpoints (overnight cities)</div>
+            <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
+              <thead><tr><th>City</th><th style="width: 90px;">Nights</th><th>Why here</th><th>Lodging on record</th><th>Dining</th><th>Nearest airport</th></tr></thead>
+              <tbody>{% for cp in c.checkpoints %}<tr>
+                <td><strong>{{ cp.city }}</strong></td>
+                <td><input class="form-control form-control-sm" type="number" min="0" name="nights_{{ loop.index0 }}" value="{{ cp.nights }}"></td>
+                <td>{{ cp.why or '' }}</td><td>{{ cp.lodging_note or '' }}</td><td>{{ cp.dining_note or '' }}</td><td>{{ cp.airport or '' }}</td></tr>{% endfor %}</tbody>
+            </table></div>
+            <div class="card-footer bg-white"><button class="btn btn-sm btn-outline-secondary" type="submit">Save nights</button>
+              <span class="small text-muted ms-2">To move a checkpoint, ask for changes below.</span></div>
+          </div>
+        </form>
+        <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Day budget</div>
+          <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
+            <thead><tr><th>Day</th><th>Date</th><th>From → to</th><th class="text-end">km</th><th class="text-end">Driving</th><th>Visits</th><th>Overnight</th></tr></thead>
+            <tbody>{% for d in c.days %}<tr class="{{ 'table-warning' if d.drive_hours and d.drive_hours > brief.max_drive_hours else '' }}">
+              <td>{{ d.day }}</td><td>{{ d.date or '' }}</td>
+              <td>{% if d['from'] and d.to and d['from'] != d.to %}{{ d['from'] }} → {{ d.to }}{% else %}{{ d.to or d['from'] or '' }} <span class="text-muted">(no transfer)</span>{% endif %}</td>
+              <td class="text-end">{{ d.km or '' }}</td><td class="text-end">{{ ('%.1f h'|format(d.drive_hours)) if d.drive_hours else '' }}</td>
+              <td>{{ (d.visits or [])|join(', ') }}{% if d.note %}<div class="text-muted">{{ d.note }}</div>{% endif %}</td>
+              <td>{{ d.overnight }}</td></tr>{% endfor %}</tbody>
+          </table></div></div>
+        {{ review_bar() }}
+      {% endif %}
+
+    {# ------------------------------------------------------------------ grid #}
+    {% elif key == 'grid' %}
+      {% if not can_run %}<div class="alert alert-light border small">Approve the checkpoints first; the grid is worked out from them.</div>
+      {% elif st.data %}
+        {% set gd = st.data %}
+        <p class="mb-3">Outbound {{ gd.total_km }} km, {{ hours(gd.total_minutes) }}{% if gd.total_minutes_max and gd.total_minutes_max != gd.total_minutes %}–{{ hours(gd.total_minutes_max) }}{% endif %} of driving in normal weather and traffic{% if gd.partial %}; some legs have no figures yet, so totals are low{% endif %}.</p>
+        <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">Between checkpoints (km · drive time)</div>
+          <div class="table-responsive"><table class="table table-sm table-bordered mb-0 align-middle small text-center">
+            <thead><tr><th></th>{% for cp in gd.checkpoints %}<th>{{ cp }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in gd.grid %}<tr><th class="text-start">{{ row['from'] }}</th>
+              {% for cell in row.cells %}<td class="{{ 'table-light' if cell.km == 0 else '' }}">{% if cell.km %}{{ cell.km|round|int }} km<br><span class="text-muted">{{ hours(cell.minutes) }}{% if cell.minutes_max and cell.minutes_max != cell.minutes %}–{{ hours(cell.minutes_max) }}{% endif %}</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          </table></div></div>
+        <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">City by city on the main route</div>
+          <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
+            <thead><tr><th>From</th><th>To</th><th class="text-end">km</th><th>Drive time</th><th>Road</th><th class="text-end">Cumulative km</th><th>Figures from</th></tr></thead>
+            <tbody>{% for l in gd.legs %}<tr><td>{{ l['from'] }}</td><td>{{ l.to }}</td><td class="text-end">{{ l.km if l.km is not none else '?' }}</td>
+              <td>{{ hours(l.minutes) }}{% if l.minutes_max %}–{{ hours(l.minutes_max) }}{% endif %}</td><td>{{ l.road or '' }}</td>
+              <td class="text-end">{{ gd.cumulative[loop.index].km }}</td><td>{{ src(l.source) }}</td></tr>{% endfor %}</tbody>
+          </table></div></div>
+        <div class="card shadow border-0 sticky-bottom mt-3" style="bottom: .5rem;"><div class="card-body py-2 text-end">
+          <span class="small text-muted me-2">Worked out from the approved route and checkpoints; change those to change it.</span>
+          <form method="post" action="{{ url_for('tour_planner.approve_stage', plan_id=plan.plan_id, key='grid') }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-success btn-sm" type="submit" {{ 'disabled' if st.approved_at else '' }}><i class="bi bi-check2-circle"></i> {{ 'Approved' if st.approved_at else 'Approve the grid' }}</button>
+          </form>
+        </div></div>
+      {% endif %}
+
+    {# ------------------------------------------------------------------ later phases #}
+    {% else %}
+      <div class="card shadow-sm border-0"><div class="card-body">
+        <h2 class="h6">{{ st.label }}</h2>
+        <p class="small text-muted mb-0">{{ st.blurb|capitalize }}. Coming in build phase {{ st.phase }} of the Tour Planner. Phase 1 covers the brief, the route, the checkpoints and the journey grid.</p>
+      </div></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
