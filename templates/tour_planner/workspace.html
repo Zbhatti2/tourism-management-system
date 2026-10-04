@@ -527,9 +527,12 @@
           </table></div></div>
         <div class="card shadow-sm border-0 mb-3"><div class="card-header bg-white small fw-semibold">City by city on the main route</div>
           <div class="table-responsive"><table class="table table-sm mb-0 align-middle small">
-            <thead><tr><th>From</th><th>To</th><th class="text-end">km</th><th>Drive time</th><th>Road</th><th class="text-end">Cumulative km</th><th>Figures from</th></tr></thead>
-            <tbody>{% for l in gd.legs %}<tr><td>{{ l['from'] }}</td><td>{{ l.to }}</td><td class="text-end">{{ l.km if l.km is not none else '?' }}</td>
+            <thead><tr><th>From</th><th>To</th><th class="text-end">km</th><th>Drive time</th><th>Road</th><th>Checkpoint</th><th class="text-end">Cumulative km</th><th>Figures from</th></tr></thead>
+            <tbody>{% set start = gd.cumulative[0].city if gd.cumulative else none %}{% if start and start in gd.checkpoints %}<tr class="table-success"><td class="text-muted">Start</td><td>{{ start }}</td><td></td><td></td><td></td>
+              <td><i class="bi bi-moon-stars text-success"></i> <strong>{{ start }}</strong>{% set n = (gd.nights or {}).get(start) %}{% if n %} <span class="text-muted">· {{ n }} night{{ 's' if n != 1 }}</span>{% endif %}</td><td class="text-end">0</td><td></td></tr>{% endif %}
+              {% for l in gd.legs %}{% set is_cp = l.to in gd.checkpoints %}<tr class="{{ 'table-success' if is_cp else '' }}"><td>{{ l['from'] }}</td><td>{{ l.to }}</td><td class="text-end">{{ l.km if l.km is not none else '?' }}</td>
               <td>{{ hours(l.minutes) }}{% if l.minutes_max %}–{{ hours(l.minutes_max) }}{% endif %}</td><td>{{ l.road or '' }}</td>
+              <td>{% if is_cp %}<i class="bi bi-moon-stars text-success"></i> <strong>{{ l.to }}</strong>{% set n = (gd.nights or {}).get(l.to) %}{% if n %} <span class="text-muted">· {{ n }} night{{ 's' if n != 1 }}</span>{% endif %}{% endif %}</td>
               <td class="text-end">{{ gd.cumulative[loop.index].km }}</td><td>{{ src(l.source) }}</td></tr>{% endfor %}</tbody>
           </table></div></div>
         <div class="card shadow border-0 sticky-bottom mt-3" style="bottom: .5rem;"><div class="card-body py-2 text-end">

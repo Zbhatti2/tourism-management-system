@@ -109,6 +109,9 @@ def workspace(plan_id):
         tp.compute_grid(db, plan_id)
         smap = tp.stages(db, plan_id)
         st = smap[key]
+    if key == "grid" and st["data"] and "nights" not in st["data"] and smap["route"]["data"]:
+        # grids worked out before the Checkpoint column: nights from the checkpoints
+        st["data"]["nights"] = tp.journey_grid(smap["route"]["data"], smap["checkpoints"]["data"]).get("nights", {})
     questions = []
     if key == "brief" and st["run"] and st["run"]["result"]:
         try:
