@@ -120,7 +120,7 @@ def workspace(plan_id):
     return render_template(
         "tour_planner/workspace.html", plan=plan, brief=brief, fig=tp.group_figures(brief), stages=smap, key=key, st=st,
         can_run=tp.previous_approved(smap, key), problems=tp.brief_problems(brief), questions=questions,
-        return_modes=tp.RETURN_MODES, guide_seating=tp.GUIDE_SEATING, hours=tp.hours, cost=cost, calls=calls,
+        return_modes=tp.RETURN_MODES, guide_seating=tp.GUIDE_SEATING, transport_types=tp.TRANSPORT_TYPES, hours=tp.hours, cost=cost, calls=calls,
         run=run, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
         status_url=url_for("tour_planner.run_status", plan_id=plan_id, run_id=run["run_id"]) if run else None,
         stop_url=url_for("tour_planner.run_stop", plan_id=plan_id, run_id=run["run_id"]) if run else None,
@@ -139,8 +139,11 @@ def _brief_from_form(form, brief):
     b["return_mode"] = form.get("return_mode") if form.get("return_mode") in tp.RETURN_MODES else "overland"
     b["guide_seating"] = form.get("guide_seating") if form.get("guide_seating") in tp.GUIDE_SEATING else "one_per_minibus"
     for k, lo, hi, dflt in (("tour_days", 1, 90, 10), ("weather_days", 0, 10, 0), ("max_drive_hours", 2, 14, 8),
-                            ("guides", 0, 20, 2), ("vehicle_seats", 4, 60, 14)):
+                            ("guides", 0, 20, 2), ("vehicle_capacity", 3, 70, 15)):
         b[k] = max(lo, min(hi, _int(form.get(k), dflt)))
+    mg = _int(form.get("max_guests_per_vehicle"), 0)
+    b["max_guests_per_vehicle"] = max(1, min(mg, 69)) if mg else None
+    tp.normalise_transport(b)
     b["fly_home"] = bool(form.get("fly_home"))
     b["drivers_included"] = bool(form.get("drivers_included"))
     parties = []
@@ -374,6 +377,22 @@ def print_flags(plan_id):
     return render_template("tour_planner/print.html", plan=plan, brief=brief, fig=tp.group_figures(brief),
                            sections=sections, one_stage=key in smap, show_all=show_all,
                            statuses=tp.FLAG_STATUS, stage_key=key if key in smap else None,
+                           printed_at=db.execute("SELECT datetime('now')").fetchone()[0])
+
+
+@tour_planner_bp.route("/<int:plan_id>/brief/print")
+@login_required
+def print_brief(plan_id):
+    """The Tour Brief on one printable page: the tour, the travelling
+    parties with their totals, and transport."""
+    _tenant()
+    db = get_db()
+    plan = _plan(db, plan_id)
+    brief = tp.brief_of(plan)
+    smap = tp.stages(db, plan_id)
+    return render_template("tour_planner/print_brief.html", plan=plan, brief=brief, fig=tp.group_figures(brief),
+                           st=smap["brief"], return_modes=tp.RETURN_MODES, guide_seating=tp.GUIDE_SEATING,
+                           problems=tp.brief_problems(brief),
                            printed_at=db.execute("SELECT datetime('now')").fetchone()[0])
 
 

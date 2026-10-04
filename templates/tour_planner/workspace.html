@@ -250,7 +250,10 @@
       <form method="post" action="{{ url_for('tour_planner.save_brief', plan_id=plan.plan_id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card shadow-sm border-0 mb-3"><div class="card-body">
-          <h2 class="h6">Tour</h2>
+          <div class="d-flex justify-content-between align-items-start">
+            <h2 class="h6">Tour</h2>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('tour_planner.print_brief', plan_id=plan.plan_id) }}" target="_blank" title="The Tour Brief on one printable page (saved values)"><i class="bi bi-printer"></i> Print</a>
+          </div>
           <div class="row g-2">
             <div class="col-md-6"><label class="form-label small text-muted mb-0">Tour name</label><input class="form-control form-control-sm" name="name" value="{{ brief.name }}"></div>
             <div class="col-md-3"><label class="form-label small text-muted mb-0">Standard</label><input class="form-control form-control-sm" name="standard" value="{{ brief.standard }}"></div>
@@ -286,30 +289,49 @@
               </tr>
               {% endfor %}
             </tbody>
+            <tfoot><tr class="fw-semibold border-top border-2">
+              <td colspan="3" class="text-end">Total</td>
+              <td class="ps-3" id="tot-guests">{{ fig.guests }}</td>
+              <td class="ps-3" id="tot-doubles">{{ fig.doubles }}</td>
+              <td class="ps-3" id="tot-singles">{{ fig.singles }}</td>
+            </tr>
+            <tr class="small text-muted"><td colspan="3" class="text-end border-0">Rooms</td>
+              <td colspan="3" class="ps-3 border-0" id="tot-rooms">{{ fig.guest_rooms }} guest rooms, sleeping {{ 2 * fig.doubles + fig.singles }}</td></tr></tfoot>
           </table></div>
           <div class="small text-muted">Three empty rows are added each time you save. Couples share a double; a guest who needs their own room takes a single.</div>
         </div></div>
 
         <div class="card shadow-sm border-0 mb-3"><div class="card-body">
-          <h2 class="h6">Guides, vehicles, drivers</h2>
+          <h2 class="h6">Transport and guides</h2>
           <div class="row g-2">
-            <div class="col-md-2"><label class="form-label small text-muted mb-0">Guides</label><input class="form-control form-control-sm" type="number" min="0" name="guides" value="{{ brief.guides }}"></div>
-            <div class="col-md-4"><label class="form-label small text-muted mb-0">Guide seating</label>
-              <select class="form-select form-select-sm" name="guide_seating">{% for k, v in guide_seating.items() %}<option value="{{ k }}" {{ 'selected' if brief.guide_seating == k else '' }}>{{ v }}</option>{% endfor %}</select></div>
-            <div class="col-md-3"><label class="form-label small text-muted mb-0">Vehicle</label><input class="form-control form-control-sm" name="vehicle_type" value="{{ brief.vehicle_type }}"></div>
-            <div class="col-md-3"><label class="form-label small text-muted mb-0">Seats per vehicle</label><input class="form-control form-control-sm" type="number" min="4" name="vehicle_seats" value="{{ brief.vehicle_seats }}"></div>
-            <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="drivers_included" value="1" id="drivers" {{ 'checked' if brief.drivers_included else '' }}>
+            <div class="col-md-3"><label class="form-label small text-muted mb-0" for="vehicle_type">Transport type</label>
+              <input class="form-control form-control-sm" id="vehicle_type" name="vehicle_type" list="transport-types" value="{{ brief.vehicle_type }}">
+              <datalist id="transport-types">{% for t in transport_types %}<option value="{{ t }}">{% endfor %}</datalist></div>
+            <div class="col-md-3"><label class="form-label small text-muted mb-0" for="max_guests_per_vehicle">Max guests per vehicle</label>
+              <input class="form-control form-control-sm" type="number" min="1" id="max_guests_per_vehicle" name="max_guests_per_vehicle" value="{{ brief.max_guests_per_vehicle or '' }}" placeholder="as many as fit ({{ fig.max_guests_per_vehicle }})"></div>
+            <div class="col-md-2"><label class="form-label small text-muted mb-0" for="guides">Guides</label><input class="form-control form-control-sm" type="number" min="0" id="guides" name="guides" value="{{ brief.guides }}"></div>
+            <div class="col-md-4"><label class="form-label small text-muted mb-0" for="vehicle_capacity">Total vehicle capacity <span class="text-nowrap">(incl. driver and guides)</span></label>
+              <input class="form-control form-control-sm" type="number" min="3" id="vehicle_capacity" name="vehicle_capacity" value="{{ brief.vehicle_capacity }}"></div>
+            <div class="col-md-4"><label class="form-label small text-muted mb-0" for="guide_seating">Guide seating</label>
+              <select class="form-select form-select-sm" id="guide_seating" name="guide_seating">{% for k, v in guide_seating.items() %}<option value="{{ k }}" {{ 'selected' if brief.guide_seating == k else '' }}>{{ v }}</option>{% endfor %}</select></div>
+            <div class="col-md-8 d-flex align-items-end"><div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="drivers_included" value="1" id="drivers" {{ 'checked' if brief.drivers_included else '' }}>
               <label class="form-check-label small" for="drivers">Drivers come with the vehicles; the tour pays their rooms and meals</label></div></div>
-            <div class="col-md-6"><label class="form-label small text-muted mb-0">Interests</label><input class="form-control form-control-sm" name="interests" value="{{ brief.interests }}" placeholder="e.g. history, mountains, food"></div>
-            <div class="col-md-6"><label class="form-label small text-muted mb-0">Other notes</label><input class="form-control form-control-sm" name="notes" value="{{ brief.notes }}"></div>
           </div>
-          <div class="mt-3 small">
-            <span class="badge bg-light text-dark border">{{ fig.guests }} guests</span>
-            <span class="badge bg-light text-dark border">{{ fig.doubles }} doubles + {{ fig.singles }} singles = {{ fig.guest_rooms }} guest rooms</span>
+          <div class="form-text">Total vehicle capacity is every seat in one vehicle, the driver's and the guide's included. Leave Max guests per vehicle empty to fill the seats left after the driver{{ ' and guide' if brief.guide_seating == 'one_per_minibus' else '' }}.</div>
+          <div class="mt-2 small">
+            <span class="badge bg-light text-dark border">{{ fig.vehicles }} × {{ (brief.vehicle_type or 'vehicle')|lower }}{% if fig.per_vehicle %}: {{ fig.per_vehicle|join(' + ') }} guests{% endif %}{% if fig.guides_in_vehicles %} + 1 guide each{% endif %} + 1 driver each</span>
+            <span class="badge bg-light text-dark border">Total capacity {{ fig.vehicles }} × {{ fig.vehicle_capacity }} = {{ fig.total_capacity }} seats for {{ fig.riding }} people</span>
+            {% if fig.suv %}<span class="badge bg-light text-dark border">1 SUV for the guides</span>{% endif %}
             <span class="badge bg-light text-dark border">{{ fig.guide_rooms }} guide room{{ 's' if fig.guide_rooms != 1 }}</span>
             {% if fig.driver_rooms %}<span class="badge bg-light text-dark border">{{ fig.driver_rooms }} driver room{{ 's' if fig.driver_rooms != 1 }}</span>{% endif %}
-            <span class="badge bg-light text-dark border">{{ fig.vehicles }} × {{ brief.vehicle_type|lower }}{% if fig.per_vehicle %}: {{ fig.per_vehicle|join(' + ') }} guests{% endif %}{% if brief.guide_seating == 'one_per_minibus' and brief.guides %} + 1 guide each{% endif %}</span>
-            {% if fig.suv %}<span class="badge bg-light text-dark border">1 SUV for the guides</span>{% endif %}
+          </div>
+        </div></div>
+
+        <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+          <h2 class="h6">Interests and notes</h2>
+          <div class="row g-2">
+            <div class="col-md-6"><label class="form-label small text-muted mb-0">Interests</label><input class="form-control form-control-sm" name="interests" value="{{ brief.interests }}" placeholder="e.g. history, mountains, food"></div>
+            <div class="col-md-6"><label class="form-label small text-muted mb-0">Other notes</label><input class="form-control form-control-sm" name="notes" value="{{ brief.notes }}"></div>
           </div>
         </div></div>
 
@@ -556,4 +578,30 @@
 </div>
 {% endif %}
 {% if key in ('route', 'checkpoints') %}{{ criteria_modal(key) }}{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if key == 'brief' %}
+<script>
+  // Travelling parties: the Total line follows what's typed.
+  (function () {
+    function sum(name) {
+      var t = 0;
+      document.querySelectorAll('input[name="' + name + '"]').forEach(function (el) { t += parseInt(el.value, 10) || 0; });
+      return t;
+    }
+    function update() {
+      var g = sum('p_guests'), d = sum('p_doubles'), s = sum('p_singles');
+      document.getElementById('tot-guests').textContent = g;
+      document.getElementById('tot-doubles').textContent = d;
+      document.getElementById('tot-singles').textContent = s;
+      var rooms = document.getElementById('tot-rooms');
+      rooms.textContent = (d + s) + ' guest rooms, sleeping ' + (2 * d + s) + (2 * d + s < g ? ' — not enough for ' + g + ' guests' : '');
+      rooms.classList.toggle('text-danger', 2 * d + s < g);
+    }
+    document.querySelectorAll('input[name="p_guests"], input[name="p_doubles"], input[name="p_singles"]').forEach(function (el) {
+      el.addEventListener('input', update);
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

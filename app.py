@@ -121,8 +121,22 @@ MODULES = [
     {"key": "catalog_sync", "label": "Catalog Sync", "icon": "arrow-repeat", "endpoint": "catalog_sync.index",
      "roles": ["SystemAdmin"]},
     # Platform-level research agents with a review queue (platform_agents.py).
-    {"key": "platform_agents", "label": "TMS Agents", "icon": "robot", "endpoint": "platform_agents.index",
-     "roles": ["SystemAdmin"]},
+    # Sub-menus by what the agents do (Zeb, Oct 2026); "section" tells base.html
+    # which one is open (blueprints/platform_agents.py sets g.nav_section).
+    {"key": "platform_agents", "label": "TMS Agents", "icon": "robot", "roles": ["SystemAdmin"], "children": [
+        {"key": "platform_agents", "label": "Overview", "icon": "grid", "endpoint": "platform_agents.index",
+         "section": "overview"},
+        {"key": "platform_agents", "label": "Content Enrichment", "icon": "magic", "endpoint": "platform_agents.index",
+         "args": {"section": "enrichment"}, "section": "enrichment"},
+        {"key": "platform_agents", "label": "Image Collectors", "icon": "images", "endpoint": "platform_agents.index",
+         "args": {"section": "images"}, "section": "images"},
+        {"key": "platform_agents", "label": "PDF Agents", "icon": "file-earmark-pdf", "endpoint": "platform_agents.index",
+         "args": {"section": "pdf"}, "section": "pdf"},
+        {"key": "platform_agents", "label": "Geography & Distances", "icon": "globe-americas",
+         "endpoint": "platform_agents.index", "args": {"section": "geo"}, "section": "geo"},
+        {"key": "platform_agents", "label": "Review Queue", "icon": "check2-square", "endpoint": "platform_agents.review",
+         "section": "review"},
+    ]},
     # AI spend per tenant and monthly allowances (ai_usage.py).
     {"key": "platform_ai_usage", "label": "AI Usage", "icon": "cpu", "endpoint": "platform_ai_usage.platform_usage",
      "roles": ["SystemAdmin"]},

@@ -510,9 +510,10 @@ def merge_places(places, force=False):
 
 # ---- the run -------------------------------------------------------------------------------------------------------
 
-def start(db, files, params, user_id):
+def start(db, files, params, user_id, agent_key="pdf", modes=MODES):
     """files: [(file name, bytes)]. Store the uploads and start the run.
-    Returns run_id."""
+    Returns run_id. agent_key / modes: the Accommodation and Restaurants PDF
+    agents (pdf_catalog_agent.py) start their runs here too."""
     files = [(n, d) for n, d in files if d]
     if not files:
         raise PdfError("Choose a PDF file.")
@@ -528,19 +529,21 @@ def start(db, files, params, user_id):
             raise PdfError(f"{name}: {e}")
         digest = fingerprint(data)
         seen = db.execute("""SELECT u.file_name, u.created_at, u.run_id FROM platform_agent_uploads u
-                             WHERE u.file_hash = ? ORDER BY u.upload_id DESC LIMIT 1""", (digest,)).fetchone()
+                             JOIN platform_agent_runs r ON r.run_id = u.run_id
+                             WHERE u.file_hash = ? AND r.agent_key = ? ORDER BY u.upload_id DESC LIMIT 1""",
+                          (digest, agent_key)).fetchone()
         if seen and not params.get("again"):
             raise PdfError(f"“{name}” was already read on {seen['created_at'][:10]} (run {seen['run_id']}, as "
                            f"“{seen['file_name']}”). Tick “Read it again anyway” to read it once more.")
         checked.append((name, data, pages, digest))
     pa.anthropic_client()
-    mode = params.get("mode") if params.get("mode") in MODES else "multi"
+    mode = params.get("mode") if params.get("mode") in modes else "multi"
     params = dict(params, mode=mode)
     total_pages = sum(min(p, MAX_PAGES) for _n, _d, p, _h in checked)
     label = (checked[0][0] if len(checked) == 1 else f"{len(checked)} PDFs") + \
-        f" ({total_pages} page{'s' if total_pages != 1 else ''}; {MODES[mode].lower()})"
+        f" ({total_pages} page{'s' if total_pages != 1 else ''}; {modes[mode].lower()})"
     cur = db.execute("INSERT INTO platform_agent_runs (agent_key, scope_label, params, created_by, items_total) "
-                     "VALUES ('pdf', ?, ?, ?, ?)", (label, json.dumps(params), user_id, len(checked) + 1))
+                     "VALUES (?, ?, ?, ?, ?)", (agent_key, label, json.dumps(params), user_id, len(checked) + 1))
     run_id = cur.lastrowid
     for name, data, pages, digest in checked:
         db.execute("INSERT INTO platform_agent_uploads (run_id, file_name, mime_type, file_size, page_count, file_data, "

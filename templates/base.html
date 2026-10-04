@@ -57,7 +57,8 @@
           <ul class="nav nav-pills flex-column ms-3">
             {% for c in m.children %}
             <li class="nav-item">
-              {% set child_active = request.blueprint == c.key and (not c.group or (session.get('supplier_group') or 'all') == c.group) %}
+              {% set child_active = request.blueprint == c.key and (not c.group or (session.get('supplier_group') or 'all') == c.group)
+                                  and (not c.section or g.get('nav_section') == c.section) %}
               <a href="{{ url_for(c.endpoint, **(c.args or {})) }}" class="nav-link {{ 'active' if child_active else 'text-white-50' }}">
                 <i class="bi bi-{{ c.icon }} me-2"></i>{{ c.label }}
               </a>
