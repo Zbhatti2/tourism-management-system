@@ -865,6 +865,34 @@ def _migration_reference_room_rate(db):
     db.commit()
 
 
+def _migration_package_groups(db):
+    """Package Groups (Zeb, Oct 2026): a lookup to group a tenant's packages
+    and Tour Designs (Gurdwaras Tour, Northern Areas...), shown as a column
+    on Package Management and Tour Design, maintained in Table Maintenance."""
+    db.executescript("""
+CREATE TABLE IF NOT EXISTS package_groups (
+    package_group_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    code            TEXT,
+    label           TEXT NOT NULL,
+    description     TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (tenant_id, code)
+);
+CREATE INDEX IF NOT EXISTS idx_package_groups_tenant ON package_groups(tenant_id);
+""")
+    for table in ("packages", "tour_plans"):
+        if _column_exists(db, table, "tenant_id") and not _column_exists(db, table, "package_group_id"):
+            db.execute(f"ALTER TABLE {table} ADD COLUMN package_group_id INTEGER REFERENCES package_groups(package_group_id)")
+    # Starter groups for the tenants (the ones Zeb drew); each tenant edits its own.
+    for (tid,) in db.execute("SELECT tenant_id FROM tenants WHERE COALESCE(is_platform, 0) = 0").fetchall():
+        for n, (code, label) in enumerate((("GURDWARAS", "Gurdwaras Tour"), ("NORTHERN_AREAS", "Northern Areas")), 1):
+            db.execute("INSERT OR IGNORE INTO package_groups (tenant_id, code, label, sort_order) VALUES (?, ?, ?, ?)",
+                       (tid, code, label, n * 10))
+    db.commit()
+
+
 def _migration_city_checkpoint_flag(db):
     """cities.is_checkpoint: a good overnight stop for tour groups (set by
     the platform, or proposed by a tenant's Tour Planner)."""
@@ -907,6 +935,7 @@ MIGRATIONS = [
     ("2026_10_catalog_images", _migration_catalog_images),
     ("2026_10_state_alt_names", _migration_state_alt_names),
     ("2026_10_reference_room_rate", _migration_reference_room_rate),
+    ("2026_10_package_groups", _migration_package_groups),
 ]
 
 

@@ -57,8 +57,11 @@ MODULES = [
     # Tour Design (Zeb, Oct 2026): where tours are ideated and decided, with
     # the Tour Planner agent (blueprints/tour_planner.py); Package Management
     # adds Ready designs as Packages.
-    {"key": "tour_planner", "label": "Tour Design", "icon": "compass", "roles": ["TenantAdmin", "User"], "endpoint": "tour_planner.index"},
-    {"key": "packages", "label": "Package Management", "icon": "map", "roles": ["TenantAdmin", "User"], "endpoint": "packages.list_packages"},
+    # Grouped under Tours Management (Zeb, Oct 2026).
+    {"key": "tours_management", "label": "Tours Management", "icon": "signpost-2", "roles": ["TenantAdmin", "User"], "children": [
+        {"key": "tour_planner", "label": "Tour Design", "icon": "compass", "endpoint": "tour_planner.index"},
+        {"key": "packages", "label": "Package Management", "icon": "map", "endpoint": "packages.list_packages"},
+    ]},
     # Foundations for Zeb's "First Agents" plan (Sept 2026) -- Agent Runs +
     # Human Review Queue. Single top-level entry (Review Queue is a tab on
     # the Agent Runs page, not a separate sidebar child -- see

@@ -12,6 +12,13 @@
       <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search code or name…">
     </div>
     <div class="col-auto">
+      <select class="form-select" name="group">
+        <option value="">All groups</option>
+        {% for pg in package_groups %}<option value="{{ pg.package_group_id }}" {{ "selected" if group_id == pg.package_group_id|string else "" }}>{{ pg.label }}</option>{% endfor %}
+        <option value="none" {{ "selected" if group_id == "none" else "" }}>No group</option>
+      </select>
+    </div>
+    <div class="col-auto">
       <select class="form-select" name="status">
         <option value="">All statuses</option>
         <option value="draft" {{ "selected" if status == "draft" else "" }}>Draft</option>
@@ -26,7 +33,7 @@
     <div class="col-auto">
       <button class="btn btn-outline-secondary" type="submit">Search</button>
     </div>
-    {% if q or status or show_archived %}
+    {% if q or status or show_archived or group_id %}
     <div class="col-auto">
       <a href="{{ url_for('packages.list_packages') }}" class="btn btn-link">Clear</a>
     </div>
@@ -41,6 +48,7 @@
         <tr>
           <th>Package Code</th>
           <th>Name</th>
+          <th>Group</th>
           <th>Type</th>
           <th>Duration</th>
           <th>Pax</th>
@@ -52,6 +60,7 @@
         <tr onclick="window.location='{{ url_for('packages.view_package', package_id=p.package_id) }}'" style="cursor:pointer;">
           <td><code>{{ p.package_code }}</code></td>
           <td>{{ p.package_name }}</td>
+          <td>{{ p.group_label or "—" }}</td>
           <td class="text-muted small">{{ "Fixed Departure" if p.package_type == "fixed_departure" else "Custom" }}</td>
           <td class="text-muted small">{% if p.duration_days %}{{ p.duration_days }}d / {{ p.duration_nights or 0 }}n{% else %}—{% endif %}</td>
           <td class="text-muted small">{% if p.min_pax or p.max_pax %}{{ p.min_pax or "?" }}–{{ p.max_pax or "?" }}{% else %}—{% endif %}</td>
@@ -62,7 +71,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="text-center text-muted py-5">No packages yet — <a href="{{ url_for('packages.new_package') }}">add the first one</a>.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-5">No packages yet — <a href="{{ url_for('packages.new_package') }}">add the first one</a>.</td></tr>
         {% endfor %}
       </tbody>
     </table>

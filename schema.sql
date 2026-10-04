@@ -2089,11 +2089,26 @@ CREATE TABLE packages (
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     tour_design_version_id INTEGER REFERENCES tour_design_versions(version_id),  -- the Ready Tour Design it was added from (tour_design.py)
+    package_group_id INTEGER REFERENCES package_groups(package_group_id),  -- e.g. Gurdwaras Tour, Northern Areas (Table Maintenance)
     UNIQUE (tenant_id, package_code)
 );
 CREATE INDEX idx_packages_tenant ON packages(tenant_id);
 CREATE INDEX idx_packages_status ON packages(status);
 CREATE INDEX idx_packages_service ON packages(service_id);
+
+-- Package Groups (Zeb, Oct 2026): a tenant's own grouping of its packages,
+-- e.g. Gurdwaras Tour, Northern Areas -- a standard lookup (Table Maintenance).
+CREATE TABLE package_groups (
+    package_group_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    code            TEXT,
+    label           TEXT NOT NULL,
+    description     TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (tenant_id, code)
+);
+CREATE INDEX idx_package_groups_tenant ON package_groups(tenant_id);
 
 -- The Master Route -- Country -> City sequence a package travels.
 CREATE TABLE package_route_stops (
@@ -3258,7 +3273,8 @@ CREATE TABLE IF NOT EXISTS tour_plans (
     created_by      INTEGER REFERENCES users(user_id),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    ready_version_id INTEGER REFERENCES tour_design_versions(version_id)  -- its Ready for package version (tour_design.py)
+    ready_version_id INTEGER REFERENCES tour_design_versions(version_id),  -- its Ready for package version (tour_design.py)
+    package_group_id INTEGER REFERENCES package_groups(package_group_id)  -- Group, carried into the Package made from it
 );
 CREATE INDEX IF NOT EXISTS idx_tour_plans_tenant ON tour_plans(tenant_id);
 -- Ready for package: frozen versions of a Tour Design (tour_design.py)

@@ -17,6 +17,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 import agent_runs
 import ai_usage
+import package_groups
 import tour_planner as tp
 from auth.decorators import login_required
 from db import get_db, log_action
@@ -51,9 +52,18 @@ def index():
     db = get_db()
     tp.mark_stale(db, g.tenant_id)
     import tour_design
+    group_id = (request.args.get("group") or "").strip()
+    sql = ("SELECT tp.*, pg.label AS group_label FROM tour_plans tp "
+           "LEFT JOIN package_groups pg ON pg.package_group_id = tp.package_group_id "
+           "WHERE tp.tenant_id = ? AND tp.status != 'archived'")
+    args = [g.tenant_id]
+    if group_id == "none":
+        sql += " AND tp.package_group_id IS NULL"
+    elif group_id.isdigit():
+        sql += " AND tp.package_group_id = ?"
+        args.append(int(group_id))
     plans = []
-    for p in db.execute("SELECT * FROM tour_plans WHERE tenant_id = ? AND status != 'archived' ORDER BY updated_at DESC",
-                        (g.tenant_id,)).fetchall():
+    for p in db.execute(sql + " ORDER BY tp.updated_at DESC", args).fetchall():
         smap = tp.stages(db, p["plan_id"])
         built = [s for s in smap.values() if s["built"]]
         brief = tp.brief_of(p)
@@ -61,7 +71,8 @@ def index():
                       "built": len(built), "working": any(s["state"] == "working" for s in built),
                       "ready": tour_design.current_version(db, p),
                       "changed": tour_design.changed_since(db, p, smap, brief)})
-    return render_template("tour_planner/index.html", plans=plans)
+    return render_template("tour_planner/index.html", plans=plans, group_id=group_id,
+                           package_groups=package_groups.choices(db, g.tenant_id))
 
 
 @tour_planner_bp.route("/new", methods=["GET", "POST"])
@@ -76,6 +87,10 @@ def new_plan():
             flash("Give the tour a name, or paste a request.", "error")
             return redirect(url_for("tour_planner.new_plan"))
         plan_id = tp.create_plan(db, g.tenant_id, g.user_id, name or "New tour", request_text=text or None)
+        gid = package_groups.valid_id(db, g.tenant_id, request.form.get("package_group_id"))
+        if gid:
+            db.execute("UPDATE tour_plans SET package_group_id = ? WHERE plan_id = ?", (gid, plan_id))
+            db.commit()
         log_action("Create", "tour_plans", plan_id, f"New tour plan {name or '(from a request)'}")
         if text and request.form.get("action") == "fill":
             try:
@@ -83,7 +98,8 @@ def new_plan():
             except tp.PlannerError as e:
                 flash(f"The brief couldn't be filled in automatically: {e}", "error")
         return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="brief"))
-    return render_template("tour_planner/new.html", allowance=_allowance(db))
+    return render_template("tour_planner/new.html", allowance=_allowance(db),
+                           package_groups=package_groups.choices(db, g.tenant_id))
 
 
 def _allowance(db):
@@ -120,6 +136,8 @@ def workspace(plan_id):
     return render_template(
         "tour_planner/workspace.html", plan=plan, brief=brief, fig=tp.group_figures(brief), stages=smap, key=key, st=st,
         can_run=tp.previous_approved(smap, key), problems=tp.brief_problems(brief), questions=questions,
+        package_groups=package_groups.choices(db, g.tenant_id, plan["package_group_id"]),
+        group_label=package_groups.label(db, plan["package_group_id"]),
         return_modes=tp.RETURN_MODES, guide_seating=tp.GUIDE_SEATING, transport_types=tp.TRANSPORT_TYPES, hours=tp.hours, cost=cost, calls=calls,
         run=run, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
         status_url=url_for("tour_planner.run_status", plan_id=plan_id, run_id=run["run_id"]) if run else None,
@@ -166,6 +184,9 @@ def save_brief(plan_id):
     db = get_db()
     plan = _plan(db, plan_id)
     brief = _brief_from_form(request.form, tp.brief_of(plan))
+    if "package_group_id" in request.form:  # the Group, on the plan itself (not part of the brief)
+        db.execute("UPDATE tour_plans SET package_group_id = ? WHERE plan_id = ? AND tenant_id = ?",
+                   (package_groups.valid_id(db, g.tenant_id, request.form.get("package_group_id")), plan_id, g.tenant_id))
     tp.save_brief(db, plan_id, brief)
     if request.form.get("action") == "approve":
         problems = tp.brief_problems(brief)

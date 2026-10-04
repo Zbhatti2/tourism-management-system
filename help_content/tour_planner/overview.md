@@ -1,11 +1,14 @@
 ---
 title: Tour Design
 order: 1
-keywords: [tour design, tour planner, ai agent, itinerary, route, checkpoints, journey times, brief, package, print, ready for package]
+keywords: [tour design, group, tours management, tour planner, ai agent, itinerary, route, checkpoints, journey times, brief, package, print, ready for package]
 ---
 **Tour Design** is where tours are ideated and decided. Each Tour Design
 is planned with the **Tour Planner** agent, one stage at a time. Open it
-from the **Tour Design** item in the sidebar, or from the dashboard tile.
+from **Tours Management → Tour Design** in the sidebar, or from the
+dashboard tile. Each design can have a **Group** (Gurdwaras Tour, Northern
+Areas…), chosen when you start it or on the Tour Brief. The list has a
+Group column and filter, and the Package made from a design takes its group.
 Several people can each work on their own designs. When a design is
 ready, Package Management adds it as a Package.
 
