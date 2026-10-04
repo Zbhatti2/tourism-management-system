@@ -28,13 +28,15 @@ Each stage shows its status on the left: *Ready*, *Working…*, *To review*,
    - The **Total** line under the travelling parties adds up guests,
      doubles and singles as you type, and warns when the rooms sleep fewer
      than the guests.
-   - **Transport and guides**: Transport type, Max guests per vehicle,
-     Guides, and the **Total vehicle capacity**, which counts every seat
-     including the driver's and the guide's. TMS works out the vehicles.
-     For example, with one guide in each vehicle, 24 guests in 15-seaters
-     need two vehicles: 12 guests, a guide and the driver in each. Leave
-     Max guests per vehicle empty to fill every seat left. The **Total
-     capacity** shows vehicles × seats against the people riding.
+   - **Transport and guides**: Transport type, then per vehicle the Max
+     guests, Guides and Drivers. **Total vehicle capacity** is their sum,
+     every seat in one vehicle, worked out for you. The number of vehicles
+     follows from the guests. For example, 24 guests at 12 per vehicle with
+     1 guide and 1 driver each need 2 vehicles of 14 seats: 2 × 14 = 28
+     seats for 28 people.
+   - Under it, separate rows show the **Transport**, the **Total capacity**
+     against the people riding, and the **Rooms for guides and drivers**
+     (one single each; drivers' rooms only when the tour pays for them).
    - **Print** (top right of the Tour card) opens the saved brief on one
      page, with the totals and transport, ready to print.
 2. **Route and POIs**: the main route city by city, with distances and drive

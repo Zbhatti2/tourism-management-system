@@ -111,7 +111,10 @@ DEFAULT_BRIEF = {
     "name": "", "standard": "4-Star", "start_city": "Islamabad", "start_date": "", "destination": "",
     "route_note": "", "return_mode": "overland", "fly_home": True, "tour_days": 10, "weather_days": 0,
     "max_drive_hours": 8, "parties": [], "guides": 2, "guide_seating": "one_per_minibus",
-    "vehicle_type": "Minibus", "vehicle_seats": 14, "vehicle_capacity": 15, "max_guests_per_vehicle": None,
+    # Transport per vehicle: filled in by normalise_transport (None = not set yet,
+    # read from an older brief's figures; a new brief gets 12 + 1 guide + 1 driver).
+    "vehicle_type": "Minibus", "max_guests_per_vehicle": None, "guides_per_vehicle": None, "drivers_per_vehicle": None,
+    "vehicle_seats": 13,
     "drivers_included": True, "currency": "USD",
     "interests": "", "notes": "", "checkpoint_criteria": {}, "flag_responses": {},
 }
@@ -144,54 +147,62 @@ def brief_of(plan):
 
 
 def normalise_transport(b):
-    """Transport (Zeb, Oct 2026): Transport Type, Max Guests per Vehicle,
-    Guides and the Total Vehicle Capacity including the driver and guides.
-    Older briefs only had 'seats per vehicle' (guests and guide, without the
-    driver): their capacity is that plus the driver."""
-    if not b.get("vehicle_capacity"):
-        b["vehicle_capacity"] = int(b.get("vehicle_seats") or 14) + 1
-    b["vehicle_capacity"] = max(int(b["vehicle_capacity"]), 3)
-    b["vehicle_seats"] = b["vehicle_capacity"] - 1
+    """Transport (Zeb, Oct 2026): per vehicle, Max Guests + Guides + Drivers =
+    the Total Vehicle Capacity. The number of vehicles follows from the
+    guests, and the tour's guides and drivers from the vehicles.
+
+    Older briefs had 'seats per vehicle' (guests and guide, without the
+    driver), a number of guides and a guide-seating choice: they are read
+    into the same figures, giving the same vehicles."""
+    if "guides_per_vehicle" not in b or b.get("guides_per_vehicle") is None:
+        gpv = 1 if b.get("guide_seating") == "one_per_minibus" and int(b.get("guides") or 0) else 0
+        b["guides_per_vehicle"] = gpv
+        b["drivers_per_vehicle"] = 1
+        if not b.get("max_guests_per_vehicle"):
+            seats = int(b.get("vehicle_capacity") or 0) - 1 if b.get("vehicle_capacity") else int(b.get("vehicle_seats") or 14)
+            b["max_guests_per_vehicle"] = max(seats - gpv, 1)
+    b["max_guests_per_vehicle"] = max(int(b.get("max_guests_per_vehicle") or 12), 1)
+    b["guides_per_vehicle"] = max(int(b.get("guides_per_vehicle") or 0), 0)
+    b["drivers_per_vehicle"] = max(int(b.get("drivers_per_vehicle") if b.get("drivers_per_vehicle") is not None else 1), 0)
+    b["vehicle_capacity"] = b["max_guests_per_vehicle"] + b["guides_per_vehicle"] + b["drivers_per_vehicle"]
+    b["vehicle_seats"] = b["vehicle_capacity"] - b["drivers_per_vehicle"]
+    vehicles = _vehicles(b)
+    b["guides"] = vehicles * b["guides_per_vehicle"]
+    b["guide_seating"] = "one_per_minibus" if b["guides_per_vehicle"] else "none"
     return b
 
 
-def transport_figures(brief):
-    """(seats left for guests in each vehicle, guide riding in each, the
-    planner's max guests per vehicle or None)."""
-    capacity = int(brief.get("vehicle_capacity") or 15)
-    guide_in = 1 if brief.get("guide_seating") == "one_per_minibus" and int(brief.get("guides") or 0) else 0
-    room = max(capacity - 1 - guide_in, 1)  # one seat is the driver's
-    wanted = brief.get("max_guests_per_vehicle")
-    wanted = int(wanted) if wanted not in (None, "", 0, "0") else None
-    return room, guide_in, wanted
+def _guests(brief):
+    return sum(int(p.get("guests") or 0) for p in brief.get("parties") or [])
+
+
+def _vehicles(brief):
+    guests = _guests(brief)
+    return math.ceil(guests / max(int(brief.get("max_guests_per_vehicle") or 12), 1)) if guests else 0
 
 
 def group_figures(brief):
-    """Guests, rooms and vehicles worked out from the brief."""
+    """Guests, rooms and transport worked out from the brief."""
+    brief = normalise_transport(dict(brief))
     parties = brief.get("parties") or []
-    guests = sum(int(p.get("guests") or 0) for p in parties)
+    guests = _guests(brief)
     doubles = sum(int(p.get("doubles") or 0) for p in parties)
     singles = sum(int(p.get("singles") or 0) for p in parties)
-    guides = int(brief.get("guides") or 0)
-    room, guide_in, wanted = transport_figures(brief)
-    per_bus = min(wanted, room) if wanted else room
-    if guide_in:
-        buses = max(math.ceil(guests / per_bus), guides) if guests else 0
-    else:
-        buses = math.ceil(guests / per_bus) if guests else 0
+    vehicles = _vehicles(brief)
     split = []
-    if buses:
-        base, extra = divmod(guests, buses)
-        split = [base + (1 if i < extra else 0) for i in range(buses)]
-    suv = 1 if brief.get("guide_seating") == "suv" and guides else 0
-    drivers = buses + suv
-    capacity = int(brief.get("vehicle_capacity") or 15)
-    riding = guests + buses + (min(guides, buses) if guide_in else 0)  # guests, drivers, guides in the vehicles
+    if vehicles:
+        base, extra = divmod(guests, vehicles)
+        split = [base + (1 if i < extra else 0) for i in range(vehicles)]
+    gpv, dpv, capacity = brief["guides_per_vehicle"], brief["drivers_per_vehicle"], brief["vehicle_capacity"]
+    guides, drivers = vehicles * gpv, vehicles * dpv
     return {"guests": guests, "doubles": doubles, "singles": singles, "guest_rooms": doubles + singles,
-            "guide_rooms": guides, "driver_rooms": drivers if brief.get("drivers_included") else 0,
-            "vehicles": buses, "per_vehicle": split, "suv": suv, "drivers": drivers,
-            "max_guests_per_vehicle": per_bus, "vehicle_capacity": capacity, "total_capacity": buses * capacity,
-            "riding": riding, "guides_in_vehicles": min(guides, buses) if guide_in else 0}
+            "vehicles": vehicles, "per_vehicle": split, "suv": 0,
+            "max_guests_per_vehicle": brief["max_guests_per_vehicle"], "guides_per_vehicle": gpv,
+            "drivers_per_vehicle": dpv, "vehicle_capacity": capacity, "total_capacity": vehicles * capacity,
+            "guides": guides, "drivers": drivers, "riding": guests + guides + drivers,
+            "guides_in_vehicles": guides,
+            # Rooms for the crew: one each; drivers only when the tour pays for them.
+            "guide_rooms": guides, "driver_rooms": drivers if brief.get("drivers_included") else 0}
 
 
 def brief_problems(brief):
@@ -211,10 +222,8 @@ def brief_problems(brief):
         g, d, s = int(p.get("guests") or 0), int(p.get("doubles") or 0), int(p.get("singles") or 0)
         if g and 2 * d + s < g:
             out.append(f"{p.get('label') or 'A party'}: {g} guests but rooms for only {2 * d + s}.")
-    room, guide_in, wanted = transport_figures(brief)
-    if wanted and wanted > room:
-        out.append(f"Max guests per vehicle is {wanted}, but a vehicle of {brief.get('vehicle_capacity')} seats has room "
-                   f"for only {room} guests after the driver{' and guide' if guide_in else ''}.")
+    if fig["guests"] and not int(brief.get("drivers_per_vehicle") or 0):
+        out.append("Transport: no driver per vehicle -- set Drivers per vehicle (self-drive is unusual for a group).")
     return out
 
 
@@ -652,10 +661,9 @@ BRIEF_TOOL = {"name": "report_brief", "description": "The Tour Brief read from t
                   "name": {"type": "string"}, "standard": {"type": "string"}, "start_city": {"type": "string"},
                   "start_date": {"type": "string", "description": "YYYY-MM-DD"}, "destination": {"type": "string"},
                   "route_note": {"type": "string"}, "return_mode": {"type": "string", "enum": list(RETURN_MODES)},
-                  "fly_home": {"type": "boolean"}, "tour_days": {"type": "integer"}, "guides": {"type": "integer"},
-                  "guide_seating": {"type": "string", "enum": list(GUIDE_SEATING)},
+                  "fly_home": {"type": "boolean"}, "tour_days": {"type": "integer"},
+                  "guides_per_vehicle": {"type": "integer"}, "drivers_per_vehicle": {"type": "integer"},
                   "vehicle_type": {"type": "string"},
-                  "vehicle_capacity": {"type": "integer", "description": "Seats in each vehicle, counting the driver and guide"},
                   "max_guests_per_vehicle": {"type": "integer"},
                   "drivers_included": {"type": "boolean"}, "interests": {"type": "string"}, "notes": {"type": "string"},
                   "parties": {"type": "array", "items": {"type": "object", "properties": {
@@ -731,8 +739,8 @@ def dismiss_questions(db, plan_id):
 def merge_brief(brief, found):
     """The parsed request on top of the current brief (non-empty values only)."""
     found = dict(found)
-    if found.get("vehicle_seats") and not found.get("vehicle_capacity"):  # an older-style answer
-        found["vehicle_capacity"] = int(found["vehicle_seats"]) + 1
+    if found.get("vehicle_seats") and not found.get("max_guests_per_vehicle"):  # an older-style answer
+        found["max_guests_per_vehicle"] = max(int(found["vehicle_seats"]) - 1, 1)
     b = dict(brief)
     for k, v in found.items():
         if k == "questions" or v in (None, "", []):

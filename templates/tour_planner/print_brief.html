@@ -50,17 +50,21 @@
       <td class="text-end">{{ p.guests or '' }}</td><td class="text-end">{{ p.doubles or '' }}</td><td class="text-end">{{ p.singles or '' }}</td></tr>{% endfor %}</tbody>
     <tfoot><tr><td></td><td colspan="3">Total</td><td class="text-end">{{ fig.guests }}</td><td class="text-end">{{ fig.doubles }}</td><td class="text-end">{{ fig.singles }}</td></tr></tfoot>
   </table>
-  <div class="small text-muted mt-1">{{ fig.guest_rooms }} guest rooms, sleeping {{ 2 * fig.doubles + fig.singles }}{% if fig.guide_rooms %} · {{ fig.guide_rooms }} guide room{{ 's' if fig.guide_rooms != 1 }}{% endif %}{% if fig.driver_rooms %} · {{ fig.driver_rooms }} driver room{{ 's' if fig.driver_rooms != 1 }}{% endif %}</div>
+  <div class="small text-muted mt-1">{{ fig.guest_rooms }} guest rooms, sleeping {{ 2 * fig.doubles + fig.singles }}</div>
 
   <h2>Transport and guides</h2>
   <dl class="brief">
     <dt>Transport type</dt><dd>{{ brief.vehicle_type or '—' }}</dd>
-    <dt>Max guests per vehicle</dt><dd>{{ fig.max_guests_per_vehicle }}{% if not brief.max_guests_per_vehicle %} (as many as fit){% endif %}</dd>
-    <dt>Guides</dt><dd>{{ brief.guides }}{% if brief.guides %} — {{ guide_seating.get(brief.guide_seating, '')|lower }}{% endif %}</dd>
-    <dt>Vehicle capacity</dt><dd>{{ fig.vehicle_capacity }} seats each, driver and guide included</dd>
-    <dt>Vehicles</dt><dd>{{ fig.vehicles }}{% if fig.per_vehicle %} ({{ fig.per_vehicle|join(' + ') }} guests){% endif %}{% if fig.suv %}, plus 1 SUV for the guides{% endif %}</dd>
-    <dt>Total capacity</dt><dd>{{ fig.vehicles }} × {{ fig.vehicle_capacity }} = {{ fig.total_capacity }} seats for {{ fig.riding }} people ({{ fig.guests }} guests, {{ fig.guides_in_vehicles }} guide{{ 's' if fig.guides_in_vehicles != 1 }}, {{ fig.vehicles }} driver{{ 's' if fig.vehicles != 1 }})</dd>
-    <dt>Drivers</dt><dd>{{ 'Come with the vehicles; the tour pays their rooms and meals' if brief.drivers_included else 'Not included' }}</dd>
+    <dt>Per vehicle</dt><dd>{{ fig.max_guests_per_vehicle }} guests max + {{ fig.guides_per_vehicle }} guide{{ 's' if fig.guides_per_vehicle != 1 }} + {{ fig.drivers_per_vehicle }} driver{{ 's' if fig.drivers_per_vehicle != 1 }} = {{ fig.vehicle_capacity }} seats</dd>
+    <dt>Transport</dt><dd>{{ fig.vehicles }} × {{ brief.vehicle_type or 'vehicle' }}{% if fig.per_vehicle %} ({{ fig.per_vehicle|join(' + ') }} guests){% endif %}</dd>
+    <dt>Total capacity</dt><dd>{{ fig.vehicles }} × {{ fig.vehicle_capacity }} = {{ fig.total_capacity }} seats for {{ fig.riding }} people ({{ fig.guests }} guests + {{ fig.guides }} guide{{ 's' if fig.guides != 1 }} + {{ fig.drivers }} driver{{ 's' if fig.drivers != 1 }})</dd>
+  </dl>
+
+  <h2>Rooms for guides and drivers</h2>
+  <dl class="brief">
+    <dt>Guides</dt><dd>{{ fig.guide_rooms }} room{{ 's' if fig.guide_rooms != 1 }}</dd>
+    <dt>Drivers</dt><dd>{% if brief.drivers_included %}{{ fig.driver_rooms }} room{{ 's' if fig.driver_rooms != 1 }} (the tour pays their rooms and meals){% else %}Not paid by the tour{% endif %}</dd>
+    <dt>Total</dt><dd>{{ fig.guide_rooms + fig.driver_rooms }} single{{ 's' if fig.guide_rooms + fig.driver_rooms != 1 }}, on top of the {{ fig.guest_rooms }} guest rooms</dd>
   </dl>
 
   {% if brief.interests or brief.notes %}
