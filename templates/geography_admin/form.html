@@ -20,7 +20,7 @@
     {% endif %}
     <div class="mb-3">
       <label class="form-label">Label <span class="text-danger">*</span></label>
-      <input class="form-control" name="label" value="{{ (entry.label | orblank) if entry else '' }}" required>
+      <input class="form-control" name="label" value="{{ (entry.label | orblank) if entry else (request.form.get('label', '') if request.method == 'POST' else '') }}" required>
     </div>
     {% if cfg.has_code %}
     <div class="mb-3">
@@ -67,6 +67,11 @@
       <label class="form-check-label" for="is_active">Active (available to pick from when adding new addresses)</label>
     </div>
   </div>
+  {% if similar %}
+  <div class="alert alert-warning mx-3 small">Already in this table: {{ similar|join(', ') }}. If it's the same place, Cancel and use that one.
+    <div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="confirm_new" id="confirm_new" value="1">
+      <label class="form-check-label" for="confirm_new">It's a different place — add it anyway</label></div></div>
+  {% endif %}
   <div class="card-footer bg-white d-flex gap-2 justify-content-end">
     <a href="{{ url_for('geography_admin.manage', table_key=table_key) }}" class="btn btn-outline-secondary">Cancel</a>
     <button class="btn btn-primary" type="submit">Save</button>

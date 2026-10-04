@@ -29,7 +29,8 @@ class Resolver:
     def __init__(self, db):
         self.db = db
         self.countries = [dict(r) for r in db.execute("SELECT country_id, code, label, region_id FROM countries")]
-        self.states = [dict(r) for r in db.execute("SELECT state_id, country_id, code, label FROM states")]
+        alt = ", alt_names" if any(r[1] == "alt_names" for r in db.execute("PRAGMA table_info(states)")) else ", NULL AS alt_names"
+        self.states = [dict(r) for r in db.execute(f"SELECT state_id, country_id, code, label{alt} FROM states")]
         self.cities = [dict(r) for r in db.execute(
             "SELECT ci.city_id, ci.label, ci.state_id, s.country_id, ci.alt_names FROM cities ci "
             "JOIN states s ON s.state_id = ci.state_id")]
@@ -60,12 +61,13 @@ class Resolver:
         for s in pool:
             if s["code"] and s["code"].upper() == t.upper():
                 return s, "same"
-        return self._strict(t, *self._best(t, pool, lambda s: [s["label"]]), lambda s: [s["label"]])
+        names = lambda s: [s["label"]] + split_alt_names(s.get("alt_names"))  # noqa: E731
+        return self._strict(t, *self._best(t, pool, names), names)
 
     def add_state(self, country_id, label):
         cur = self.db.execute(
             "INSERT INTO states (country_id, label, sort_order, is_active) VALUES (?, ?, 0, 1)", (country_id, label))
-        row = {"state_id": cur.lastrowid, "country_id": country_id, "code": None, "label": label}
+        row = {"state_id": cur.lastrowid, "country_id": country_id, "code": None, "label": label, "alt_names": None}
         self.states.append(row)
         return row
 
@@ -114,6 +116,11 @@ class Resolver:
         for item in pool:
             names_ = names(item)
             how = compare(text, names_[0], names_[1:])
+            if how != "same":  # spaces don't count for places: "Kyber Pakhtun Khawa" / "Khyber Pakhtunkhwa"
+                from geo_merge import same_place
+                joined = max((same_place(text, n) or "" for n in names_), key=lambda h: _RANK.get(h, 0))
+                if joined and _RANK[joined] > _RANK.get(how, 0):
+                    how = joined
             if how and (best_how is None or _RANK[how] > _RANK[best_how]):
                 best, best_how = item, how
                 if how == "same":

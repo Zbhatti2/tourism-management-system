@@ -2,7 +2,7 @@
 {% block title %}Reassign "{{ entry.label }}"{% endblock %}
 {% block content %}
 <h1 class="h4 mb-1">Merge / Reassign</h1>
-<p class="text-muted">Move every record currently using <strong>{{ entry.label }}</strong> over to a different {{ cfg.label[:-1] if cfg.label.endswith('s') else cfg.label }} entry. This table is shared across every tenant, so this can move records belonging to more than just yours.</p>
+<p class="text-muted">Move every record currently using <strong>{{ entry.label }}</strong> over to a different {{ cfg.label[:-1] if cfg.label.endswith('s') else cfg.label }} entry: addresses, Points of Interest, hotels, restaurants, packages, hubs — for every tenant. Its name is kept as another spelling of the entry you choose.{% if table_key == 'states' %} Its cities move too; a city both provinces have becomes one.{% endif %}</p>
 
 <div class="card shadow-sm border-0" style="max-width: 640px;">
   <div class="card-body">
@@ -25,7 +25,7 @@
         <select class="form-select" name="target_id" required>
           <option value="">Choose an entry…</option>
           {% for o in others %}
-          <option value="{{ o[cfg.pk] }}">{{ o.label }}{{ '' if o.is_active else ' (inactive)' }}</option>
+          <option value="{{ o[cfg.pk] }}" {{ 'selected' if preselect == o[cfg.pk] else '' }}>{{ o.label }}{{ '' if o.is_active else ' (inactive)' }}{% if parent_fk and o[parent_fk] != same_parent %} — elsewhere{% endif %}</option>
           {% endfor %}
         </select>
       </div>

@@ -34,6 +34,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 
 from auth.decorators import system_admin_required
 from db import get_db, log_action
+import geo_merge
 from utils import haversine_km, parse_coordinates
 
 geography_admin_bp = Blueprint("geography_admin", __name__)
@@ -127,14 +128,30 @@ def _safe_int(value, default=0):
         return default
 
 
+def _references(db, cfg):
+    """Every column in the database that points at this table: the
+    configured ones (with their labels) plus any other found from the
+    schema's foreign keys -- supplier / organisation addresses, Points of
+    Interest, the platform catalogs, packages, hubs... (Oct 2026: merging a
+    duplicate province used to leave those pointing at the deleted one)."""
+    refs = [dict(r) for r in cfg["references"]]
+    have = {(r["table"], r["fk"]) for r in refs}
+    for (t,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").fetchall():
+        for fk in db.execute(f"PRAGMA foreign_key_list('{t}')").fetchall():
+            if fk[2] == cfg["table"] and (t, fk[3]) not in have:
+                have.add((t, fk[3]))
+                refs.append({"table": t, "fk": fk[3], "label": t.replace("_", " ") + " record(s)",
+                             "count_only": t == "city_distances"})
+    return refs
+
+
 def _usage_count(db, cfg, entry_id):
-    """Total rows across every referencing table (children one level down
-    the hierarchy, plus addresses/country_phone_codes) that point at this
-    row, plus a per-table breakdown for display. No tenant filter — these
-    are global tables, so usage is counted across every tenant."""
+    """Total rows across every referencing table that point at this row,
+    plus a per-table breakdown for display. No tenant filter — these are
+    global tables, so usage is counted across every tenant."""
     total = 0
     breakdown = []
-    for ref in cfg["references"]:
+    for ref in _references(db, cfg):
         count = db.execute(
             f"SELECT COUNT(*) c FROM {ref['table']} WHERE {ref['fk']} = ?", (entry_id,)
         ).fetchone()["c"]
@@ -235,9 +252,10 @@ def manage(table_key):
     rows = db.execute(sql, params).fetchall()
 
     entries = [{"row": r, "usage_count": _usage_count(db, cfg, r[cfg["pk"]])[0]} for r in rows]
+    dups = geo_merge.duplicates(db, table_key, parent_filter=_safe_int(parent_filter, None))
     return render_template(
         "geography_admin/manage.html", table_key=table_key, cfg=cfg, entries=entries,
-        q=q, parent_filter=parent_filter, parent_options=_parent_options(db, cfg),
+        q=q, parent_filter=parent_filter, parent_options=_parent_options(db, cfg), duplicates=dups,
     )
 
 
@@ -258,6 +276,12 @@ def new_entry(table_key):
         if values.get("__error"):
             flash(values["__error"], "error")
             return render_template("geography_admin/form.html", cfg=cfg, table_key=table_key, entry=None, parent_options=_parent_options(db, cfg))
+        like = geo_merge.similar_existing(db, table_key, label, values.get(cfg["parent"]["fk"]) if cfg.get("parent") else None)
+        if like and not form.get("confirm_new"):
+            flash(f"“{label}” looks like {', '.join('“' + x + '”' for x in like)}, already in this table. Use that one, "
+                  "or tick “It's a different place” to add it anyway.", "error")
+            return render_template("geography_admin/form.html", cfg=cfg, table_key=table_key, entry=None,
+                                   parent_options=_parent_options(db, cfg), similar=like)
         try:
             cols = ", ".join(values.keys())
             qs = ", ".join(["?"] * len(values))
@@ -364,9 +388,14 @@ def reassign(table_key, entry_id):
     if entry is None:
         abort(404)
     count, breakdown = _usage_count(db, cfg, entry_id)
+    # Entries under the same parent first (a province's duplicate is in the same country).
+    p = cfg.get("parent")
+    order = (f"CASE WHEN {p['fk']} = ? THEN 0 ELSE 1 END, " if p else "") + "label COLLATE NOCASE"
     others = db.execute(
-        f"SELECT * FROM {cfg['table']} WHERE {cfg['pk']} != ? ORDER BY label COLLATE NOCASE", (entry_id,)
+        f"SELECT * FROM {cfg['table']} WHERE {cfg['pk']} != ? ORDER BY {order}",
+        (entry_id, entry[p["fk"]]) if p else (entry_id,),
     ).fetchall()
+    preselect = request.args.get("target", type=int)
 
     if request.method == "POST":
         target_id = _safe_int(request.form.get("target_id"), None)
@@ -378,15 +407,7 @@ def reassign(table_key, entry_id):
         if target is None:
             abort(404)
 
-        moved = 0
-        for ref in cfg["references"]:
-            if ref.get("count_only"):
-                continue
-            cur = db.execute(f"UPDATE {ref['table']} SET {ref['fk']} = ? WHERE {ref['fk']} = ?", (target_id, entry_id))
-            moved += cur.rowcount
-
-        if also_delete:
-            db.execute(f"DELETE FROM {cfg['table']} WHERE {cfg['pk']} = ?", (entry_id,))
+        moved = geo_merge.merge(db, table_key, entry_id, target_id, also_delete=also_delete)
         db.commit()
 
         log_action(
@@ -408,7 +429,8 @@ def reassign(table_key, entry_id):
     return render_template(
         "geography_admin/reassign.html",
         cfg=cfg, table_key=table_key, entry=entry, others=others,
-        usage_count=count, usage_breakdown=breakdown,
+        usage_count=count, usage_breakdown=breakdown, preselect=preselect,
+        same_parent=entry[p["fk"]] if p else None, parent_fk=p["fk"] if p else None,
     )
 
 

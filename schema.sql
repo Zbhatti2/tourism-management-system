@@ -178,7 +178,8 @@ CREATE TABLE states (
     label           TEXT NOT NULL,          -- e.g. 'New York', 'Punjab'
     description     TEXT,
     sort_order      INTEGER DEFAULT 0,
-    is_active       INTEGER NOT NULL DEFAULT 1
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    alt_names       TEXT                    -- other spellings, one per line (a merged duplicate's name lands here)
 );
 CREATE INDEX idx_states_country ON states(country_id);
 -- Partial (code can be NULL — e.g. Pakistan's provinces): prevents the same
