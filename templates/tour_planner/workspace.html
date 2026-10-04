@@ -32,6 +32,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-success btn-sm" type="submit" {{ 'disabled' if st.approved_at else '' }}><i class="bi bi-check2-circle"></i> Approve this stage</button>
       </form>
+      {% if stage_open_flags and not st.approved_at %}<div class="small text-muted mt-1">Approving marks the {{ stage_open_flags }} open flag{{ 's' if stage_open_flags != 1 }} Checked / resolved. Flags set to “Noted, I'll handle it” stay on the to-do list.</div>{% endif %}
     </div>
   </div>
 </div></div>
@@ -51,6 +52,7 @@
   <ol class="small mb-2 ps-3">{% for f in flags %}{% set a = answers.get(f) or {} %}
     <li class="mb-2">
       <div class="{{ 'text-muted text-decoration-line-through' if a.status in ('resolved', 'dismissed') else '' }}">{{ f }}</div>
+      {% if a.accepted_on and a.status == 'resolved' %}<div class="text-success small"><i class="bi bi-check2-circle"></i> Accepted with the stage approval, {{ a.accepted_on }}</div>{% endif %}
       <div class="row g-1 mt-1">
         <div class="col-md-3"><select class="form-select form-select-sm" name="fs_{{ loop.index0 }}" aria-label="Status">
           {% for v, lbl in flag_statuses %}<option value="{{ v }}" {{ 'selected' if (a.status or 'open') == v else '' }}>{{ lbl }}</option>{% endfor %}</select></div>

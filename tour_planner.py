@@ -775,7 +775,7 @@ ROUTE_TOOL = {"name": "report_route", "description": "The tour's route, its poin
 
 def _brief_text(brief):
     fig = group_figures(brief)
-    b = {k: v for k, v in brief.items() if k not in ("parties", "checkpoint_criteria", "flag_responses")
+    b = {k: v for k, v in brief.items() if k not in ("parties", "checkpoint_criteria", "flag_responses", "flags_settled")
          and v not in (None, "", [])}
     b["group"] = fig
     b["parties"] = brief.get("parties")
@@ -841,6 +841,47 @@ def save_flag_responses(db, plan_id, key, responses):
     db.execute("UPDATE tour_plans SET brief = ?, updated_at = datetime('now') WHERE plan_id = ?",
                (json.dumps(b, ensure_ascii=False), plan_id))
     db.commit()
+
+
+def open_flags(smap, brief, key):
+    """The flags of one stage nobody has answered yet (status Open)."""
+    data = smap[key]["data"]
+    flags = ((data or {}).get("flags") or []) if isinstance(data, dict) else []
+    answers = (brief.get("flag_responses") or {}).get(key) or {}
+    return [f for f in flags if ((answers.get(f) or {}).get("status") or "open") == "open"]
+
+
+def resolve_open_flags(db, plan_id, key, smap, approved_at=None):
+    """Approving a stage accepts it as it stands (Zeb, Oct 2026: "Checkpoint
+    Status says Approved. But ... still say 'Open'"): every flag still Open
+    becomes Checked / resolved, marked as accepted with the approval. Flags
+    the planner answered keep their answer ('Noted, I'll handle it' stays on
+    the list of things to do).
+
+    Done once per approval (brief.flags_settled remembers it), so a flag the
+    planner sets back to Open afterwards stays Open. Returns how many were
+    resolved."""
+    plan = db.execute("SELECT brief FROM tour_plans WHERE plan_id = ?", (plan_id,)).fetchone()
+    b = dict(DEFAULT_BRIEF, **json.loads(plan["brief"] or "{}"))
+    stamp = approved_at or db.execute("SELECT approved_at FROM tour_plan_stages WHERE plan_id = ? AND stage_key = ?",
+                                      (plan_id, key)).fetchone()[0]
+    settled = dict(b.get("flags_settled") or {})
+    if not stamp or settled.get(key) == stamp:
+        return 0
+    todo = open_flags(smap, b, key)
+    fr = dict(b.get("flag_responses") or {})
+    answers = dict(fr.get(key) or {})
+    for f in todo:
+        a = dict(answers.get(f) or {})
+        a.update(status="resolved", accepted_on=stamp[:10])
+        answers[f] = a
+    fr[key] = answers
+    b["flag_responses"] = fr
+    settled[key] = stamp
+    b["flags_settled"] = settled
+    db.execute("UPDATE tour_plans SET brief = ? WHERE plan_id = ?", (json.dumps(b, ensure_ascii=False), plan_id))
+    db.commit()
+    return len(todo)
 
 
 def revise_instructions(key, responses):
