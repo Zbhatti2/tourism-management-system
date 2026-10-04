@@ -44,6 +44,19 @@
       </select>
       <div class="form-text">For picking a Top and a Secondary choice among several suppliers of the same Type in the same City — e.g. 100+ Hotels in Lahore.</div>
     </div>
+    {% if show_ref_rate %}
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label" for="ref_room_rate">Reference Room Rate <span class="text-muted small">(USD, double / night)</span></label>
+        <input class="form-control" id="ref_room_rate" name="ref_room_rate" inputmode="decimal" value="{{ request.form.ref_room_rate if request.method == 'POST' else (('%g' % supplier.ref_room_rate) if supplier and supplier.ref_room_rate is not none else '') }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label" for="ref_rate_as_of">As of</label>
+        <input class="form-control" type="date" id="ref_rate_as_of" name="ref_rate_as_of" value="{{ request.form.ref_rate_as_of if request.method == 'POST' else ((supplier.ref_rate_as_of | orblank) if supplier else '') }}">
+      </div>
+      <div class="col-12 form-text mt-1">Used by the Tour Planner only, to estimate lodging. Comes from the TMS catalog when this hotel is linked to it; change it here to use your own figure. Your contracted prices stay in Room Types.</div>
+    </div>
+    {% endif %}
     <div class="mb-3">
       <label class="form-label">Web page</label>
       <input class="form-control" type="url" name="web_page" placeholder="https://…" value="{{ (supplier.web_page | orblank) if supplier else '' }}">

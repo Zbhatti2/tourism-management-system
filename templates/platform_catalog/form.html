@@ -30,6 +30,7 @@
         {% else %}
         <input class="form-control" id="{{ col }}" name="{{ col }}" value="{{ val(col) }}" {% if kind in ('int','real','money') %}inputmode="decimal"{% endif %} {% if kind == 'date' %}type="date"{% endif %}>
         {% endif %}
+        {% if opts.help and col != 'alt_names' %}<div class="form-text">{{ opts.help }}</div>{% endif %}
       </div>
       {% endfor %}
     </div>

@@ -48,9 +48,19 @@ sync from then on.
 
 | Points of Interest | Suppliers |
 |---|---|
-| Name, POI Type, Year Established, location, address (Local Location), phone, website, description (Historical Significance), coordinates | Name, type and star sub-type, website, address, phone, email, and amenities for hotels |
+| Name, POI Type, Year Established, location, address (Local Location), phone, website, description (Historical Significance), coordinates | Name, type and star sub-type, website, address, phone, email, and for hotels the amenities and the **Reference Room Rate** |
 
 Everything else in the catalog, such as entry fee, opening hours, star
 rating, number of rooms, cuisine, price range, images and catalog notes, is
 shown live on the tenant's record under **From the Platform Catalog**.
 The tenant's own notes are never touched.
+
+### Reference Room Rate
+
+A hotel in the platform Accommodation catalog can carry a **Reference Room
+Rate**: a typical double room per night in US dollars, with its *as of*
+date. It reaches the tenant's Supplier like any other synced field, and the
+tenant can change it on the Supplier's Edit screen. A rate the tenant has
+changed is kept: a later platform change waits on this screen as an update
+to review. The rate is used only by the **Tour Planner**, to estimate
+lodging. Contracted prices stay in the Supplier's room types.

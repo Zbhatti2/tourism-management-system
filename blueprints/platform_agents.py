@@ -12,6 +12,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 import agent_runs
 import platform_agents as pa
+from platform_catalog import PROPERTY_TYPES
 from auth.decorators import system_admin_required
 from db import get_db, log_action
 
@@ -52,11 +53,21 @@ def index():
         "pois": db.execute("SELECT COUNT(*) FROM platform_pois WHERE is_active = 1 AND (" +
                            " OR ".join(f"{f} IS NULL OR {f} = ''" for f in pa.FIELDS["platform_pois"]) + ")").fetchone()[0],
     }
+    catalog_cities = {}
+    for key in ("accommodation", "restaurants"):
+        table = pa.CATALOG_ENTITIES[pa.AGENTS[key]["entity"]][0]
+        catalog_cities[key] = db.execute(f"""SELECT ci.city_id, ci.label, COUNT(*) AS n FROM {table} p
+                                             JOIN cities ci ON ci.city_id = p.city_id WHERE p.is_active = 1
+                                             GROUP BY ci.city_id ORDER BY ci.label""").fetchall()
+        gaps[key] = db.execute(f"SELECT COUNT(*) FROM {table} WHERE is_active = 1 AND (" +
+                               " OR ".join(f"{c} IS NULL OR {c} = ''" for c in pa.FIELDS[pa.AGENTS[key]["entity"]]) +
+                               ")").fetchone()[0]
     all_poi_types = db.execute("""SELECT pt.poi_type_id, pt.label FROM poi_types pt JOIN tenants t ON t.tenant_id = pt.tenant_id
                                   WHERE t.is_platform = 1 AND pt.is_active = 1 ORDER BY pt.label""").fetchall()
     return render_template("platform_agents/index.html", agents=pa.AGENTS, runs=runs, countries=countries, states=states,
                            cities=cities, poi_cities=poi_cities, poi_types=poi_types, gaps=gaps,
-                           pending=pa.pending_count(db), all_poi_types=all_poi_types)
+                           pending=pa.pending_count(db), all_poi_types=all_poi_types, catalog_cities=catalog_cities,
+                           property_types=PROPERTY_TYPES)
 
 
 @platform_agents_bp.route("/start-pdf", methods=["POST"])
@@ -129,6 +140,16 @@ def start(agent_key):
                 return redirect(url_for("platform_agents.index"))
             r = db.execute("SELECT label FROM cities WHERE city_id = ?", (params["from_city_id"],)).fetchone()
             label = f"From {r[0] if r else '?'}"
+    elif agent_key in ("accommodation", "restaurants"):
+        params.update(country_id=_int(f.get("country_id")), city_id=_int(f.get("city_id")))
+        if agent_key == "accommodation":
+            ptype = f.get("property_type") or None
+            params["property_type"] = ptype if ptype in PROPERTY_TYPES else None
+        if params["city_id"]:
+            r = db.execute("SELECT label FROM cities WHERE city_id = ?", (params["city_id"],)).fetchone()
+            parts.append(f"in {r[0]}" if r else "")
+        noun = (params.get("property_type") or "Accommodation") if agent_key == "accommodation" else "Restaurants"
+        label = " ".join([noun] + [p for p in parts if p])
     else:
         params.update(country_id=_int(f.get("country_id")), city_id=_int(f.get("city_id")),
                       poi_type_id=_int(f.get("poi_type_id")))
