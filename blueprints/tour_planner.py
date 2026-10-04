@@ -137,13 +137,10 @@ def _brief_from_form(form, brief):
               "currency", "interests", "notes"):
         b[k] = (form.get(k) or "").strip()
     b["return_mode"] = form.get("return_mode") if form.get("return_mode") in tp.RETURN_MODES else "overland"
-    b["guide_seating"] = form.get("guide_seating") if form.get("guide_seating") in tp.GUIDE_SEATING else "one_per_minibus"
     for k, lo, hi, dflt in (("tour_days", 1, 90, 10), ("weather_days", 0, 10, 0), ("max_drive_hours", 2, 14, 8),
-                            ("guides", 0, 20, 2), ("vehicle_capacity", 3, 70, 15)):
+                            ("max_guests_per_vehicle", 1, 60, 12), ("guides_per_vehicle", 0, 5, 1),
+                            ("drivers_per_vehicle", 0, 3, 1)):
         b[k] = max(lo, min(hi, _int(form.get(k), dflt)))
-    mg = _int(form.get("max_guests_per_vehicle"), 0)
-    b["max_guests_per_vehicle"] = max(1, min(mg, 69)) if mg else None
-    tp.normalise_transport(b)
     b["fly_home"] = bool(form.get("fly_home"))
     b["drivers_included"] = bool(form.get("drivers_included"))
     parties = []
@@ -156,7 +153,7 @@ def _brief_from_form(form, brief):
         if row["guests"] or row["label"] or row["origin_city"]:
             parties.append(row)
     b["parties"] = parties
-    return b
+    return tp.normalise_transport(b)
 
 
 @tour_planner_bp.route("/<int:plan_id>/brief", methods=["POST"])
