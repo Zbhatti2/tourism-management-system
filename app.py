@@ -200,6 +200,8 @@ def create_app():
     # poi_bp keeps its existing prefix/routes -- only its sidebar entry
     # moved (see the MODULES comment above).
     app.register_blueprint(poi_bp, url_prefix="/points-of-interest")
+    import list_memory
+    list_memory.init_app(app)  # every list comes back filtered as you left it
     app.register_blueprint(services_bp, url_prefix="/inventory/services")
     app.register_blueprint(products_bp, url_prefix="/inventory/products")
     app.register_blueprint(packages_bp, url_prefix="/packages")

@@ -36,6 +36,14 @@ The left sidebar covers the whole app:
 - **System Management** — users, tenant settings, and administrative
   tools.
 
+### Lists remember where you were
+
+When you filter a list (by type, city, a search…) and open a record, the
+list keeps your filter: **Back**, **Cancel**, **Save** and **Delete** all
+bring you back to the same filtered list, so you can pick another entry.
+Press **Clear** on the list, or open the module from the sidebar while
+you're elsewhere, to start again with the full list.
+
 ## Using this help panel
 
 Click **Help** in the top-right corner from almost anywhere to open this
