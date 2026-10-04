@@ -854,6 +854,17 @@ def _migration_state_alt_names(db):
     db.commit()
 
 
+def _migration_reference_room_rate(db):
+    """Reference Room Rate (Zeb, Oct 2026): USD per double room per night on
+    the platform Accommodation catalog, synced to tenants' Suppliers (they
+    can override it) and used only by the Tour Planner."""
+    for table in ("platform_accommodation", "suppliers"):
+        for col, decl in (("ref_room_rate", "REAL"), ("ref_rate_as_of", "TEXT")):
+            if not _column_exists(db, table, col):
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    db.commit()
+
+
 def _migration_city_checkpoint_flag(db):
     """cities.is_checkpoint: a good overnight stop for tour groups (set by
     the platform, or proposed by a tenant's Tour Planner)."""
@@ -895,6 +906,7 @@ MIGRATIONS = [
     ("2026_10_tour_design", _migration_tour_design),
     ("2026_10_catalog_images", _migration_catalog_images),
     ("2026_10_state_alt_names", _migration_state_alt_names),
+    ("2026_10_reference_room_rate", _migration_reference_room_rate),
 ]
 
 

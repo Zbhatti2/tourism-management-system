@@ -36,6 +36,9 @@
           <dt class="col-sm-4">Supplier Type</dt><dd class="col-sm-8">{{ supplier.type_label or "—" }}</dd>
           <dt class="col-sm-4">Sub-Type</dt><dd class="col-sm-8">{{ supplier.subtype_label or "—" }}</dd>
           <dt class="col-sm-4">Preference</dt><dd class="col-sm-8">{{ supplier.preference or "—" }}</dd>
+          {% if supplier.group_code == 'ACCOMMODATION' or supplier.ref_room_rate is not none %}
+          <dt class="col-sm-4">Reference Room Rate</dt><dd class="col-sm-8">{% if supplier.ref_room_rate is not none %}USD {{ "{:,.0f}".format(supplier.ref_room_rate) }} / night{% if supplier.ref_rate_as_of %} <span class="text-muted">(as of {{ supplier.ref_rate_as_of }})</span>{% endif %} <span class="text-muted">· Tour Planning only</span>{% else %}—{% endif %}</dd>
+          {% endif %}
           <dt class="col-sm-4">Web page</dt><dd class="col-sm-8">{% if supplier.web_page %}<a href="{{ supplier.web_page }}" target="_blank" rel="noopener">{{ supplier.web_page }}</a>{% else %}—{% endif %}</dd>
         </dl>
       </div>

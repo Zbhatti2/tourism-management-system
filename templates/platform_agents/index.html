@@ -81,6 +81,52 @@
   </div>
 </div>
 
+<div class="row g-3 mb-3">
+  {# accommodation #}
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+      <h2 class="h6"><i class="bi bi-{{ agents.accommodation.icon }} me-1"></i>{{ agents.accommodation.label }}</h2>
+      <p class="small text-muted">{{ agents.accommodation.blurb }} <strong>{{ gaps.accommodation }}</strong> properties have gaps. Approved changes reach tenants through Catalog Sync, where a tenant's own Reference Room Rate is kept.</p>
+      <form method="post" action="{{ url_for('platform_agents.start', agent_key='accommodation') }}" class="mt-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label small text-muted mb-0">City</label>
+        <select class="form-select form-select-sm mb-2" name="city_id"><option value="">Any</option>
+          {% for c in catalog_cities.accommodation %}<option value="{{ c.city_id }}">{{ c.label }} ({{ c.n }})</option>{% endfor %}</select>
+        <label class="form-label small text-muted mb-0">Property Type</label>
+        <select class="form-select form-select-sm mb-2" name="property_type"><option value="">Any</option>
+          {% for t in property_types %}<option>{{ t }}</option>{% endfor %}</select>
+        <div class="d-flex gap-2 align-items-end mb-2">
+          <div><label class="form-label small text-muted mb-0">How many (max {{ agents.accommodation.max }})</label>
+            <input class="form-control form-control-sm" type="number" name="limit" value="8" min="1" max="{{ agents.accommodation.max }}"></div>
+          <div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="only_missing" value="1" id="accommodation_missing" checked>
+            <label class="form-check-label small" for="accommodation_missing">Only properties with gaps</label></div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
+      </form>
+    </div></div>
+  </div>
+  {# restaurants #}
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+      <h2 class="h6"><i class="bi bi-{{ agents.restaurants.icon }} me-1"></i>{{ agents.restaurants.label }}</h2>
+      <p class="small text-muted">{{ agents.restaurants.blurb }} <strong>{{ gaps.restaurants }}</strong> restaurants have gaps. Approved changes reach tenants through Catalog Sync.</p>
+      <form method="post" action="{{ url_for('platform_agents.start', agent_key='restaurants') }}" class="mt-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label small text-muted mb-0">City</label>
+        <select class="form-select form-select-sm mb-2" name="city_id"><option value="">Any</option>
+          {% for c in catalog_cities.restaurants %}<option value="{{ c.city_id }}">{{ c.label }} ({{ c.n }})</option>{% endfor %}</select>
+        <div class="d-flex gap-2 align-items-end mb-2">
+          <div><label class="form-label small text-muted mb-0">How many (max {{ agents.restaurants.max }})</label>
+            <input class="form-control form-control-sm" type="number" name="limit" value="8" min="1" max="{{ agents.restaurants.max }}"></div>
+          <div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="only_missing" value="1" id="restaurants_missing" checked>
+            <label class="form-check-label small" for="restaurants_missing">Only restaurants with gaps</label></div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
+      </form>
+    </div></div>
+  </div>
+</div>
+
 <div class="card shadow-sm border-0 mb-3">
   <div class="card-body">
     <h2 class="h6"><i class="bi bi-{{ agents.pdf.icon }} me-1"></i>{{ agents.pdf.label }}</h2>

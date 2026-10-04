@@ -13,11 +13,15 @@ Agents
                pairs: one city to several others, or the gaps in existing rows.
 * pois      -- Points of Interest missing a description, opening hours, entry
                fee, year founded, website, phone or coordinates.
+* accommodation -- platform Accommodation missing star rating, rooms, contact
+               details, coordinates, amenities or the Reference Room Rate.
+* restaurants -- platform Restaurants missing rating, class, cuisine, price
+               range, group suitability, contact details or coordinates.
 
 Every run is narrow by design (a chosen country / city / list, capped in
 size), works in batches (one Claude call with web search per batch), and each
-proposed value carries a confidence and the page it came from. Approved POI
-changes reach tenants through Catalog Sync.
+proposed value carries a confidence and the page it came from. Approved POI,
+Accommodation and Restaurant changes reach tenants through Catalog Sync.
 """
 import json
 import re
@@ -85,8 +89,28 @@ FIELDS = {
                       "website": ("Website", "url"), "phone": ("Phone", "text"), "address": ("Address / landmark", "text"),
                       "latitude": ("Latitude", "lat"), "longitude": ("Longitude", "lon")},
 }
+_CONTACT = {"address": ("Address / landmark", "text"), "phone": ("Phone", "text"), "email": ("Email", "email"),
+            "website": ("Website", "url"), "latitude": ("Latitude", "lat"), "longitude": ("Longitude", "lon")}
+FIELDS["platform_accommodation"] = {
+    "star_rating": ("Star rating (1-5)", "stars"), "rating_note": ("Rating (as published)", "text"),
+    "rooms": ("No. of rooms", "int"),
+    "ref_room_rate": ("Reference room rate (USD, double / night)", "money"),
+    **_CONTACT,
+    "amen_dining": ("Dining", "yesno"), "amen_pool": ("Pool", "yesno"), "amen_gym": ("Gym", "yesno"),
+    "amen_room_service": ("Room service", "yesno"), "amen_parking": ("Parking", "yesno"),
+    "amen_internet": ("Internet / Wi-Fi", "yesno"), "amen_business_center": ("Business center", "yesno"),
+    "amen_pets": ("Pets allowed", "yesno")}
+FIELDS["platform_restaurants"] = {
+    "rating": ("Rating (out of 5)", "rating5"), "class": ("Class", "text"), "cuisine": ("Cuisine / specialty", "text"),
+    "currency": ("Currency", "currency"), "price_from": ("Price per person — from", "money"),
+    "price_to": ("Price per person — to", "money"), "group_suitable": ("Group suitable", "yesno"), **_CONTACT}
+# The platform catalog tables these agents fill: entity -> (table, pk, catalog_sync entity).
+CATALOG_ENTITIES = {"platform_accommodation": ("platform_accommodation", "accommodation_id", "accommodation"),
+                    "platform_restaurants": ("platform_restaurants", "restaurant_id", "restaurants")}
 FIELDS["city_flags"] = {"is_checkpoint": ("Overnight checkpoint", "yesno")}
-ENTITY_LABELS = {"city_flags": "City (overnight checkpoint)", "cities": "City", "city_distances": "Distance", "platform_pois": "Point of Interest"}
+ENTITY_LABELS = {"city_flags": "City (overnight checkpoint)", "cities": "City", "city_distances": "Distance",
+                 "platform_pois": "Point of Interest", "platform_accommodation": "Accommodation",
+                 "platform_restaurants": "Restaurant"}
 
 AGENTS = {
     "geography": {"label": "Geography", "icon": "globe-americas", "entity": "cities", "batch": 10, "max": 40,
@@ -95,6 +119,14 @@ AGENTS = {
                   "max": 30, "blurb": "Finds road distance, typical drive time, main route and rail for city pairs."},
     "pois": {"label": "POI Enrichment", "icon": "geo-alt", "entity": "platform_pois", "batch": 4, "max": 24,
              "blurb": "Fills in descriptions, opening hours, entry fees, year founded, website, phone and coordinates."},
+    "accommodation": {"label": "Accommodation Enrichment", "icon": "building", "entity": "platform_accommodation",
+                      "batch": 4, "max": 24,
+                      "blurb": "Fills in star rating, rooms, address, phone, email, website, coordinates, amenities and "
+                               "a Reference Room Rate for hotels, resorts and guest houses."},
+    "restaurants": {"label": "Restaurant Enrichment", "icon": "cup-hot", "entity": "platform_restaurants", "batch": 4,
+                    "max": 24,
+                    "blurb": "Fills in rating, class, cuisine, price per person, group suitability, address, phone, "
+                             "website and coordinates for restaurants."},
     "pdf": {"label": "POIs from a PDF", "icon": "file-earmark-pdf", "entity": "platform_pois", "batch": 1, "max": 1,
             "blurb": "Reads a PDF (brochure, guidebook, report): proposes new Points of Interest and updates to known "
                      "ones, and stages its photos for the Master Image Catalog."},
@@ -166,6 +198,21 @@ def validate(kind, raw):
             return (round(f, 1), None) if f > 0 else (None, "must be positive")
         if kind == "int":
             return int(round(_number(v))), None
+        if kind == "stars":
+            n = int(round(_number(v)))
+            return (n, None) if 1 <= n <= 5 else (None, "stars must be 1 to 5")
+        if kind == "rating5":
+            f = _number(v)
+            return (round(f, 1), None) if 0 <= f <= 5 else (None, "rating must be 0 to 5")
+        if kind == "money":
+            f = _number(v)
+            return (round(f, 2), None) if f > 0 else (None, "must be positive")
+        if kind == "currency":
+            c = str(v).strip().upper()
+            return (c, None) if re.fullmatch(r"[A-Z]{3}", c) else (None, "not a 3-letter currency code")
+        if kind == "email":
+            e = str(v).strip()
+            return (e, None) if re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e) else (None, "not an email address")
         if kind == "tz":
             from zoneinfo import available_timezones
             return (v, None) if v in available_timezones() else (None, "not an IANA time zone")
@@ -269,6 +316,26 @@ def targets(db, agent_key, params):
             where = _place(db, r["city_id"]) if r["city_id"] else (r["city_text"] or "")
             out.append({"key": str(r["poi_id"]), "label": f"{r['name']} ({r['type_label'] or 'POI'}, {where})",
                         "current": {f: r[f] for f in FIELDS["platform_pois"]}})
+    elif agent_key in ("accommodation", "restaurants"):
+        entity = AGENTS[agent_key]["entity"]
+        table, pk, _sync = CATALOG_ENTITIES[entity]
+        fields = FIELDS[entity]
+        sql = f"SELECT p.* FROM {table} p WHERE p.is_active = 1"
+        args = []
+        for key in ("country_id", "city_id"):
+            if p.get(key):
+                sql += f" AND p.{key} = ?"
+                args.append(p[key])
+        if agent_key == "accommodation" and p.get("property_type"):
+            sql += " AND p.property_type = ?"
+            args.append(p["property_type"])
+        if p.get("only_missing", True):
+            sql += " AND (" + " OR ".join(f"p.{f} IS NULL OR p.{f} = ''" for f in fields) + ")"
+        for r in db.execute(sql + " ORDER BY p.name LIMIT ?", args + [limit]):
+            where = _place(db, r["city_id"]) if r["city_id"] else (r["city_text"] or "")
+            what = r["property_type"] if agent_key == "accommodation" else (r["cuisine"] or "Restaurant")
+            current = {f: ({1: "Yes", 0: "No"}.get(r[f]) if kind == "yesno" else r[f]) for f, (_l, kind) in fields.items()}
+            out.append({"key": str(r[pk]), "label": f"{r['name']} ({what or 'Property'}, {where})", "current": current})
     return out
 
 
@@ -283,6 +350,25 @@ def _instructions(agent_key):
                 "time in minutes (drive_minutes; if sources give a range, drive_minutes is the lower and "
                 "drive_minutes_max the upper end), the main route or road name (e.g. M-2, N-5, KKH), and whether a "
                 "passenger RAIL service connects them (rail_available: Yes or No). Do not give straight-line distances.")
+    if agent_key == "accommodation":
+        return ("Each item is a hotel, resort or guest house. For each, find: its official star rating (star_rating, "
+                "1-5; only an official or clearly published class, otherwise leave it out) and the rating as published "
+                "(rating_note, e.g. '4-star heritage'), the number of rooms, a typical published rate for a DOUBLE room "
+                "per night converted to US dollars (ref_room_rate: a number in USD; say the original price and currency "
+                "and the date or season in note), its street address or landmark, main phone, reservations email, "
+                "official website, latitude and longitude in decimal degrees, and whether it has each amenity "
+                "(amen_dining = restaurant on site, amen_pool, amen_gym, amen_room_service, amen_parking, amen_internet = "
+                "Wi-Fi, amen_business_center, amen_pets = pets allowed: Yes or No, only when a source says so). Prefer "
+                "the hotel's own site, then tourism boards and major booking sites. Skip anything you cannot find a "
+                "source for.")
+    if agent_key == "restaurants":
+        return ("Each item is a restaurant. For each, find: its traveller rating out of 5 (rating, e.g. 4.4, from a major "
+                "review site), its class when there is no rating (class, e.g. Upscale, Casual, Hotel dining), cuisine or "
+                "specialty (comma-separated), the typical price per person for a meal (price_from and price_to as "
+                "numbers, with the local currency as a 3-letter code in currency), whether it can seat a tour group of "
+                "15-30 (group_suitable: Yes or No, only when a source suggests it), its street address or landmark, "
+                "phone, email, website (official site or main listing), and latitude and longitude in decimal degrees. "
+                "Skip anything you cannot find a source for.")
     return ("For each place, find: a factual description (2-4 sentences: what it is and why it matters to visitors), "
             "the year founded or era, the days and hours it is open, the entry fee (with currency, and foreigner/local "
             "prices if different), its official website, a phone number, a street address or landmark, and its "
@@ -303,7 +389,7 @@ def research_batch(client, agent_key, batch, meter):
         "search results, never invented). Give a confidence from 0 to 1 (1 = stated clearly by an official or "
         "authoritative source; 0.5 = found but sources disagree or are informal). Values listed under already_known "
         "are in the database: only report one of those if a source clearly shows it is wrong, and say why in note.\n\n"
-        f"Allowed fields: {', '.join(fields)}.\n\nItems:\n{json.dumps(items, ensure_ascii=False, indent=1)}\n\n"
+        f"Allowed fields: {', '.join(f'{k} ({v[0]})' for k, v in fields.items())}.\n\nItems:\n{json.dumps(items, ensure_ascii=False, indent=1)}\n\n"
         "When done, call report_findings once with everything you found.")
     tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": max(3, 2 * len(batch))},
              {"name": "report_findings", "description": "Report the values found, each with its source.",
@@ -477,7 +563,7 @@ def run_cost(db, run_id):
 def decide(db, proposal_ids, approve, user_id):
     """Approve (write) or reject proposals. Returns (applied, rejected, errors)."""
     applied = rejected = 0
-    errors, touched_pois = [], set()
+    errors, touched_pois, touched = [], set(), {}
     today = date.today().isoformat()
     for pid in proposal_ids:
         p = db.execute("SELECT * FROM platform_agent_proposals WHERE proposal_id = ? AND status = 'pending'",
@@ -528,6 +614,18 @@ def decide(db, proposal_ids, approve, user_id):
                 if not cur.rowcount:
                     raise AgentError("the POI no longer exists")
                 touched_pois.add(int(p["record_key"]))
+            elif p["entity"] in CATALOG_ENTITIES:
+                table, pk, sync_entity = CATALOG_ENTITIES[p["entity"]]
+                if kind == "yesno":
+                    value = 1 if value == "Yes" else 0
+                extra = ", ref_rate_as_of = ?" if p["field"] == "ref_room_rate" else ""
+                cur = db.execute(f"UPDATE {table} SET {p['field']} = ?{extra}, checked_on = ?, updated_at = datetime('now'), "
+                                 f"source = COALESCE(NULLIF(source, ''), ?) WHERE {pk} = ?",
+                                 (value,) + ((today,) if extra else ()) +
+                                 (today, f"TMS Agent: {p['source_url']}", int(p["record_key"])))
+                if not cur.rowcount:
+                    raise AgentError("the record no longer exists")
+                touched.setdefault(sync_entity, set()).add(int(p["record_key"]))
             elif p["entity"] == "city_distances":
                 a, b = (int(x) for x in p["record_key"].split(":"))
                 db.execute("INSERT OR IGNORE INTO city_distances (city_a_id, city_b_id) VALUES (?, ?)", (a, b))
@@ -542,8 +640,11 @@ def decide(db, proposal_ids, approve, user_id):
             errors.append(f"{p['record_label']} — {PROPOSAL_FIELDS[p['entity']][p['field']][0]}: {e}")
     db.commit()
     if touched_pois:
+        touched["pois"] = touched_pois
+    if touched:
         import catalog_sync
-        catalog_sync.push(db, "pois", sorted(touched_pois))
+        for sync_entity, ids in touched.items():
+            catalog_sync.push(db, sync_entity, sorted(ids))
         db.commit()
     return applied, rejected, errors
 

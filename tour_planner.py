@@ -453,6 +453,15 @@ def tool_find_hubs(db, tenant_id, args):
                                     WHERE h.is_active = 1 AND h.city_id IN ({q})""", ids)]
 
 
+def _reference_rate(rate, as_of):
+    """The Reference Room Rate (USD per double room per night) -- the
+    tenant's own figure on its Supplier (which overrides the catalog's), or
+    the platform catalog's. A guide for planning, not a contracted price."""
+    if rate is None:
+        return {}
+    return {"reference_rate_usd": rate, "reference_rate_as_of": as_of}
+
+
 def tool_hotels(db, tenant_id, args):
     """Hotels per city with what TMS knows about them: the tenant's own
     Accommodation suppliers with their room types and latest prices, then
@@ -464,7 +473,8 @@ def tool_hotels(db, tenant_id, args):
         if not c:
             continue
         mine = []
-        for s_ in db.execute("""SELECT s.supplier_id, s.supplier_name, s.preference, t.label AS type_label, st.label AS subtype
+        for s_ in db.execute("""SELECT s.supplier_id, s.supplier_name, s.preference, t.label AS type_label, st.label AS subtype,
+                                       s.ref_room_rate, s.ref_rate_as_of
                                 FROM suppliers s JOIN supplier_groups g ON g.supplier_group_id = s.supplier_group_id AND g.code = 'ACCOMMODATION'
                                 LEFT JOIN supplier_types t ON t.supplier_type_id = s.supplier_type_id
                                 LEFT JOIN supplier_subtypes st ON st.supplier_subtype_id = s.supplier_subtype_id
@@ -477,10 +487,13 @@ def tool_hotels(db, tenant_id, args):
                                             FROM supplier_rooms sr JOIN hotel_room_types rt ON rt.room_type_id = sr.room_type_id
                                             WHERE sr.supplier_id = ? AND sr.tenant_id = ?""", (s_["supplier_id"], tenant_id))]
             mine.append({"supplier_id": s_["supplier_id"], "name": s_["supplier_name"], "type": s_["type_label"],
-                         "grade": s_["subtype"], "preference": s_["preference"], "rooms": rooms})
+                         "grade": s_["subtype"], "preference": s_["preference"], "rooms": rooms,
+                         **_reference_rate(s_["ref_room_rate"], s_["ref_rate_as_of"])})
         names = {m["name"].lower() for m in mine}
         plat = [{"accommodation_id": r["accommodation_id"], "name": r["name"], "stars": r["star_rating"],
-                 "type": r["property_type"], "rooms": r["rooms"], "dining": bool(r["amen_dining"])}
+                 "type": r["property_type"], "rooms": r["rooms"], "dining": bool(r["amen_dining"]),
+                 **_reference_rate(r["ref_room_rate"] if "ref_room_rate" in r.keys() else None,
+                                   r["ref_rate_as_of"] if "ref_rate_as_of" in r.keys() else None)}
                 for r in db.execute("SELECT * FROM platform_accommodation WHERE city_id = ? AND is_active = 1", (cid,))
                 if r["name"].lower() not in names]
         out.append({"city_id": cid, "city": c["label"], "tenant_suppliers": mine[:12], "platform_catalog": plat[:12]})
@@ -521,7 +534,8 @@ TOOLS = {
     "lodging_at": (tool_lodging, "Hotels TMS knows in these cities (tenant suppliers, platform catalog, 4-star count).",
                    {"city_ids": {"type": "array", "items": {"type": "integer"}}}),
     "hotels_at": (tool_hotels, "Hotels in these cities: the tenant's own suppliers with room types and latest prices (USD), "
-                  "then the platform catalog's hotels with star ratings.",
+                  "then the platform catalog's hotels with star ratings. Either may carry a reference_rate_usd: "
+                  "a typical double room per night, for planning.",
                   {"city_ids": {"type": "array", "items": {"type": "integer"}}}),
     "restaurants_at": (tool_restaurants, "Restaurants in these cities: the tenant's own F&B suppliers, then the platform catalog "
                        "(cuisine, price range, group suitability).",
@@ -1069,7 +1083,9 @@ def run_lodging(db, tenant_id, client, brief, route, checkpoints, instructions, 
         "hotel must take the whole group in one place (the brief's guest rooms plus guide and driver rooms) and meet "
         "the brief's standard; where nothing of that standard exists, say so (meets_standard = false) and offer the best "
         "available. Give per-night prices in USD for a double room and a single room: the tenant's TMS price where it "
-        "has one (price_basis 'TMS price as of <date>'), otherwise a web rate (price_basis = URL) or a careful estimate "
+        "has one in its room types (price_basis 'TMS price as of <date>'), otherwise the hotel's TMS Reference Room Rate "
+        "(reference_rate_usd -- a double room; price_basis 'TMS reference rate as of <date>'; for a single room use "
+        "about 80% of it unless you know better), otherwise a web rate (price_basis = URL) or a careful estimate "
         "(price_basis 'estimate'). For restaurants, give 1-3 places that can seat the group, with a typical lunch and "
         "dinner cost per person in USD; say where meals are better taken at the hotel. Flag anything uncertain.\n"
         + (f"\nThe planner reviewed your previous answer and asks for these changes:\n{instructions}\n"

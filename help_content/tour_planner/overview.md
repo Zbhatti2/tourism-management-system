@@ -51,6 +51,10 @@ Each stage shows its status on the left: *Ready*, *Working…*, *To review*,
    whole group, with one recommended:
    - your own Suppliers come first, with their prices from TMS, then the
      platform catalog, then the web;
+   - a hotel's price comes from its room types in TMS; where there are
+     none, from its **Reference Room Rate** (your own figure on the
+     Supplier, or the platform catalog's); then a web rate or an estimate.
+     Each price shows where it came from;
    - hotels below your standard are marked;
    - choose a different hotel with the **Use** button, or type a price;
    - restaurants that can seat the group are listed with typical lunch and

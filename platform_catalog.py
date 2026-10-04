@@ -74,8 +74,12 @@ CATALOGS = {
             ("star_rating", "Star Rating", "int", {"min": 1, "max": 5}),
             ("rating_note", "Rating (as published)", "text", {}),
             ("rooms", "No. of Rooms", "int", {"min": 0}),
-            # No rates: hotel rates are tenant-level (Zeb, Oct 2026) -- each tenant
-            # keeps its own in its Supplier records.
+            # Contracted rates stay tenant-level (room types in each Supplier). The
+            # Reference Room Rate is a guide for Tour Planning only (Zeb, Oct 2026),
+            # synced to tenants, who can override it.
+            ("ref_room_rate", "Reference Room Rate (USD, double / night)", "money",
+             {"help": "A typical rate, used only by the Tour Planner. Tenants receive it and can override it."}),
+            ("ref_rate_as_of", "Reference Rate As Of", "date", {}),
         ] + [(col, label, "yn", {"group": "Amenities"}) for col, label in AMENITIES],
         "list": [("property_type", "Type"), ("star_rating", "Stars"), ("city_label", "City"),
                  ("country_label", "Country")],

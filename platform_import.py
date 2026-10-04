@@ -125,8 +125,8 @@ ENTITIES = {
     },
     "accommodation": {
         "label": "Accommodation", "order": 5, "name_col": "Property Name",
-        "purpose": "Hotels, resorts and guest houses for the platform Accommodation catalog. No rates: each "
-                   "tenant keeps its own (rate columns in older files are ignored).",
+        "purpose": "Hotels, resorts and guest houses for the platform Accommodation catalog. Contracted rates stay "
+                   "with each tenant; the optional Reference Room Rate is a guide for Tour Planning only.",
         "match": "Property Name + City (other spellings included), or the same type within 150 m. An existing "
                  "property only has its empty fields filled.",
         "cols": [("Property Name", True, "", "name"),
@@ -134,7 +134,10 @@ ENTITIES = {
                  ("Star Rating", False, "5, 4, 3, 2 or 1: official or class rating", "star_rating"),
                  ("Rating (as published)", False, "e.g. 4-star heritage, Boutique / 3-star class", "rating_note")] + GEO_COLS +
                 [("Address / Landmark", False, "", "address")] + COORD_COLS + [PHONE, EMAIL, WEB] +
-                [("No. of Rooms", False, "Whole number", "rooms")] +
+                [("No. of Rooms", False, "Whole number", "rooms"),
+                 ("Reference Room Rate (USD)", False, "Typical double room per night, number only (Tour Planning only)",
+                  "ref_room_rate"),
+                 ("Reference Rate As Of", False, "YYYY-MM-DD", "ref_rate_as_of")] +
                 [(label, False, "Y or N", col) for col, label in AMENITIES] + TAIL,
         "lists": dict({"Property Type": PROPERTY_TYPES, "Star Rating": [5, 4, 3, 2, 1]},
                       **{label: ["Y", "N"] for _c, label in AMENITIES}),
@@ -177,7 +180,7 @@ ENTITIES = {
 }
 ORDERED = sorted(ENTITIES, key=lambda k: ENTITIES[k]["order"])
 INT_COLS = {"star_rating", "rooms", "altitude_m"}
-REAL_COLS = {"latitude", "longitude", "rating", "price_from", "price_to", "road_km"}
+REAL_COLS = {"latitude", "longitude", "rating", "price_from", "price_to", "road_km", "ref_room_rate"}
 YN_COLS = {"is_major", "group_suitable"} | {c for c, _l in AMENITIES}
 
 

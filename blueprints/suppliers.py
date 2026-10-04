@@ -160,10 +160,11 @@ def _city_options(db):
 def _get_supplier(db, supplier_id):
     supplier = db.execute(
         """SELECT s.*, t.label AS type_label, t.template_key AS template_key, t.code AS type_code,
-                  st.label AS subtype_label
+                  st.label AS subtype_label, sg.code AS group_code
            FROM suppliers s
            LEFT JOIN supplier_types t ON t.supplier_type_id = s.supplier_type_id
            LEFT JOIN supplier_subtypes st ON st.supplier_subtype_id = s.supplier_subtype_id
+           LEFT JOIN supplier_groups sg ON sg.supplier_group_id = s.supplier_group_id
            WHERE s.supplier_id = ? AND s.is_deleted = 0 AND s.tenant_id = ?""",
         (supplier_id, g.tenant_id),
     ).fetchone()
@@ -518,6 +519,33 @@ def _form_fields(form):
     }
 
 
+def _shows_ref_rate(supplier, group):
+    """The Reference Room Rate belongs on Accommodation suppliers (or any
+    supplier that already has one)."""
+    if supplier is not None:
+        return supplier["group_code"] == "ACCOMMODATION" or supplier["template_key"] == "hotel" \
+            or supplier["ref_room_rate"] is not None
+    return bool(group) and group["code"] == "ACCOMMODATION"
+
+
+def _save_ref_rate(db, supplier_id, form):
+    """Reference Room Rate (Tour Planning only): saved when the form showed
+    it. Returns an error message, or None."""
+    if "ref_room_rate" not in form:
+        return None
+    raw = (form.get("ref_room_rate") or "").replace(",", "").strip()
+    try:
+        rate = float(raw) if raw else None
+    except ValueError:
+        return "Reference Room Rate must be a number (USD per night)."
+    if rate is not None and rate < 0:
+        return "Reference Room Rate can't be negative."
+    as_of = (form.get("ref_rate_as_of") or "").strip() or None
+    db.execute("UPDATE suppliers SET ref_room_rate = ?, ref_rate_as_of = ? WHERE supplier_id = ? AND tenant_id = ?",
+               (rate, as_of if rate is not None else None, supplier_id, g.tenant_id))
+    return None
+
+
 def _resource_form_fields(form):
     return {
         "supplier_name": form.get("supplier_name", "").strip(),
@@ -542,6 +570,7 @@ def new_supplier():
             return render_template(
                 "suppliers/form.html", supplier=None, supplier_types=_supplier_types(db, _current_group(db)),
                 subtypes_json=_subtypes_for_type_json(db), group=_current_group(db),
+                show_ref_rate=_shows_ref_rate(None, _current_group(db)),
             )
         db.execute(
             """INSERT INTO suppliers
@@ -555,6 +584,10 @@ def new_supplier():
         )
         db.commit()
         supplier_id = db.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+        rate_error = _save_ref_rate(db, supplier_id, request.form)
+        db.commit()
+        if rate_error:
+            flash(rate_error + " The supplier was saved without it.", "warning")
         log_action("Create", "supplier", supplier_id, f"Created supplier {f['supplier_name']}")
         flash("Supplier created. Add its addresses, contacts and images here, then use Back to return to the list.",
               "success")
@@ -562,6 +595,7 @@ def new_supplier():
     group = _current_group(db)
     return render_template(
         "suppliers/form.html", supplier=None, supplier_types=_supplier_types(db, group),
+        show_ref_rate=_shows_ref_rate(None, group),
         subtypes_json=_subtypes_for_type_json(db), group=group,
     )
 
@@ -647,6 +681,16 @@ def edit_supplier(supplier_id):
                 "suppliers/form.html", supplier=supplier,
                 supplier_types=_supplier_types(db, _current_group(db), supplier["supplier_type_id"]),
                 subtypes_json=_subtypes_for_type_json(db), group=_current_group(db),
+                show_ref_rate=_shows_ref_rate(supplier, _current_group(db)),
+            )
+        rate_error = _save_ref_rate(db, supplier_id, request.form)
+        if rate_error:
+            flash(rate_error, "error")
+            return render_template(
+                "suppliers/form.html", supplier=supplier,
+                supplier_types=_supplier_types(db, _current_group(db), supplier["supplier_type_id"]),
+                subtypes_json=_subtypes_for_type_json(db), group=_current_group(db),
+                show_ref_rate=True,
             )
         db.execute(
             """UPDATE suppliers SET supplier_name=?, supplier_type_id=?, supplier_subtype_id=?,
@@ -663,7 +707,7 @@ def edit_supplier(supplier_id):
         return _back_to_list(supplier_id)
     group = _current_group(db)
     return render_template(
-        "suppliers/form.html", supplier=supplier,
+        "suppliers/form.html", supplier=supplier, show_ref_rate=_shows_ref_rate(supplier, group),
         supplier_types=_supplier_types(db, group, supplier["supplier_type_id"]),
         subtypes_json=_subtypes_for_type_json(db), group=group,
     )

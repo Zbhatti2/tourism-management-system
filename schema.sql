@@ -946,7 +946,9 @@ CREATE TABLE suppliers (
     is_deleted      INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    supplier_group_id INTEGER REFERENCES supplier_groups(supplier_group_id)  -- from the Type (triggers in supplier_groups.py); External Resources always External Resources
+    supplier_group_id INTEGER REFERENCES supplier_groups(supplier_group_id),  -- from the Type (triggers in supplier_groups.py); External Resources always External Resources
+    ref_room_rate   REAL,                  -- Reference Room Rate (USD, double room / night) for Tour Planning only; from the platform catalog, tenant may override
+    ref_rate_as_of  TEXT
 );
 CREATE INDEX idx_suppliers_tenant ON suppliers(tenant_id);
 CREATE INDEX idx_suppliers_group ON suppliers(tenant_id, supplier_group_id);
@@ -2845,7 +2847,9 @@ CREATE TABLE IF NOT EXISTS platform_accommodation (
     amen_parking     INTEGER,
     amen_internet    INTEGER,
     amen_business_center INTEGER,
-    amen_pets        INTEGER
+    amen_pets        INTEGER,
+    ref_room_rate    REAL,                  -- Reference Room Rate: USD per double room per night, for Tour Planning only (tenants can override)
+    ref_rate_as_of   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_platform_accommodation_city ON platform_accommodation(city_id);
 CREATE INDEX IF NOT EXISTS idx_platform_accommodation_country ON platform_accommodation(country_id);

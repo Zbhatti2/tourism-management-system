@@ -1,12 +1,16 @@
 ---
 title: Platform Catalogs Overview
 order: 1
-keywords: [points of interest, accommodation, hotels, restaurants, embassies, consulates, catalog, duplicates, merge, undo, alternate names]
+keywords: [points of interest, accommodation, reference room rate, hotels, restaurants, embassies, consulates, catalog, duplicates, merge, undo, alternate names]
 ---
 **Points of Interest**, **Accommodation**, **Restaurants** and
 **Embassies & Consulates** are the platform catalogs: shared data that
 TMS maintains for every tenant. Only the SystemAdmin can see or change
 them here.
+
+An Accommodation record can carry a **Reference Room Rate** (USD, double
+room per night) and its *as of* date. It's a guide for the Tour Planner
+only. Tenants receive it through Catalog Sync and can override it.
 
 ## The list
 

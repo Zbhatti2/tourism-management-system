@@ -1,7 +1,7 @@
 ---
 title: TMS Agents
 order: 1
-keywords: [agents, ai, platform, geography, distances, drive time, points of interest, enrichment, review, approve]
+keywords: [agents, ai, platform, geography, distances, drive time, points of interest, accommodation, hotels, restaurants, reference room rate, enrichment, review, approve]
 ---
 **TMS Agents** are platform-level AI agents, a **TMS System Admin**
 screen. They research the shared catalogs on the web and **propose**
@@ -19,8 +19,19 @@ values. Nothing is saved until you approve it.
 - **POI Enrichment:** description, year founded, opening hours, entry
   fee, website, phone, address and coordinates for Points of Interest
   with gaps. Choose a city and/or POI type.
+- **Accommodation Enrichment:** star rating, rating as published, number
+  of rooms, address, phone, email, website, coordinates, the amenities
+  (dining, pool, gym, room service, parking, Wi-Fi, business center,
+  pets) and a **Reference Room Rate**: a typical double room per night in
+  US dollars, with the original price and season in the note. Choose a
+  city and/or property type.
+- **Restaurant Enrichment:** rating out of 5 (or a class when there is no
+  rating), cuisine, price per person (from–to, with the currency), whether
+  it can seat a tour group, address, phone, email, website and
+  coordinates. Choose a city.
 
-Runs are kept small on purpose: up to 40 cities, 30 pairs or 24 POIs. A
+Runs are kept small on purpose: up to 40 cities, 30 pairs, or 24 POIs,
+properties or restaurants. A
 run takes about a minute per batch, and its page refreshes by itself.
 
 ## Reviewing
@@ -39,8 +50,9 @@ The **Review queue** collects everything still waiting, from every run.
 
 Approved values are written straight to the catalog. They're dated
 (*Checked On* or *Verified On*), and the source is recorded when the
-record had none. Points of Interest changes then reach tenants through
-**Catalog Sync**.
+record had none. Points of Interest, Accommodation and Restaurant changes
+then reach tenants through **Catalog Sync**. An approved Reference Room
+Rate is dated today (*Reference Rate As Of*).
 
 ## POIs from a PDF
 

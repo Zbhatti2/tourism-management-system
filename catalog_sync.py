@@ -436,11 +436,48 @@ class SupplierAdapter(_Adapter):
 
 
 class AccommodationAdapter(SupplierAdapter):
+    """Hotels and resorts. Also carries the Reference Room Rate (USD per double
+    room per night, with its as-of date) -- a guide for the Tour Planner only.
+    A tenant that sets its own rate keeps it: a later platform change waits
+    as an update to review, like any other field."""
     entity = "accommodation"
     type_codes = ("HOTEL", "RESORT")
+    fields = SupplierAdapter.fields + [("ref_room_rate", "Reference Room Rate")]
 
     def type_code(self, p):
         return "RESORT" if p["property_type"] == "Resort" else "HOTEL"
+
+    def platform_values(self, p):
+        out = super().platform_values(p)
+        if "ref_room_rate" in p.keys():
+            out["ref_room_rate"] = [p["ref_room_rate"], p["ref_rate_as_of"]]
+        return out
+
+    def local_values(self, local_id):
+        out = super().local_values(local_id)
+        s = self.db.execute("SELECT ref_room_rate, ref_rate_as_of FROM suppliers WHERE supplier_id = ? AND tenant_id = ?",
+                            (local_id, self.tenant_id)).fetchone()
+        out["ref_room_rate"] = [s["ref_room_rate"], s["ref_rate_as_of"]] if s else [None, None]
+        return out
+
+    def write(self, local_id, changes):
+        super().write(local_id, changes)
+        if "ref_room_rate" in changes:
+            rate, as_of = (list(changes["ref_room_rate"] or []) + [None, None])[:2]
+            self.db.execute("UPDATE suppliers SET ref_room_rate = ?, ref_rate_as_of = ?, updated_at = datetime('now') "
+                            "WHERE supplier_id = ? AND tenant_id = ?", (rate, as_of, local_id, self.tenant_id))
+
+    def display(self, field, value):
+        if field == "ref_room_rate":
+            return rate_label(*(list(value or []) + [None, None])[:2])
+        return super().display(field, value)
+
+
+def rate_label(rate, as_of=None):
+    """'USD 85 / night (as of 2026-10-01)' or ''."""
+    if rate in (None, ""):
+        return ""
+    return f"USD {float(rate):,.0f} / night" + (f" (as of {as_of})" if as_of else "")
 
 
 class RestaurantAdapter(SupplierAdapter):
