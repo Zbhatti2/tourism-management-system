@@ -204,13 +204,15 @@ def create_package(db, tenant_id, version_id, user_id=None):
         notes.append("Open items from the design:\n" + "\n".join(
             f"- [{f['stage']}] {f['flag']}" + (f" -> {f['note']}" if f.get("note") else "") for f in snap["open_flags"]))
     code = _unique_code(db, tenant_id, f"TD-{v['plan_id']:04d}-V{v['version_no']}")
+    group = db.execute("SELECT package_group_id FROM tour_plans WHERE plan_id = ? AND tenant_id = ?",
+                       (v["plan_id"], tenant_id)).fetchone()
     cur = db.execute("""INSERT INTO packages (tenant_id, package_code, package_name, package_type, duration_days,
                             duration_nights, min_pax, max_pax, status, description, base_currency, notes,
-                            tour_design_version_id)
-                        VALUES (?, ?, ?, 'fixed_departure', ?, ?, ?, ?, 'draft', ?, ?, ?, ?)""",
+                            tour_design_version_id, package_group_id)
+                        VALUES (?, ?, ?, 'fixed_departure', ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)""",
                      (tenant_id, code, v["name"], len(days) or brief.get("tour_days"), v["nights"], fig["guests"] or None,
                       fig["guests"] or None, summary or None, (brief.get("currency") or "USD")[:3],
-                      "\n\n".join(notes), version_id))
+                      "\n\n".join(notes), version_id, group[0] if group else None))
     pkg = cur.lastrowid
     # Route stops: the checkpoints, in order.
     stops = []

@@ -1,11 +1,23 @@
 ---
 title: Package Management Overview
 order: 1
-keywords: [packages, tour package, template, itinerary, services, products, suppliers, points of interest, airport, station, transport hub, airline ticket]
+keywords: [packages, group, package groups, tours management, tour package, template, itinerary, services, products, suppliers, points of interest, airport, station, transport hub, airline ticket]
 ---
 A Package is a tour package **template** — assembled from Services,
 Products, Suppliers, and Points of Interest, but not yet a scheduled
 departure or a customer booking (those are later roadmap phases).
+
+Package Management and Tour Design are under **Tours Management** in the
+sidebar.
+
+## Groups
+
+Each package can belong to a **Group**, such as *Gurdwaras Tour* or
+*Northern Areas*. The list shows a **Group** column, and **All groups**
+filters by one (or *No group*). Set the group on the package's Edit
+screen. A package added from a Tour Design takes the design's group. The
+groups themselves are kept in **Table Maintenance → Package Groups**, where
+you can add, rename, reorder or deactivate them.
 
 ## Creating a package
 

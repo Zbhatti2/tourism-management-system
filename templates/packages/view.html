@@ -6,6 +6,7 @@
   <div>
     <h1 class="h3 mb-0"><code>{{ package.package_code }}</code> — {{ package.package_name }}</h1>
     <div class="mt-1">
+      {% if package.group_label %}<span class="badge bg-primary-subtle text-primary"><i class="bi bi-collection"></i> {{ package.group_label }}</span>{% endif %}
       <span class="badge bg-secondary-subtle text-dark">{{ "Fixed Departure" if package.package_type == "fixed_departure" else "Custom" }}</span>
       {% if package.status == "active" %}<span class="badge bg-success-subtle text-success">Active</span>
       {% elif package.status == "draft" %}<span class="badge bg-warning-subtle text-warning-emphasis">Draft</span>

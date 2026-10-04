@@ -9,6 +9,9 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3"><label class="form-label fw-semibold">Tour name</label>
       <input class="form-control" name="name" placeholder="e.g. Karakoram Tour"></div>
+    <div class="mb-3" style="max-width: 360px;"><label class="form-label" for="package_group_id">Group</label>
+      <select class="form-select" id="package_group_id" name="package_group_id"><option value="">— None —</option>
+        {% for pg in package_groups %}<option value="{{ pg.package_group_id }}">{{ pg.label }}</option>{% endfor %}</select></div>
     <div class="mb-2"><label class="form-label fw-semibold">Request</label>
       <textarea class="form-control" name="request_text" rows="12" placeholder="Group of 24 from Islamabad to Kashgar and back, 4-star, assembling 15 March 2027. 3 couples from Sydney, 2 couples from Los Angeles, 4 individuals from London (single rooms), 5 couples from New York…"></textarea></div>
     <div class="form-text mb-3">Reading the request is one AI call (about 1–2 cents), charged to your organisation's AI usage.

@@ -83,6 +83,15 @@
     </div>
     {% endif %}
 
+    <div class="mb-3">
+      <label class="form-label" for="package_group_id">Group</label>
+      {% set current_group = (package.package_group_id if package else (form_values.package_group_id|int if form_values and form_values.package_group_id else none)) %}
+      <select class="form-select" id="package_group_id" name="package_group_id">
+        <option value="">— None —</option>
+        {% for pg in package_groups or [] %}<option value="{{ pg.package_group_id }}" {{ "selected" if current_group == pg.package_group_id else "" }}>{{ pg.label }}{% if not pg.is_active %} (inactive){% endif %}</option>{% endfor %}
+      </select>
+      <div class="form-text">E.g. Gurdwaras Tour, Northern Areas. Groups are kept in <a href="{{ url_for('table_maintenance.manage', table_key='package_groups') }}">Table Maintenance → Package Groups</a>.</div>
+    </div>
     <div class="row g-2 mb-3">
       <div class="col-4">
         <label class="form-label">Package Type</label>

@@ -336,6 +336,14 @@ TABLES = {
             "nav_label": "Supplier Type",
         },
     },
+    "package_groups": {
+        "label": "Package Groups",
+        "table": "package_groups",
+        "pk": "package_group_id",
+        "references": [
+            {"table": "packages", "fk": "package_group_id", "label": "package(s)"},
+        ],
+    },
     "supplier_document_types": {
         "label": "Supplier Document Types",
         "table": "supplier_document_types",
@@ -379,6 +387,9 @@ TABLE_GROUPS = [
         "hotel_amenity_options",
         "hotel_room_types",
         "supplier_document_types",
+    ]),
+    ("Tours Group", [
+        "package_groups",
     ]),
     ("Knowledge Group", [
         "knowledge_domains",

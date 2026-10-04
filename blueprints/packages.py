@@ -54,7 +54,9 @@ packages_bp = Blueprint("packages", __name__)
 
 def _get_package(db, package_id):
     package = db.execute(
-        "SELECT * FROM packages WHERE package_id = ? AND tenant_id = ?", (package_id, g.tenant_id)
+        "SELECT p.*, pg.label AS group_label FROM packages p "
+        "LEFT JOIN package_groups pg ON pg.package_group_id = p.package_group_id "
+        "WHERE p.package_id = ? AND p.tenant_id = ?", (package_id, g.tenant_id)
     ).fetchone()
     if package is None:
         abort(404)
@@ -417,22 +419,42 @@ def list_packages():
     status = request.args.get("status", "").strip()
     show_archived = request.args.get("show_archived") == "1"
 
-    sql = "SELECT * FROM packages WHERE tenant_id = ?"
+    group_id = request.args.get("group", "").strip()
+
+    sql = """SELECT p.*, pg.label AS group_label FROM packages p
+             LEFT JOIN package_groups pg ON pg.package_group_id = p.package_group_id
+             WHERE p.tenant_id = ?"""
     params = [g.tenant_id]
     if not show_archived:
-        sql += " AND status != 'archived'"
+        sql += " AND p.status != 'archived'"
     if q:
-        sql += " AND (package_name LIKE ? OR package_code LIKE ?)"
+        sql += " AND (p.package_name LIKE ? OR p.package_code LIKE ?)"
         params += [f"%{q}%", f"%{q}%"]
     if status:
-        sql += " AND status = ?"
+        sql += " AND p.status = ?"
         params.append(status)
-    sql += " ORDER BY package_code"
+    if group_id == "none":
+        sql += " AND p.package_group_id IS NULL"
+    elif group_id.isdigit():
+        sql += " AND p.package_group_id = ?"
+        params.append(int(group_id))
+    sql += " ORDER BY p.package_code"
     packages = db.execute(sql, params).fetchall()
 
     return render_template(
         "packages/list.html", packages=packages, q=q, status=status, show_archived=show_archived,
+        group_id=group_id, package_groups=_package_groups(db),
     )
+
+
+def _package_groups(db, current_id=None):
+    import package_groups
+    return package_groups.choices(db, g.tenant_id, current_id)
+
+
+def _group_id(db, raw):
+    import package_groups
+    return package_groups.valid_id(db, g.tenant_id, raw)
 
 
 @packages_bp.route("/<int:package_id>")
@@ -666,7 +688,7 @@ def new_package():
             tour_services = _tour_package_services(db)
             return render_template(
                 "packages/form.html", package=None, form_values=form, tour_services=tour_services,
-                tour_services_map=_tour_services_map(tour_services),
+                tour_services_map=_tour_services_map(tour_services), package_groups=_package_groups(db),
             )
 
         package_code = service["service_code"]
@@ -677,8 +699,8 @@ def new_package():
             """INSERT INTO packages (tenant_id, service_id, package_code, package_name, package_type,
                                       duration_days, duration_nights, min_pax, max_pax, difficulty_rating,
                                       minimum_age, status, description, inclusions, exclusions, base_currency,
-                                      notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                      notes, package_group_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 g.tenant_id, service["service_id"], package_code, package_name, package_type,
                 form.get("duration_days") or None, form.get("duration_nights") or None,
@@ -687,7 +709,7 @@ def new_package():
                 form.get("status") or "draft",
                 description, form.get("inclusions", "").strip() or None,
                 form.get("exclusions", "").strip() or None, form.get("base_currency", "").strip() or None,
-                form.get("notes", "").strip() or None,
+                form.get("notes", "").strip() or None, _group_id(db, form.get("package_group_id")),
             ),
         )
         db.commit()
@@ -702,7 +724,7 @@ def new_package():
         "packages/form.html", package=None, form_values=None, tour_services=tour_services,
         tour_services_map=_tour_services_map(tour_services),
         source="design" if request.args.get("from") == "design" else "new",
-        designs=tour_design.ready_designs(db, g.tenant_id),
+        designs=tour_design.ready_designs(db, g.tenant_id), package_groups=_package_groups(db),
     )
 
 
@@ -752,13 +774,14 @@ def edit_package(package_id):
 
         if not package_name:
             flash("Package Name is required.", "error")
-            return render_template("packages/form.html", package=package, form_values=form)
+            return render_template("packages/form.html", package=package, form_values=form,
+                                   package_groups=_package_groups(db, package["package_group_id"]))
 
         db.execute(
             """UPDATE packages SET package_name=?, package_type=?, duration_days=?, duration_nights=?,
                                     min_pax=?, max_pax=?, difficulty_rating=?, minimum_age=?, status=?,
                                     description=?, inclusions=?, exclusions=?, base_currency=?, notes=?,
-                                    updated_at=datetime('now')
+                                    package_group_id=?, updated_at=datetime('now')
                WHERE package_id=? AND tenant_id=?""",
             (
                 package_name, package_type, form.get("duration_days") or None, form.get("duration_nights") or None,
@@ -766,7 +789,7 @@ def edit_package(package_id):
                 form.get("difficulty_rating", "").strip() or None, form.get("minimum_age") or None, status,
                 form.get("description", "").strip() or None, form.get("inclusions", "").strip() or None,
                 form.get("exclusions", "").strip() or None, form.get("base_currency", "").strip() or None,
-                form.get("notes", "").strip() or None,
+                form.get("notes", "").strip() or None, _group_id(db, form.get("package_group_id")),
                 package_id, g.tenant_id,
             ),
         )
@@ -775,7 +798,8 @@ def edit_package(package_id):
         flash("Package updated.", "success")
         return redirect(url_for("packages.view_package", package_id=package_id))
 
-    return render_template("packages/form.html", package=package, form_values=None)
+    return render_template("packages/form.html", package=package, form_values=None,
+                           package_groups=_package_groups(db, package["package_group_id"]))
 
 
 @packages_bp.route("/<int:package_id>/delete", methods=["POST"])
