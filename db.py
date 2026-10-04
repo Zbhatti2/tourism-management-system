@@ -846,6 +846,14 @@ def _migration_catalog_images(db):
     catalog_image_sync.migrate(db, _column_exists)
 
 
+def _migration_state_alt_names(db):
+    """states.alt_names: other spellings of a province (a merged duplicate's
+    name lands here, so imports using it find the right one -- geo_merge.py)."""
+    if not _column_exists(db, "states", "alt_names"):
+        db.execute("ALTER TABLE states ADD COLUMN alt_names TEXT")
+    db.commit()
+
+
 def _migration_city_checkpoint_flag(db):
     """cities.is_checkpoint: a good overnight stop for tour groups (set by
     the platform, or proposed by a tenant's Tour Planner)."""
@@ -886,6 +894,7 @@ MIGRATIONS = [
     ("2026_10_poi_links", _migration_poi_links),
     ("2026_10_tour_design", _migration_tour_design),
     ("2026_10_catalog_images", _migration_catalog_images),
+    ("2026_10_state_alt_names", _migration_state_alt_names),
 ]
 
 

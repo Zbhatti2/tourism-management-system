@@ -14,6 +14,27 @@
   An entry that's still in use can't be deleted outright; deactivate it to hide it from new selections, or use "Merge into..." to move its records to a different entry first.
 </p>
 
+{% if duplicates %}
+<div class="card shadow-sm border-0 mb-3 border-start border-warning border-3">
+  <div class="card-body py-2">
+    <h2 class="h6 mb-1"><i class="bi bi-intersect"></i> Possible duplicates <span class="badge bg-warning text-dark">{{ duplicates|length }}</span></h2>
+    <p class="small text-muted mb-2">Names that are the same, sound alike or are near spellings, under the same {{ cfg.parent.nav_label|lower if cfg.parent else 'parent' }}. <strong>Merge</strong> moves everything that uses the first one (addresses, Points of Interest, hotels, packages… for every tenant) to the second, keeps the first name as another spelling, and deletes it.{% if table_key == 'states' %} Cities in both become one.{% endif %}</p>
+    <ul class="list-unstyled small mb-0">
+      {% for d in duplicates %}
+      <li class="d-flex flex-wrap align-items-center gap-2 py-1 border-top">
+        <span><strong>{{ d.a.label }}</strong> <span class="text-muted">({{ d.a.uses }} use{{ '' if d.a.uses == 1 else 's' }})</span></span>
+        <i class="bi bi-arrow-right text-muted"></i>
+        <span><strong>{{ d.b.label }}</strong> <span class="text-muted">({{ d.b.uses }} use{{ '' if d.b.uses == 1 else 's' }})</span></span>
+        <span class="badge bg-light text-dark border">{{ {'same': 'same name', 'sounds': 'sounds alike', 'similar': 'near spelling'}[d.how] }}</span>
+        <a class="btn btn-sm btn-outline-warning ms-auto" href="{{ url_for('geography_admin.reassign', table_key=table_key, entry_id=d.a.id, target=d.b.id) }}">Merge…</a>
+        <a class="btn btn-sm btn-link" href="{{ url_for('geography_admin.reassign', table_key=table_key, entry_id=d.b.id, target=d.a.id) }}" title="Keep the first one instead">the other way</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
 <form method="get" class="row g-2 mb-3 align-items-end">
   <div class="col-auto">
     <label class="form-label small mb-0">Search</label>
