@@ -94,12 +94,12 @@
       <textarea class="form-control" name="historical_significance" rows="3">{{ (poi.historical_significance | orblank) if poi else '' }}</textarea>
     </div>
     <div class="mb-3">
-      <label class="form-label">Notes</label>
-      <textarea class="form-control" name="notes" rows="3">{{ (poi.notes | orblank) if poi else '' }}</textarea>
+      <label class="form-label">Notes / History</label>
+      <textarea class="form-control" name="notes" rows="5">{{ (poi.notes | orblank) if poi else '' }}</textarea>
     </div>
     <div class="mb-3">
       <label class="form-label d-flex justify-content-between align-items-center">
-        <span>Links</span>
+        <span>Additional links <span class="small text-muted fw-normal">— videos, photo galleries, documents</span></span>
         <button type="button" class="btn btn-sm btn-outline-primary" onclick="addLinkRow()"><i class="bi bi-plus"></i> Add link</button>
       </label>
       <div id="link_rows"></div>
@@ -125,7 +125,8 @@
   // dropped server-side on save (see poi._save_poi_links_from_form).
   let linkRowCount = 0;
 
-  function addLinkRow(url, description) {
+  const LINK_TYPES = {{ link_types | tojson }};
+  function addLinkRow(url, description, linkType) {
     linkRowCount += 1;
     const wrap = document.getElementById('link_rows');
     const row = document.createElement('div');
@@ -137,8 +138,22 @@
     numCol.textContent = 'Link #' + linkRowCount;
     row.appendChild(numCol);
 
+    const typeCol = document.createElement('div');
+    typeCol.className = 'col-md-2';
+    const typeSel = document.createElement('select');
+    typeSel.className = 'form-select';
+    typeSel.name = 'link_type';
+    typeSel.setAttribute('aria-label', 'Type');
+    LINK_TYPES.forEach(([v, label]) => {
+      const o = document.createElement('option'); o.value = v; o.textContent = label;
+      if (v === (linkType || 'video')) o.selected = true;
+      typeSel.appendChild(o);
+    });
+    typeCol.appendChild(typeSel);
+    row.appendChild(typeCol);
+
     const urlCol = document.createElement('div');
-    urlCol.className = 'col-md-5';
+    urlCol.className = 'col-md-4';
     const urlInput = document.createElement('input');
     urlInput.className = 'form-control';
     urlInput.name = 'link_url';
@@ -148,7 +163,7 @@
     row.appendChild(urlCol);
 
     const descCol = document.createElement('div');
-    descCol.className = 'col-md-6';
+    descCol.className = 'col-md-4';
     const descInput = document.createElement('input');
     descInput.className = 'form-control';
     descInput.name = 'link_description';
@@ -178,7 +193,7 @@
   }
 
   {% for l in poi_links %}
-  addLinkRow({{ (l.url | default('')) | tojson }}, {{ (l.description | default('')) | tojson }});
+  addLinkRow({{ (l.url | default('')) | tojson }}, {{ (l.description | default('')) | tojson }}, {{ (l.link_type | default('other')) | tojson }});
   {% endfor %}
   updateLinkRowsEmptyHint();
 

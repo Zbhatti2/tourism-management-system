@@ -71,18 +71,18 @@
 
     <div class="card shadow-sm border-0 mb-3">
       <div class="card-body">
-        <h2 class="h6">Notes</h2>
+        <h2 class="h6">Notes / History</h2>
         <p class="small mb-0" style="white-space: pre-line;">{{ poi.notes or "—" }}</p>
       </div>
     </div>
 
     <div class="card shadow-sm border-0 mb-3">
       <div class="card-body">
-        <h2 class="h6">Links</h2>
+        <h2 class="h6">Additional links</h2>
         {% if poi_links %}
         <dl class="row mb-0 small">
           {% for l in poi_links %}
-          <dt class="col-sm-4">Link #{{ loop.index }}</dt>
+          <dt class="col-sm-4"><span class="badge bg-light text-dark border">{{ {'video': 'Video', 'images': 'Images', 'document': 'Document'}.get(l.link_type, 'Link') }}</span></dt>
           <dd class="col-sm-8">
             {% if l.url %}{{ l.url | linkify }}{% else %}—{% endif %}
             {% if l.description %}<div class="text-muted">{{ l.description }}</div>{% endif %}

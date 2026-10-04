@@ -14,6 +14,7 @@ import json
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 import catalog_sync
+import poi_links
 from auth.decorators import system_admin_required
 from db import get_db, log_action
 from fuzzy import split_alt_names
@@ -141,7 +142,8 @@ def view_record(entity, rid):
                                    (rid,)).fetchone()[0]
     return render_template("platform_catalog/view.html", entity=entity, spec=spec, row=_get(db, spec, rid),
                            fields=all_fields(spec), alt_names=split_alt_names(_get(db, spec, rid)["alt_names"]),
-                           master_images=master_images)
+                           master_images=master_images, links=poi_links.links(db, rid) if entity == "pois" else [],
+                           link_types=poi_links.LINK_TYPE)
 
 
 # ---- add / edit -------------------------------------------------------------------
@@ -194,8 +196,15 @@ def _form_values(db, spec, form):
 
 
 def _render_form(db, entity, spec, row, form=None):
+    links = []
+    if entity == "pois":
+        if form is not None and hasattr(form, "getlist") and form.getlist("link_url"):
+            links = [{"url": u, "link_type": t, "title": ti} for u, t, ti in poi_links.from_form(form)]
+        elif row is not None:
+            links = poi_links.links(db, row[spec["pk"]])
     return render_template("platform_catalog/form.html", entity=entity, spec=spec, row=row, form=form,
-                           fields=all_fields(spec), poi_types=_poi_types(db), countries=_countries(db))
+                           fields=all_fields(spec), poi_types=_poi_types(db), countries=_countries(db),
+                           links=links, link_types=poi_links.LINK_TYPES)
 
 
 @platform_catalog_bp.route("/<entity>/new", methods=["GET", "POST"])
@@ -211,6 +220,8 @@ def new_record(entity):
             return _render_form(db, entity, spec, None, request.form)
         cur = db.execute(f"INSERT INTO {spec['table']} ({', '.join(values)}) VALUES ({', '.join('?' * len(values))})",
                          tuple(values.values()))
+        if entity == "pois":
+            poi_links.save_from_form(db, cur.lastrowid, request.form)
         db.commit()
         log_action("Create", spec["table"], cur.lastrowid, f"Added {spec['singular']} '{values['name']}' (platform catalog)")
         flash(f"'{values['name']}' added.{_pushed(db, entity, [cur.lastrowid])}", "success")
@@ -232,6 +243,8 @@ def edit_record(entity, rid):
             return _render_form(db, entity, spec, row, request.form)
         db.execute(f"UPDATE {spec['table']} SET {', '.join(f'{c} = ?' for c in values)}, updated_at = datetime('now') "
                    f"WHERE {spec['pk']} = ?", tuple(values.values()) + (rid,))
+        if entity == "pois":
+            poi_links.save_from_form(db, rid, request.form)
         db.commit()
         log_action("Update", spec["table"], rid, f"Updated {spec['singular']} '{values['name']}' (platform catalog)")
         flash(f"'{values['name']}' saved.{_pushed(db, entity, [rid])}", "success")
@@ -245,6 +258,8 @@ def delete_record(entity, rid):
     spec = _spec(entity)
     db = get_db()
     row = _get(db, spec, rid)
+    if entity == "pois":
+        db.execute("DELETE FROM platform_poi_links WHERE poi_id = ?", (rid,))
     db.execute(f"DELETE FROM {spec['table']} WHERE {spec['pk']} = ?", (rid,))
     catalog_sync.forget_catalog_record(db, entity, rid)  # tenants keep their copies; they just stop syncing
     db.commit()
