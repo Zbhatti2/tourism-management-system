@@ -66,7 +66,7 @@
           </ul>
         </div>
         {% else %}
-        <a href="{{ url_for(m.endpoint) }}" class="nav-link {{ 'active' if request.blueprint == m.key or request.endpoint == m.endpoint or (m.key=='dashboard' and request.blueprint=='dashboard') or (m.key=='suppliers' and request.blueprint=='images' and (request.view_args or {}).get('kind', 'supplier') == 'supplier' and not request.endpoint.startswith('images.platform_update')) or (m.entity == 'pois' and request.blueprint == 'images' and (request.view_args or {}).get('kind') == 'platform_poi') or (m.key=='ai_agents' and request.blueprint in ('ai_usage', 'tour_planner')) or (m.entity and request.blueprint == 'platform_catalog' and (request.view_args or {}).get('entity') == m.entity) else 'text-white-50' }}">
+        <a href="{{ url_for(m.endpoint) }}" class="nav-link {{ 'active' if request.blueprint == m.key or request.endpoint == m.endpoint or (m.key=='dashboard' and request.blueprint=='dashboard') or (m.key=='suppliers' and request.blueprint=='images' and (request.view_args or {}).get('kind', 'supplier') == 'supplier' and not request.endpoint.startswith('images.platform_update')) or (m.entity == 'pois' and request.blueprint == 'images' and (request.view_args or {}).get('kind') == 'platform_poi') or (m.key=='ai_agents' and request.blueprint == 'ai_usage') or (m.entity and request.blueprint == 'platform_catalog' and (request.view_args or {}).get('entity') == m.entity) else 'text-white-50' }}">
           <i class="bi bi-{{ m.icon }} me-2"></i>{{ m.label }}
         </a>
         {% endif %}

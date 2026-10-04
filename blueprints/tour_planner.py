@@ -50,13 +50,17 @@ def index():
     _tenant()
     db = get_db()
     tp.mark_stale(db, g.tenant_id)
+    import tour_design
     plans = []
     for p in db.execute("SELECT * FROM tour_plans WHERE tenant_id = ? AND status != 'archived' ORDER BY updated_at DESC",
                         (g.tenant_id,)).fetchall():
         smap = tp.stages(db, p["plan_id"])
         built = [s for s in smap.values() if s["built"]]
-        plans.append({"plan": p, "brief": tp.brief_of(p), "approved": sum(1 for s in built if s["approved_at"]),
-                      "built": len(built), "working": any(s["state"] == "working" for s in built)})
+        brief = tp.brief_of(p)
+        plans.append({"plan": p, "brief": brief, "approved": sum(1 for s in built if s["approved_at"]),
+                      "built": len(built), "working": any(s["state"] == "working" for s in built),
+                      "ready": tour_design.current_version(db, p),
+                      "changed": tour_design.changed_since(db, p, smap, brief)})
     return render_template("tour_planner/index.html", plans=plans)
 
 
@@ -90,6 +94,7 @@ def _allowance(db):
 @tour_planner_bp.route("/<int:plan_id>")
 @login_required
 def workspace(plan_id):
+    import tour_design
     _tenant()
     db = get_db()
     tp.mark_stale(db, g.tenant_id)
@@ -119,7 +124,9 @@ def workspace(plan_id):
         run=run, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
         status_url=url_for("tour_planner.run_status", plan_id=plan_id, run_id=run["run_id"]) if run else None,
         stop_url=url_for("tour_planner.run_stop", plan_id=plan_id, run_id=run["run_id"]) if run else None,
-        unit="step", allowance=_allowance(db), criteria=tp.criteria_of(brief), flag_statuses=tp.FLAG_STATUSES,
+        unit="step", allowance=_allowance(db), criteria=tp.criteria_of(brief), flag_statuses=tp.FLAG_STATUSES, open_flags=tp.open_flag_count(smap, brief),
+        ready=tour_design.current_version(db, plan), ready_missing=tour_design.missing_for_ready(smap),
+        ready_changed=tour_design.changed_since(db, plan, smap, brief),
         journey=tp.journey_grid(smap["route"]["data"], None) if key in ("route", "checkpoints") and smap["route"]["data"] else None,
         budget=tp.lodging_budget(brief, smap["lodging"]["data"]) if key == "lodging" and smap["lodging"]["data"] else None)
 
@@ -324,6 +331,50 @@ def answer_flags(plan_id, key):
     else:
         flash("Your answers to the flags are saved. Later stages' agents will read them.", "success")
     return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=key))
+
+
+@tour_planner_bp.route("/<int:plan_id>/ready", methods=["POST"])
+@login_required
+def mark_ready(plan_id):
+    """Freeze the design as a Ready for package version (tour_design.py)."""
+    import tour_design
+    _tenant()
+    db = get_db()
+    _plan(db, plan_id)
+    if request.form.get("action") == "withdraw":
+        tour_design.withdraw(db, g.tenant_id, plan_id)
+        log_action("Update", "tour_plans", plan_id, "Withdrew a Tour Design from Ready for package")
+        flash("Withdrawn: Package Management no longer offers this design.", "success")
+    else:
+        try:
+            n = tour_design.mark_ready(db, g.tenant_id, plan_id, g.user_id, request.form.get("note"))
+        except tour_design.DesignError as e:
+            flash(str(e), "error")
+        else:
+            log_action("Update", "tour_plans", plan_id, f"Marked Tour Design ready for package (version {n})")
+            flash(f"Version {n} is Ready for package: Package Management → New Package → Add from Tour Design.", "success")
+    return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=request.form.get("stage") or None))
+
+
+@tour_planner_bp.route("/<int:plan_id>/print")
+@login_required
+def print_flags(plan_id):
+    """A printable list of the flags that need attention: one stage
+    (?stage=route) or the whole design; ?answered=1 includes the answered
+    ones too."""
+    _tenant()
+    db = get_db()
+    plan = _plan(db, plan_id)
+    smap = tp.stages(db, plan_id)
+    brief = tp.brief_of(plan)
+    key = request.args.get("stage")
+    keys = [key] if key in smap else [k for k in tp.STAGE_KEYS if smap[k]["built"]]
+    show_all = bool(request.args.get("answered"))
+    sections = tp.flag_report(smap, brief, keys, show_all)
+    return render_template("tour_planner/print.html", plan=plan, brief=brief, fig=tp.group_figures(brief),
+                           sections=sections, one_stage=key in smap, show_all=show_all,
+                           statuses=tp.FLAG_STATUS, stage_key=key if key in smap else None,
+                           printed_at=db.execute("SELECT datetime('now')").fetchone()[0])
 
 
 @tour_planner_bp.route("/<int:plan_id>/criteria", methods=["POST"])

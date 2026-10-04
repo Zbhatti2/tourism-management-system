@@ -19,11 +19,11 @@ import ai_usage
 
 AGENTS = [
     {"key": "tour_planner", "label": "Tour Planner", "icon": "map",
-     "what": "Describe a tour; the agent plans the route, attractions, overnight stops, hotels and drive times "
+     "what": "Behind Tour Design: describe a tour; the agent plans the route, attractions, overnight stops, hotels and drive times "
              "with you, stage by stage, towards a draft Package.",
      "reads": "TMS data (cities, distances, POIs, your Suppliers) and the web",
      "writes": "A tour plan you review and approve stage by stage",
-     "also_from": None, "start": ("tour_planner.index", {}), "start_label": "Open the Tour Planner",
+     "also_from": None, "start": ("tour_planner.index", {}), "start_label": "Open Tour Design",
      "features": ["Tour Planner"]},
     {"key": "hotel_intelligence", "label": "Hotel Intelligence", "icon": "building",
      "what": "Reads web pages or images you give it about a hotel (a listing, a booking screenshot) and proposes "

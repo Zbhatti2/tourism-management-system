@@ -2085,6 +2085,7 @@ CREATE TABLE packages (
     notes           TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    tour_design_version_id INTEGER REFERENCES tour_design_versions(version_id),  -- the Ready Tour Design it was added from (tour_design.py)
     UNIQUE (tenant_id, package_code)
 );
 CREATE INDEX idx_packages_tenant ON packages(tenant_id);
@@ -3207,9 +3208,28 @@ CREATE TABLE IF NOT EXISTS tour_plans (
     package_id      INTEGER REFERENCES packages(package_id),
     created_by      INTEGER REFERENCES users(user_id),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    ready_version_id INTEGER REFERENCES tour_design_versions(version_id)  -- its Ready for package version (tour_design.py)
 );
 CREATE INDEX IF NOT EXISTS idx_tour_plans_tenant ON tour_plans(tenant_id);
+-- Ready for package: frozen versions of a Tour Design (tour_design.py)
+CREATE TABLE IF NOT EXISTS tour_design_versions (
+    version_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    plan_id         INTEGER NOT NULL REFERENCES tour_plans(plan_id),
+    version_no      INTEGER NOT NULL,
+    name            TEXT NOT NULL,
+    snapshot        TEXT NOT NULL,          -- JSON: {brief, stages: {key: result}, open_flags: [...]}
+    days            INTEGER,
+    nights          INTEGER,
+    guests          INTEGER,
+    open_flags      INTEGER NOT NULL DEFAULT 0,
+    note            TEXT,                   -- the designer's note when marking it ready
+    marked_by       INTEGER REFERENCES users(user_id),
+    marked_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (plan_id, version_no)
+);
+CREATE INDEX IF NOT EXISTS idx_tour_design_versions_tenant ON tour_design_versions(tenant_id);
 CREATE TABLE IF NOT EXISTS tour_plan_stages (
     stage_id        INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),

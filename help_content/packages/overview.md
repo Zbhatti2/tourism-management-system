@@ -7,6 +7,27 @@ A Package is a tour package **template** — assembled from Services,
 Products, Suppliers, and Points of Interest, but not yet a scheduled
 departure or a customer booking (those are later roadmap phases).
 
+## Creating a package
+
+**New Package** offers two ways:
+
+- **Create New Package**: start from a Tour Package service (Inventory
+  Management → Services) and build the route, days and components
+  yourself.
+- **Add from Tour Design**: lists the Tour Designs marked **Ready for
+  package**. Tick one or more; each becomes its own draft Package, with:
+  - the design's overnight checkpoints as the route, with their nights;
+  - the day-by-day itinerary, including the guest text, visits, meals and
+    team notes;
+  - each day's visits linked to your Points of Interest where the names
+    match;
+  - the chosen hotel at each checkpoint as Hotel/Room lines (rooms ×
+    nights, with the price and supplier when known).
+
+  The Package's notes say which design and version it came from, and list
+  any flags that were still open. Check its details, prices and
+  components before making it active.
+
 ## Building a package
 
 A package brings together line items from the other catalogs:

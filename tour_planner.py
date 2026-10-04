@@ -751,6 +751,32 @@ def flag_answers(brief):
     return out
 
 
+def flag_report(smap, brief, keys, show_all=False):
+    """[{key, label, approved, items: [{n, flag, status, note}]}] for the
+    stages that have flags; without show_all only those still needing
+    attention (open, or noted but not resolved)."""
+    out = []
+    for k in keys:
+        data = smap[k]["data"]
+        flags = (data or {}).get("flags") or [] if isinstance(data, dict) else []
+        answers = (brief.get("flag_responses") or {}).get(k) or {}
+        items = []
+        for n, f in enumerate(flags, 1):
+            a = answers.get(f) or {}
+            status = a.get("status") or "open"
+            if not show_all and status in ("resolved", "dismissed"):
+                continue
+            items.append({"n": n, "flag": f, "status": status, "note": a.get("note") or ""})
+        if items:
+            out.append({"key": k, "label": STAGE[k]["label"], "approved": smap[k]["approved_at"], "items": items,
+                        "total": len(flags)})
+    return out
+
+
+def open_flag_count(smap, brief):
+    return sum(len(sec["items"]) for sec in flag_report(smap, brief, [k for k in STAGE_KEYS if smap[k]["built"]]))
+
+
 def save_flag_responses(db, plan_id, key, responses):
     """responses: {flag text: {status, note}} for one stage. Changes no
     stage result, so nothing has to be redone."""
