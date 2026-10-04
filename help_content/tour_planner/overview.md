@@ -1,11 +1,13 @@
 ---
-title: Tour Planner
+title: Tour Design
 order: 1
-keywords: [tour planner, ai agent, itinerary, route, checkpoints, journey times, brief, package]
+keywords: [tour design, tour planner, ai agent, itinerary, route, checkpoints, journey times, brief, package, print, ready for package]
 ---
-The **Tour Planner** is an AI agent that plans a group tour with you, one
-stage at a time, towards a draft Package. Open it from **AI Agents → Tour
-Planner**.
+**Tour Design** is where tours are ideated and decided. Each Tour Design
+is planned with the **Tour Planner** agent, one stage at a time. Open it
+from the **Tour Design** item in the sidebar, or from the dashboard tile.
+Several people can each work on their own designs. When a design is
+ready, Package Management adds it as a Package.
 
 ## Starting a plan
 
@@ -78,6 +80,28 @@ add your answer or instruction. **Save answers** keeps them without
 changing or un-approving the stage, and the agents of the later stages
 read them. **Save and ask the agent to revise this stage** saves them and
 re-runs the stage with your answers.
+
+## Printing the flags
+
+**Print** on a stage's Flags card prints that stage's flags that still
+need attention. **Print flags** at the top prints them for the whole
+design. Flags answered *Checked / resolved* or *Not an issue* are left
+out; the printed page has a link to include them. Each flag is printed
+with its answer and lines for the action, who will do it, and by when.
+
+## Ready for package
+
+When every stage is approved, **Ready for package…** at the top freezes
+the design as a version, with an optional note for the package team.
+Package Management then offers it under **New Package → Add from Tour
+Design**.
+
+- You can keep working on the design afterwards. If it changes, the
+  button says *changed since*; mark it ready again to offer the changes
+  as the next version.
+- **Withdraw** stops Package Management offering the design. Packages
+  already made from it keep it as their source.
+- Flags still open go into the Package's notes.
 
 ## Cost
 

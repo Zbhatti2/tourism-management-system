@@ -54,6 +54,10 @@ MODULES = [
     # sub-modules yet (Departures/Bookings are later roadmap phases), so
     # this is a single top-level entry rather than a parent-with-children
     # group like Inventory Management above.
+    # Tour Design (Zeb, Oct 2026): where tours are ideated and decided, with
+    # the Tour Planner agent (blueprints/tour_planner.py); Package Management
+    # adds Ready designs as Packages.
+    {"key": "tour_planner", "label": "Tour Design", "icon": "compass", "roles": ["TenantAdmin", "User"], "endpoint": "tour_planner.index"},
     {"key": "packages", "label": "Package Management", "icon": "map", "roles": ["TenantAdmin", "User"], "endpoint": "packages.list_packages"},
     # Foundations for Zeb's "First Agents" plan (Sept 2026) -- Agent Runs +
     # Human Review Queue. Single top-level entry (Review Queue is a tab on

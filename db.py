@@ -832,6 +832,13 @@ def _migration_poi_links(db):
     db.commit()
 
 
+def _migration_tour_design(db):
+    """Tour Design -> Package (tour_design.py): frozen Ready versions of a
+    design, and the version a Package came from."""
+    import tour_design
+    tour_design.migrate(db, _column_exists)
+
+
 def _migration_city_checkpoint_flag(db):
     """cities.is_checkpoint: a good overnight stop for tour groups (set by
     the platform, or proposed by a tenant's Tour Planner)."""
@@ -870,6 +877,7 @@ MIGRATIONS = [
     ("2026_10_tour_planner", _migration_tour_planner),
     ("2026_10_city_checkpoint_flag", _migration_city_checkpoint_flag),
     ("2026_10_poi_links", _migration_poi_links),
+    ("2026_10_tour_design", _migration_tour_design),
 ]
 
 

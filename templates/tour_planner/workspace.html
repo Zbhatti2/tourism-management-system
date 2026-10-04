@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ plan.name }} — Tour Planner{% endblock %}
+{% block title %}{{ plan.name }} — Tour Design{% endblock %}
 {% set badge = {'approved': ('bg-success-subtle text-success', 'Approved'), 'review': ('bg-warning-subtle text-warning-emphasis', 'To review'),
                 'working': ('bg-primary-subtle text-primary', 'Working…'), 'ready': ('bg-secondary-subtle text-dark', 'Ready'),
                 'waiting': ('bg-light text-muted border', 'Waiting'), 'failed': ('bg-danger-subtle text-danger', 'Failed'),
@@ -45,7 +45,8 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="d-flex justify-content-between align-items-center mb-1">
     <h3 class="h6 mb-0"><i class="bi bi-flag"></i> Flags <span class="small fw-normal text-muted">— {{ flags|length - open_n }} of {{ flags|length }} answered</span></h3>
-    <span class="small text-muted">Answer each one; the agent reads your answers in the later stages.</span>
+    <span class="small text-muted d-flex align-items-center gap-2">Answer each one; the agent reads your answers in the later stages.
+      <a class="btn btn-sm btn-outline-secondary" target="_blank" href="{{ url_for('tour_planner.print_flags', plan_id=plan.plan_id, stage=key) }}" title="Print the flags of this stage that need attention"><i class="bi bi-printer"></i> Print</a></span>
   </div>
   <ol class="small mb-2 ps-3">{% for f in flags %}{% set a = answers.get(f) or {} %}
     <li class="mb-2">
@@ -111,15 +112,46 @@
 {% endmacro %}
 
 {% block content %}
-<nav class="mb-2"><a href="{{ url_for('tour_planner.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Tour Planner</a></nav>
+<nav class="mb-2"><a href="{{ url_for('tour_planner.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Tour Design</a></nav>
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <div class="text-uppercase small text-muted fw-semibold">Tour Planner</div>
+    <div class="text-uppercase small text-muted fw-semibold">Tour Design</div>
     <h1 class="h3 mb-0">{{ plan.name }}</h1>
     <div class="small text-muted">{{ brief.start_city or '?' }} → {{ brief.destination or '?' }}{% if brief.start_date %} · assembles {{ brief.start_date }}{% endif %}
       · {{ fig.guests }} guests · {{ brief.tour_days }} days · {{ brief.standard }} · AI cost so far ${{ '%.2f'|format(cost) }}</div>
   </div>
   <div class="d-flex gap-2 align-items-start">
+  {% if ready %}
+  <details class="position-relative">
+    <summary class="btn btn-sm {{ 'btn-warning' if ready_changed else 'btn-success' }} list-unstyled"><i class="bi bi-box-seam"></i> Ready for package · v{{ ready.version_no }}{% if ready_changed %} <span class="small">(changed since)</span>{% endif %}</summary>
+    <div class="card shadow position-absolute end-0 mt-1 p-2 small" style="width: 320px; z-index: 10;">
+      <p class="mb-2">Version {{ ready.version_no }} was marked ready on {{ ready.marked_at[:16] }}{% if ready.open_flags %}, with {{ ready.open_flags }} open flag{{ '' if ready.open_flags == 1 else 's' }}{% endif %}. Package Management offers it under <strong>Add from Tour Design</strong>.</p>
+      {% if ready_changed %}<p class="mb-2 text-warning-emphasis">The design has changed since. Mark it ready again to offer the changes as version {{ ready.version_no + 1 }}.</p>{% endif %}
+      <form method="post" action="{{ url_for('tour_planner.mark_ready', plan_id=plan.plan_id) }}" class="d-flex gap-2 flex-wrap">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="stage" value="{{ key }}">
+        {% if ready_changed and not ready_missing %}<button class="btn btn-sm btn-success" name="action" value="ready" type="submit">Mark ready again</button>{% endif %}
+        <button class="btn btn-sm btn-outline-secondary" name="action" value="withdraw" type="submit">Withdraw</button>
+      </form>
+    </div>
+  </details>
+  {% else %}
+  <details class="position-relative">
+    <summary class="btn btn-sm btn-outline-success list-unstyled" title="{{ 'Approve every stage first' if ready_missing else 'Offer this design to Package Management' }}"><i class="bi bi-box-seam"></i> Ready for package…</summary>
+    <div class="card shadow position-absolute end-0 mt-1 p-2 small" style="width: 340px; z-index: 10;">
+      {% if ready_missing %}
+      <p class="mb-0">Approve every stage first. Still to approve: {{ ready_missing|join(', ') }}.</p>
+      {% else %}
+      <p class="mb-2">Freezes this design as a version that Package Management can add as a Package. You can keep working on it afterwards.{% if open_flags %} <strong>{{ open_flags }} flag{{ '' if open_flags == 1 else 's' }}</strong> still need attention; they go into the Package's notes.{% endif %}</p>
+      <form method="post" action="{{ url_for('tour_planner.mark_ready', plan_id=plan.plan_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="stage" value="{{ key }}">
+        <textarea class="form-control form-control-sm mb-2" name="note" rows="2" placeholder="Note for the package team (optional)"></textarea>
+        <button class="btn btn-sm btn-success" name="action" value="ready" type="submit">Mark ready for package</button>
+      </form>
+      {% endif %}
+    </div>
+  </details>
+  {% endif %}
+  {% if open_flags %}<a class="btn btn-sm btn-outline-warning" target="_blank" href="{{ url_for('tour_planner.print_flags', plan_id=plan.plan_id) }}" title="Print every flag in this design that needs attention"><i class="bi bi-printer"></i> Print flags <span class="badge bg-warning text-dark">{{ open_flags }}</span></a>{% endif %}
   {% if key in ('route', 'checkpoints') %}
     {% set rpois = (stages.route.data or {}).get('pois') or [] %}
     {% if rpois %}<button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#poiModal"><i class="bi bi-geo-alt"></i> Points of Interest <span class="badge bg-primary-subtle text-primary">{{ rpois|selectattr('include')|list|length }}/{{ rpois|length }}</span></button>{% endif %}

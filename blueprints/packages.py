@@ -696,11 +696,42 @@ def new_package():
         flash(f"Package {package_code} created. Now add its route, days, and components below.", "success")
         return redirect(url_for("packages.view_package", package_id=package_id))
 
+    import tour_design
     tour_services = _tour_package_services(db)
     return render_template(
         "packages/form.html", package=None, form_values=None, tour_services=tour_services,
         tour_services_map=_tour_services_map(tour_services),
+        source="design" if request.args.get("from") == "design" else "new",
+        designs=tour_design.ready_designs(db, g.tenant_id),
     )
+
+
+@packages_bp.route("/from-design", methods=["POST"])
+@login_required
+def add_from_design():
+    """Add one Package per ticked Ready Tour Design (tour_design.py)."""
+    import tour_design
+    db = get_db()
+    made = []
+    for vid in request.form.getlist("version_id"):
+        try:
+            pid = tour_design.create_package(db, g.tenant_id, int(vid), g.user_id)
+        except (ValueError, tour_design.DesignError) as e:
+            flash(str(e), "error")
+            continue
+        code = db.execute("SELECT package_code, package_name FROM packages WHERE package_id = ?", (pid,)).fetchone()
+        log_action("Create", "package", pid, f"Added package {code[0]} from Tour Design: {code[1]}")
+        made.append((pid, code[0]))
+    if not made:
+        if not request.form.getlist("version_id"):
+            flash("Tick at least one Tour Design.", "error")
+        return redirect(url_for("packages.new_package", **{"from": "design"}))
+    if len(made) == 1:
+        flash(f"Package {made[0][1]} added from the Tour Design as a draft: route, days, visits and hotels are filled "
+              "in. Check its details, prices and components.", "success")
+        return redirect(url_for("packages.view_package", package_id=made[0][0]))
+    flash(f"{len(made)} packages added from Tour Designs as drafts: " + ", ".join(c for _p, c in made) + ".", "success")
+    return redirect(url_for("packages.list_packages"))
 
 
 @packages_bp.route("/<int:package_id>/edit", methods=["GET", "POST"])

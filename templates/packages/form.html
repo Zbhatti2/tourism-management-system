@@ -1,7 +1,41 @@
 {% extends "base.html" %}
 {% block title %}{{ "Edit" if package else "New" }} Package{% endblock %}
 {% block content %}
-<h1 class="h4 mb-4">{{ "Edit" if package else "New" }} Package</h1>
+<h1 class="h4 mb-3">{{ "Edit" if package else "New" }} Package</h1>
+{% if not package %}
+<div class="btn-group mb-3" role="group" aria-label="How to create the package">
+  <a href="{{ url_for('packages.new_package') }}" class="btn {{ 'btn-primary' if source != 'design' else 'btn-outline-primary' }}"><i class="bi bi-plus-lg"></i> Create New Package</a>
+  <a href="{{ url_for('packages.new_package', **{'from': 'design'}) }}" class="btn {{ 'btn-primary' if source == 'design' else 'btn-outline-primary' }}"><i class="bi bi-compass"></i> Add from Tour Design{% if designs %} <span class="badge bg-light text-primary">{{ designs|length }}</span>{% endif %}</a>
+</div>
+{% endif %}
+{% if not package and source == 'design' %}
+<form method="post" action="{{ url_for('packages.add_from_design') }}" class="card shadow-sm border-0" style="max-width: 1000px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <p class="small text-muted">Tour Designs marked <strong>Ready for package</strong> in <a href="{{ url_for('tour_planner.index') }}">Tour Design</a>. Tick the ones to add: each becomes its own draft Package, with its route (the overnight checkpoints), its days, their visits and the chosen hotels filled in.</p>
+    {% if designs %}
+    <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+      <thead><tr><th></th><th>Tour Design</th><th>Version</th><th class="text-end">Days</th><th class="text-end">Nights</th><th class="text-end">Guests</th><th>Open flags</th><th>Marked ready</th><th>Packages</th></tr></thead>
+      <tbody>{% for d in designs %}<tr>
+        <td><input class="form-check-input" type="checkbox" name="version_id" value="{{ d.version_id }}" id="v{{ d.version_id }}"></td>
+        <td><label for="v{{ d.version_id }}"><strong>{{ d.name }}</strong></label>{% if d.note %}<div class="small text-muted">{{ d.note }}</div>{% endif %}
+          <a class="small" href="{{ url_for('tour_planner.workspace', plan_id=d.plan_id) }}" target="_blank">open the design</a></td>
+        <td>v{{ d.version_no }}</td><td class="text-end">{{ d.days or '—' }}</td><td class="text-end">{{ d.nights or '—' }}</td><td class="text-end">{{ d.guests or '—' }}</td>
+        <td>{% if d.open_flags %}<a href="{{ url_for('tour_planner.print_flags', plan_id=d.plan_id) }}" target="_blank" class="badge bg-warning-subtle text-warning-emphasis text-decoration-none">{{ d.open_flags }} open</a>{% else %}<span class="badge bg-success-subtle text-success">none</span>{% endif %}</td>
+        <td class="small">{{ d.marked_at[:10] }}{% if d.marked_by_name %} · {{ d.marked_by_name }}{% endif %}</td>
+        <td class="small">{{ d.packages_made or '—' }}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}
+    <div class="text-muted py-3">No Tour Design is ready yet. In <a href="{{ url_for('tour_planner.index') }}">Tour Design</a>, approve every stage of a design and press <strong>Ready for package</strong>.</div>
+    {% endif %}
+  </div>
+  {% if designs %}<div class="card-footer bg-white d-flex justify-content-end gap-2">
+    <a href="{{ url_for('packages.list_packages') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary" type="submit"><i class="bi bi-box-arrow-in-down"></i> Add as Package(s)</button>
+  </div>{% endif %}
+</form>
+{% else %}
 <form method="post" class="card shadow-sm border-0" style="max-width: 760px;">
   <div class="card-body">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -138,6 +172,7 @@
     <button class="btn btn-primary" type="submit">Save</button>
   </div>
 </form>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 {% if not package %}
