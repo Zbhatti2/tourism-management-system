@@ -1,25 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Platform image updates{% endblock %}
 {% block content %}
-<nav class="mb-2"><a href="{{ url_for('poi.view_poi', poi_id=poi_id) if poi_id else url_for('poi.list_pois') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Points of Interest</a></nav>
+<nav class="mb-2">{% if supplier_id %}<a href="{{ url_for('suppliers.view_supplier', supplier_id=supplier_id) }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Supplier</a>{% else %}<a href="{{ url_for('poi.view_poi', poi_id=poi_id) if poi_id else url_for('poi.list_pois') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Points of Interest</a>{% endif %}</nav>
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <div class="text-uppercase small text-muted fw-semibold">Points of Interest</div>
+    <div class="text-uppercase small text-muted fw-semibold">Points of Interest · Hotels &amp; Restaurants</div>
     <h1 class="h3 mb-0">Platform image updates</h1>
-    <div class="small text-muted">Changes to the platform's Master Image Catalog for your Points of Interest. {{ total }} waiting.
+    <div class="small text-muted">Changes to the platform's Master Image Catalogs for your Points of Interest and your hotels and restaurants that came from the platform catalog. {{ total }} waiting.
       Your setting: <strong>{{ policies[policy] }}</strong>{% if g.role in ('TenantAdmin', 'SystemAdmin') %} (<a href="{{ url_for('system_mgmt.index') ~ '#poi-image-updates' }}">change</a>){% endif %}.</div>
   </div>
-  {% if poi_id %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('images.platform_updates') }}">Show all POIs</a>{% endif %}
+  {% if poi_id or supplier_id %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('images.platform_updates') }}">Show all</a>{% endif %}
 </div>
 
 {% if groups %}
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if poi_id %}<input type="hidden" name="poi" value="{{ poi_id }}">{% endif %}
-  {% for (pid, pname), items in groups.items() %}
+  {% if supplier_id %}<input type="hidden" name="supplier" value="{{ supplier_id }}">{% endif %}
+  {% for (gkind, pid, pname), items in groups.items() %}
   <div class="card shadow-sm border-0 mb-2">
     <div class="card-header bg-white small d-flex justify-content-between">
-      <a class="fw-semibold text-decoration-none" href="{{ url_for('images.album', kind='poi', owner_id=pid) }}">{{ pname }}</a>
+      <a class="fw-semibold text-decoration-none" href="{{ url_for('images.album', kind=gkind, owner_id=pid) }}">{{ pname }}</a>
       <a href="#" class="small js-group-all">tick all</a>
     </div>
     <div class="table-responsive">
@@ -27,9 +28,9 @@
         <tbody>
           {% for u in items %}
           <tr>
-            <td style="width: 28px;"><input class="form-check-input js-pick" type="checkbox" name="ids" value="{{ u.update_id }}"></td>
-            <td style="width: 110px;"><a href="{{ url_for('images.platform_update_image', update_id=u.update_id, size='full') }}" target="_blank">
-              <img src="{{ url_for('images.platform_update_image', update_id=u.update_id, size='thumb') }}" alt="" width="100" height="66" class="rounded" style="object-fit: cover;" loading="lazy"></a></td>
+            <td style="width: 28px;"><input class="form-check-input js-pick" type="checkbox" name="{{ u.field }}" value="{{ u.update_id }}"></td>
+            <td style="width: 110px;"><a href="{{ url_for('images.platform_update_image', update_id=u.update_id, size='full', kind=u.kind if u.kind == 'supplier' else None) }}" target="_blank">
+              <img src="{{ url_for('images.platform_update_image', update_id=u.update_id, size='thumb', kind=u.kind if u.kind == 'supplier' else None) }}" alt="" width="100" height="66" class="rounded" style="object-fit: cover;" loading="lazy"></a></td>
             <td style="width: 110px;">
               {% if u.change == 'new' %}<span class="badge bg-success-subtle text-success">New image</span>
               {% elif u.change == 'changed' %}<span class="badge bg-warning-subtle text-warning-emphasis">Caption changed</span>

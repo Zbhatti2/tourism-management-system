@@ -34,6 +34,7 @@ import agent_runs
 import ai_usage
 import image_catalog as ic
 import image_collector as collector
+import catalog_image_sync
 import poi_image_sync
 from auth.decorators import login_required, system_admin_required
 from db import get_db, log_action
@@ -158,7 +159,7 @@ def _import_page(kind_key):
         return redirect(_import_url(kind))
     owners = kind.owners(db, scope)
     runs, allowance = [], None
-    if kind.key in ("supplier", "platform_poi"):
+    if kind.key == "supplier" or kind.platform:
         collector.mark_stale(db, scope)
         runs = db.execute("SELECT * FROM image_agent_runs WHERE tenant_id = ? AND owner_kind = ? ORDER BY run_id DESC "
                           "LIMIT 10", (scope, kind.key)).fetchall()
@@ -229,7 +230,7 @@ def _start_collector(db, kind, scope, ids, per_owner, label, back):
 
 def _collector_kind(key):
     kind = _kind(key)
-    if kind.key not in ("supplier", "platform_poi"):
+    if not (kind.key == "supplier" or kind.platform):
         abort(404)
     return kind
 
@@ -272,8 +273,10 @@ def collect_many(kind="supplier"):
     if not chosen:
         flash(f"No {kind.plural} match that choice.", "error")
         return redirect(back)
-    if kind.platform:
+    if kind.key == "platform_poi":
         label = f"{type_label + ' POIs' if type_label else 'Points of Interest'}{' in ' + city if city else ''}"
+    elif kind.platform:
+        label = f"{type_label or kind.singular}{' in ' + city if city else ''}"
     else:
         label = f"{type_label + 's' if type_label else 'Hotels, Resorts and Restaurants'}{' in ' + city if city else ''}"
     label += f" ({min(len(chosen), limit)}{' of ' + str(len(chosen)) if len(chosen) > limit else ''})"
@@ -327,7 +330,7 @@ def agent_run(run_id):
                            owner=owner, kind=kind, import_url=_import_url(kind), now_utc=_now_utc(db),
                            status_url=url_for("images.agent_run_status", run_id=run_id),
                            stop_url=url_for("images.agent_run_stop", run_id=run_id),
-                           unit="POIs" if kind.platform else "hotels / restaurants")
+                           unit="POIs" if kind.key == "platform_poi" else (kind.owner_word + "s") if kind.platform else "hotels / restaurants")
 
 
 def _now_utc(db):
@@ -443,11 +446,16 @@ def album(kind, owner_id):
     if owner.get("has_collector"):
         last_run = db.execute("SELECT * FROM image_agent_runs WHERE tenant_id = ? AND owner_kind = ? AND supplier_ids = ? "
                               "ORDER BY run_id DESC LIMIT 1", (scope, kind.key, f"[{owner_id}]")).fetchone()
-    updates = poi_image_sync.pending(db, scope, owner_id) if kind.key == "poi" else []
+    updates = poi_image_sync.pending(db, scope, owner_id) if kind.key == "poi" else \
+        catalog_image_sync.pending(db, scope, owner_id) if kind.key == "supplier" else []
     linked = None
     if kind.key == "poi":
         linked = db.execute("SELECT catalog_id FROM tenant_catalog_links WHERE tenant_id = ? AND entity = 'pois' "
                             "AND local_id = ? AND how != 'skipped'", (scope, owner_id)).fetchone()
+    elif kind.key == "supplier":
+        linked = db.execute("SELECT catalog_id FROM tenant_catalog_links WHERE tenant_id = ? AND entity IN "
+                            "('accommodation', 'restaurants') AND local_id = ? AND how != 'skipped'",
+                            (scope, owner_id)).fetchone()
     return render_template("images/album.html", kind=kind, owner=owner, images=images, total=total, q=q, sort=sort,
                            view=view, date_from=date_from or "", date_to=date_to or "", sorts=ic.SORT_LABELS,
                            pending=pending, max_desc=ic.DESCRIPTION_MAX, last_run=last_run, readonly=readonly,
@@ -530,25 +538,31 @@ def platform_updates():
         abort(404)
     db = get_db()
     poi_id = request.values.get("poi", type=int)
+    supplier_id = request.values.get("supplier", type=int)
     if request.method == "POST":
         ids = [int(x) for x in request.form.getlist("ids") if x.isdigit()]
+        sids = [int(x) for x in request.form.getlist("sids") if x.isdigit()]
         accept = request.form.get("action") == "accept"
-        if request.form.get("all"):
-            ids = [u["update_id"] for u in poi_image_sync.pending(db, g.tenant_id, poi_id)]
         n = poi_image_sync.decide(db, g.tenant_id, ids, accept, g.user_id)
+        n += catalog_image_sync.decide(db, g.tenant_id, sids, accept, g.user_id)
         if n:
             log_action("ImageUpdates", "poi_image_updates", None,
                        f"{'Accepted' if accept else 'Skipped'} {n} platform image update(s)")
             flash(f"{'Accepted' if accept else 'Skipped'} {n} update{'s' if n != 1 else ''}.", "success")
         else:
             flash("Tick the updates first.", "error")
-        return redirect(request.form.get("next") or url_for("images.platform_updates", poi=poi_id))
-    updates = poi_image_sync.pending(db, g.tenant_id, poi_id)
+        return redirect(request.form.get("next") or url_for("images.platform_updates", poi=poi_id, supplier=supplier_id))
     groups = {}
-    for u in updates:
-        groups.setdefault((u["poi_id"], u["poi_name"]), []).append(u)
-    return render_template("images/platform_updates.html", groups=groups, total=len(updates), poi_id=poi_id,
-                           policy=poi_image_sync.policy(db, g.tenant_id), policies=poi_image_sync.POLICIES)
+    if not supplier_id:
+        for u in poi_image_sync.pending(db, g.tenant_id, poi_id):
+            groups.setdefault(("poi", u["poi_id"], u["poi_name"]), []).append(dict(u, field="ids", kind="poi"))
+    if not poi_id:
+        for u in catalog_image_sync.pending(db, g.tenant_id, supplier_id):
+            groups.setdefault(("supplier", u["supplier_id"], u["owner_name"]), []).append(dict(u, field="sids", kind="supplier"))
+    total = sum(len(v) for v in groups.values())
+    return render_template("images/platform_updates.html", groups=groups, total=total, poi_id=poi_id,
+                           supplier_id=supplier_id, policy=poi_image_sync.policy(db, g.tenant_id),
+                           policies=poi_image_sync.POLICIES)
 
 
 @images_bp.route("/platform-updates/<int:update_id>/<size>")
@@ -559,10 +573,17 @@ def platform_update_image(update_id, size):
     if g.get("tenant_id") is None or size not in ("thumb", "full"):
         abort(404)
     db = get_db()
+    from image_owners import platform_catalog_image, platform_image
+    if request.args.get("kind") == "supplier":
+        u = db.execute("SELECT platform_image_id FROM supplier_image_updates WHERE update_id = ? AND tenant_id = ?",
+                       (update_id, g.tenant_id)).fetchone()
+        if u is None:
+            abort(404)
+        data, mime = platform_catalog_image(db, u[0], size)
+        return _blob(data, mime)
     u = db.execute("SELECT platform_image_id FROM poi_image_updates WHERE update_id = ? AND tenant_id = ?",
                    (update_id, g.tenant_id)).fetchone()
     if u is None:
         abort(404)
-    from image_owners import platform_image
     data, mime = platform_image(db, u[0], size)
     return _blob(data, mime)
