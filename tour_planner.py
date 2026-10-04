@@ -112,7 +112,7 @@ DEFAULT_BRIEF = {
     "route_note": "", "return_mode": "overland", "fly_home": True, "tour_days": 10, "weather_days": 0,
     "max_drive_hours": 8, "parties": [], "guides": 2, "guide_seating": "one_per_minibus",
     "vehicle_type": "Minibus", "vehicle_seats": 14, "drivers_included": True, "currency": "USD",
-    "interests": "", "notes": "", "checkpoint_criteria": {},
+    "interests": "", "notes": "", "checkpoint_criteria": {}, "flag_responses": {},
 }
 
 # What makes a city a good overnight checkpoint (set on the Checkpoints stage).
@@ -722,10 +722,56 @@ ROUTE_TOOL = {"name": "report_route", "description": "The tour's route, its poin
 
 def _brief_text(brief):
     fig = group_figures(brief)
-    b = {k: v for k, v in brief.items() if k not in ("parties", "checkpoint_criteria") and v not in (None, "", [])}
+    b = {k: v for k, v in brief.items() if k not in ("parties", "checkpoint_criteria", "flag_responses")
+         and v not in (None, "", [])}
     b["group"] = fig
     b["parties"] = brief.get("parties")
+    answers = flag_answers(brief)
+    if answers:
+        b["planner_answers_to_earlier_flags"] = answers
     return json.dumps(b, ensure_ascii=False, indent=1)
+
+
+# The planner's answers to the agent's flags (Zeb, Oct 2026: "No place to
+# respond to flags"). Kept in the brief by stage and flag text, so they
+# survive a re-run and every later stage's agent reads them.
+FLAG_STATUSES = [("open", "Open"), ("noted", "Noted, I'll handle it"), ("resolved", "Checked / resolved"),
+                 ("dismissed", "Not an issue")]
+FLAG_STATUS = dict(FLAG_STATUSES)
+
+
+def flag_answers(brief):
+    out = []
+    for key, answers in (brief.get("flag_responses") or {}).items():
+        for flag, a in (answers or {}).items():
+            if a.get("status", "open") == "open" and not a.get("note"):
+                continue
+            out.append(f"[{STAGE.get(key, {}).get('label', key)}] Flag: {flag[:300]} -> Planner: "
+                       f"{FLAG_STATUS.get(a.get('status'), 'Open')}" + (f". {a['note']}" if a.get("note") else ""))
+    return out
+
+
+def save_flag_responses(db, plan_id, key, responses):
+    """responses: {flag text: {status, note}} for one stage. Changes no
+    stage result, so nothing has to be redone."""
+    plan = db.execute("SELECT brief FROM tour_plans WHERE plan_id = ?", (plan_id,)).fetchone()
+    b = dict(DEFAULT_BRIEF, **json.loads(plan["brief"] or "{}"))
+    fr = dict(b.get("flag_responses") or {})
+    fr[key] = {f: a for f, a in responses.items() if a.get("note") or a.get("status", "open") != "open"}
+    b["flag_responses"] = fr
+    db.execute("UPDATE tour_plans SET brief = ?, updated_at = datetime('now') WHERE plan_id = ?",
+               (json.dumps(b, ensure_ascii=False), plan_id))
+    db.commit()
+
+
+def revise_instructions(key, responses):
+    """'Ask the agent to revise' text from the answers to a stage's flags."""
+    lines = [f"- {f[:300]}\n  Planner: {FLAG_STATUS.get(a.get('status'), 'Open')}" + (f". {a['note']}" if a.get("note") else "")
+             for f, a in responses.items() if a.get("note") or a.get("status", "open") != "open"]
+    if not lines:
+        return ""
+    return ("Revise your answer using the planner's responses to your flags. Drop flags marked resolved or not an "
+            "issue; act on the notes:\n" + "\n".join(lines))
 
 
 def run_route(db, tenant_id, client, brief, instructions, prior, meter, log):

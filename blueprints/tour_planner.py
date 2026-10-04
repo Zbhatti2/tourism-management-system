@@ -119,7 +119,7 @@ def workspace(plan_id):
         run=run, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
         status_url=url_for("tour_planner.run_status", plan_id=plan_id, run_id=run["run_id"]) if run else None,
         stop_url=url_for("tour_planner.run_stop", plan_id=plan_id, run_id=run["run_id"]) if run else None,
-        unit="step", allowance=_allowance(db), criteria=tp.criteria_of(brief),
+        unit="step", allowance=_allowance(db), criteria=tp.criteria_of(brief), flag_statuses=tp.FLAG_STATUSES,
         journey=tp.journey_grid(smap["route"]["data"], None) if key in ("route", "checkpoints") and smap["route"]["data"] else None,
         budget=tp.lodging_budget(brief, smap["lodging"]["data"]) if key == "lodging" and smap["lodging"]["data"] else None)
 
@@ -285,6 +285,44 @@ def edit_stage(plan_id, key):
     tp.set_result(db, plan_id, key, data)
     db.commit()
     flash("Saved. Stages after this one will be redone.", "success")
+    return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=key))
+
+
+@tour_planner_bp.route("/<int:plan_id>/stage/<key>/flags", methods=["POST"])
+@login_required
+def answer_flags(plan_id, key):
+    """The planner's answers to a stage's flags; optionally re-run the
+    stage with them."""
+    _tenant()
+    db = get_db()
+    _plan(db, plan_id)
+    smap = tp.stages(db, plan_id)
+    if key not in smap or not smap[key]["data"]:
+        abort(404)
+    flags = smap[key]["data"].get("flags") or []
+    responses = {}
+    for i, f in enumerate(flags):
+        status = request.form.get(f"fs_{i}") or "open"
+        note = (request.form.get(f"fn_{i}") or "").strip()[:1000]
+        responses[str(f)] = {"status": status if status in tp.FLAG_STATUS else "open", "note": note}
+    tp.save_flag_responses(db, plan_id, key, responses)
+    log_action("Update", "tour_plans", plan_id, f"Answered the Tour Planner flags: {tp.STAGE[key]['label']}")
+    if request.form.get("action") == "revise":
+        text = tp.revise_instructions(key, responses)
+        if not text:
+            flash("Answer at least one flag first.", "error")
+        elif not tp.previous_approved(smap, key):
+            flash("Approve the earlier stages first.", "error")
+        else:
+            try:
+                tp.start_run(db, g.tenant_id, g.user_id, plan_id, key, instructions=text)
+            except tp.PlannerError as e:
+                flash(str(e), "error")
+            else:
+                flash("Your answers are saved and the agent is revising this stage with them.", "success")
+                return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=key))
+    else:
+        flash("Your answers to the flags are saved. Later stages' agents will read them.", "success")
     return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage=key))
 
 

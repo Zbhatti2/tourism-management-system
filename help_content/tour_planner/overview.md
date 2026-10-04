@@ -69,6 +69,16 @@ Type what you want in **Ask for changes**, for example "stop at Abbottabad
 instead of Mansehra", and click **Re-run**. Changing or re-running a stage
 clears the stages after it, which need redoing.
 
+## Answering the flags
+
+The agent lists **flags**: things to check or decide (a pass that may be
+closed, a figure it had to estimate). Under each flag choose **Open**,
+**Noted, I'll handle it**, **Checked / resolved** or **Not an issue**, and
+add your answer or instruction. **Save answers** keeps them without
+changing or un-approving the stage, and the agents of the later stages
+read them. **Save and ask the agent to revise this stage** saves them and
+re-runs the stage with your answers.
+
 ## Cost
 
 Every run is charged to your organisation's AI Usage. A route or
