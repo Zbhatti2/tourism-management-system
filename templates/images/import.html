@@ -94,11 +94,15 @@
   </div>
 </div>
 
-{% if not owner and kind.key in ('supplier', 'platform_poi') %}
+{% if not owner and (kind.key == 'supplier' or kind.platform) %}
 <div class="card shadow-sm border-0 mt-3">
   <div class="card-body">
-    <h2 class="h6"><i class="bi bi-stars me-1"></i>{{ 'TMS Agent: POI Image Collector' if kind.platform else 'AI Image Collector' }}</h2>
-    {% if kind.platform %}
+    <h2 class="h6"><i class="bi bi-stars me-1"></i>{{ ('TMS Agent: ' ~ ('POI' if kind.key == 'platform_poi' else kind.singular) ~ ' Image Collector') if kind.platform else 'AI Image Collector' }}</h2>
+    {% if kind.platform and kind.key != 'platform_poi' %}
+    <p class="small text-muted mb-2">Finds photos on each {{ kind.owner_word }}'s official website (and its brand or tourism-board page), keeps real photos of it,
+      and suggests a Title and Description. They arrive here as an upload to curate; tenants' Suppliers linked to it inherit what you add.
+      Runs are a platform cost, typically around 10 cents per {{ kind.owner_word }}. Check each photo's licence before approving it.</p>
+    {% elif kind.platform %}
     <p class="small text-muted mb-2">Finds photos of each Point of Interest on its official website, tourism boards and Wikimedia Commons, keeps real photos of the place,
       notes the licence or credit where the page states it, and suggests a Title and Description. They arrive here as an upload to curate.
       Runs are a platform cost (the "Platform agents" line on AI Usage), typically around 10 cents per POI. Check each photo's licence before approving it.</p>
@@ -111,7 +115,7 @@
     <form method="post" action="{{ url_for('images.collect_many', kind=kind.key) }}" class="row g-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="col-sm-3"><label class="form-label small text-muted mb-0">Type</label>
-        <select class="form-select form-select-sm" name="type"><option value="">{{ 'All POI types' if kind.platform else 'Hotels, Resorts & Restaurants' }}</option>
+        <select class="form-select form-select-sm" name="type"><option value="">{{ 'All POI types' if kind.key == 'platform_poi' else ('All types' if kind.platform else 'Hotels, Resorts & Restaurants') }}</option>
           {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
       <div class="col-sm-3"><label class="form-label small text-muted mb-0">City</label>
         <select class="form-select form-select-sm" name="city"><option value="">All cities</option>

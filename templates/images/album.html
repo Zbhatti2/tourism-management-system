@@ -8,7 +8,7 @@
     <div class="text-uppercase small text-muted fw-semibold">{{ catalog_name }}{% if readonly %} <span class="badge bg-light text-muted border ms-1">View only</span>{% endif %}</div>
     <h1 class="h3 mb-0">{{ owner.name }}</h1>
     <div class="small text-muted">{% if owner.type_label %}{{ owner.type_label }} · {% endif %}{{ total }} image{{ 's' if total != 1 }}{% if images|length != total %} · {{ images|length }} shown{% endif %}
-      {% if kind.platform %} · tenants inherit these images{% elif kind.key == 'poi' and linked %} · includes images from the platform's Master Image Catalog{% endif %}</div>
+      {% if kind.platform %} · tenants inherit these images{% elif kind.key in ('poi', 'supplier') and linked %} · includes images from the platform's Master Image Catalog{% endif %}</div>
   </div>
   {% if not readonly %}
   <div class="d-flex gap-2 align-items-start">
@@ -17,7 +17,7 @@
       <summary class="btn btn-outline-primary list-unstyled" title="AI Image Collector: finds photos on the official website and similar pages"><i class="bi bi-stars"></i> Find photos with AI</summary>
       <div class="card shadow position-absolute end-0 mt-1 p-3 small" style="width: 300px; z-index: 10;">
         {% if kind.platform %}
-        <p class="mb-2">Search the web (official site, tourism boards, Wikimedia Commons) for photos of <strong>{{ owner.name }}</strong>? This is a platform AI cost (typically around 10 cents per POI). Nothing is added until you curate it.</p>
+        <p class="mb-2">Search the web (official site, tourism boards, Wikimedia Commons) for photos of <strong>{{ owner.name }}</strong>? This is a platform AI cost (typically around 10 cents per {{ kind.unit }}). Nothing is added until you curate it.</p>
         {% else %}
         <p class="mb-2">Search the web for photos of <strong>{{ owner.name }}</strong>? This uses your organisation's AI allowance (typically around 10 cents per hotel). Nothing is added until you curate it.</p>
         {% endif %}
@@ -46,7 +46,7 @@
 {% endfor %}
 {% if updates and not readonly %}
 <div class="alert alert-info small py-2"><i class="bi bi-cloud-download"></i> {{ updates|length }} update{{ 's' if updates|length != 1 }} from the platform's Master Image Catalog {{ 'are' if updates|length != 1 else 'is' }} waiting for your review.
-  <a href="{{ url_for('images.platform_updates', poi=owner.id) }}" class="alert-link">Review</a></div>
+  <a href="{{ url_for('images.platform_updates', poi=owner.id) if kind.key == 'poi' else url_for('images.platform_updates', supplier=owner.id) }}" class="alert-link">Review</a></div>
 {% endif %}
 
 <form method="get" class="card shadow-sm border-0 mb-3">

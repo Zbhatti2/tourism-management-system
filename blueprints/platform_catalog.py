@@ -18,6 +18,7 @@ import poi_links
 from auth.decorators import system_admin_required
 from db import get_db, log_action
 from fuzzy import split_alt_names
+from image_owners import CATALOG_IMAGE_KINDS
 from platform_catalog import CATALOGS, MERGEABLE, all_fields
 from platform_merge import REASONS, find_duplicates, merge, merge_fields, undo_merge
 from utils import parse_coordinates
@@ -128,7 +129,8 @@ def list_records(entity):
         types = [(o, o) for o in opts]
     return render_template("platform_catalog/list.html", entity=entity, spec=spec, rows=rows, total=total,
                            limit=LIST_LIMIT, q=q, country_id=country_id, city=city, type_value=type_value,
-                           show=show, countries=countries, cities=cities, types=types)
+                           show=show, countries=countries, cities=cities, types=types,
+                           image_kind=CATALOG_IMAGE_KINDS.get(entity))
 
 
 @platform_catalog_bp.route("/<entity>/<int:rid>")
@@ -140,10 +142,13 @@ def view_record(entity, rid):
     if entity == "pois":
         master_images = db.execute("SELECT COUNT(*) FROM platform_poi_images WHERE poi_id = ? AND is_active = 1",
                                    (rid,)).fetchone()[0]
+    elif entity in ("accommodation", "restaurants"):
+        master_images = db.execute("SELECT COUNT(*) FROM platform_catalog_images WHERE entity = ? AND record_id = ? "
+                                   "AND is_active = 1", (entity, rid)).fetchone()[0]
     return render_template("platform_catalog/view.html", entity=entity, spec=spec, row=_get(db, spec, rid),
                            fields=all_fields(spec), alt_names=split_alt_names(_get(db, spec, rid)["alt_names"]),
                            master_images=master_images, links=poi_links.links(db, rid) if entity == "pois" else [],
-                           link_types=poi_links.LINK_TYPE)
+                           link_types=poi_links.LINK_TYPE, image_kind=CATALOG_IMAGE_KINDS.get(entity))
 
 
 # ---- add / edit -------------------------------------------------------------------

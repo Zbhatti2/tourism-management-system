@@ -7,6 +7,7 @@
     {% if group %}<div class="small text-muted">{{ group.description }}</div>{% endif %}
   </div>
   <div class="d-flex gap-2">
+  {% if image_updates_pending %}<a href="{{ url_for('images.platform_updates') }}" class="btn btn-outline-info"><i class="bi bi-images"></i> Image updates <span class="badge bg-info text-dark">{{ image_updates_pending }}</span></a>{% endif %}
   {% if catalog_pending %}<a href="{{ url_for('catalog_updates.updates') }}" class="btn btn-outline-warning"><i class="bi bi-cloud-arrow-down"></i> Platform updates <span class="badge bg-warning text-dark">{{ catalog_pending }}</span></a>{% endif %}
   {% if is_external_resource %}
   <a href="{{ url_for('suppliers.new_supplier') }}" class="btn btn-outline-primary"><i class="bi bi-truck"></i> New Supplier</a>

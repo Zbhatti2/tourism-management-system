@@ -90,3 +90,19 @@ cost. **Stop** ends a run; photos it already found are kept. A run that
 does nothing for 10 minutes (for example, waiting on a web page that
 never finishes) is stopped automatically. Runs are charged to
 your organisation's AI Usage.
+
+## Images from the platform catalog
+
+A hotel or restaurant that came from the platform catalog, like a Point of
+Interest, comes with the platform's photos of it. They appear in its
+Images Catalog with the rest. You can:
+
+- delete the ones you don't like;
+- add your own;
+- re-caption and reorder them.
+
+When the platform changes its photos, you can see the changes on the
+**Image updates** screen, which you can open from the Suppliers list or
+from System Management. You decide whether to accept each change.
+Alternatively, change the **Platform images** setting in System Management
+to have changes applied automatically, or to get no changes at all.

@@ -839,6 +839,13 @@ def _migration_tour_design(db):
     tour_design.migrate(db, _column_exists)
 
 
+def _migration_catalog_images(db):
+    """Master Image Catalogs for platform Accommodation and Restaurants, and
+    their sync to tenants' Suppliers (catalog_image_sync.py)."""
+    import catalog_image_sync
+    catalog_image_sync.migrate(db, _column_exists)
+
+
 def _migration_city_checkpoint_flag(db):
     """cities.is_checkpoint: a good overnight stop for tour groups (set by
     the platform, or proposed by a tenant's Tour Planner)."""
@@ -878,6 +885,7 @@ MIGRATIONS = [
     ("2026_10_city_checkpoint_flag", _migration_city_checkpoint_flag),
     ("2026_10_poi_links", _migration_poi_links),
     ("2026_10_tour_design", _migration_tour_design),
+    ("2026_10_catalog_images", _migration_catalog_images),
 ]
 
 

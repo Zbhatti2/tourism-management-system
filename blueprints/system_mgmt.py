@@ -11,6 +11,7 @@ from auth.decorators import login_required, system_admin_required, tenant_admin_
 from security.passwords import hash_password, verify_password
 from config import Config
 from db import close_db, get_db, log_action
+import catalog_image_sync
 import poi_image_sync
 
 system_mgmt_bp = Blueprint("system_mgmt", __name__)
@@ -92,7 +93,7 @@ def index():
         host_currencies=host_currencies,
         poi_image_policies=poi_image_sync.POLICIES,
         poi_image_policy=poi_image_sync.policy(db, g.tenant_id),
-        poi_image_pending=poi_image_sync.pending_count(db, g.tenant_id),
+        poi_image_pending=poi_image_sync.pending_count(db, g.tenant_id) + catalog_image_sync.pending_count(db, g.tenant_id),
     )
 
 
@@ -342,7 +343,7 @@ def update_poi_image_updates():
         flash("Choose one of the options.", "error")
         return redirect(url_for("system_mgmt.index"))
     log_action("Update", "tenants", g.tenant_id, f"Platform POI image updates set to '{value}'")
-    flash(f"Platform POI images: {poi_image_sync.POLICIES[value]}.", "success")
+    flash(f"Platform images: {poi_image_sync.POLICIES[value]}.", "success")
     return redirect(url_for("system_mgmt.index") + "#poi-image-updates")
 
 

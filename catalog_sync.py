@@ -589,6 +589,9 @@ def _inherit_images(db, tenant_id, entity, local_id, catalog_id):
     if entity == "pois" and local_id:
         import poi_image_sync
         poi_image_sync.inherit_all(db, tenant_id, local_id, catalog_id)
+    elif entity in ("accommodation", "restaurants") and local_id:
+        import catalog_image_sync
+        catalog_image_sync.inherit_all(db, tenant_id, local_id, entity, catalog_id)
 
 
 # ---- a whole sync run ------------------------------------------------------------------------

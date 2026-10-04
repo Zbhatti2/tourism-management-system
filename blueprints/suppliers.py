@@ -49,6 +49,7 @@ from io import BytesIO
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from auth.decorators import login_required
+import catalog_image_sync
 import catalog_sync
 import supplier_groups
 from db import get_db, log_action
@@ -325,6 +326,7 @@ def list_suppliers():
         "suppliers/list.html", suppliers=rows, q=q, is_external_resource=is_external_resource,
         catalog_ids=catalog_sync.linked_local_ids(db, g.tenant_id, "suppliers"),
         catalog_pending=catalog_sync.pending_count(db, g.tenant_id),
+        image_updates_pending=catalog_image_sync.pending_count(db, g.tenant_id),
         type_id=type_id, subtype_id=subtype_id, city=city, preference=preference,
         supplier_types=_supplier_types(db, group), subtypes_json=_subtypes_for_type_json(db),
         city_options=_city_options(db), group=group, groups=supplier_groups.all_groups(db),

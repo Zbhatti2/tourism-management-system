@@ -2418,7 +2418,12 @@ CREATE TABLE supplier_documents (
     source          TEXT,                    -- 'Individual' / 'AI Agent'
     source_url      TEXT,                    -- where an AI Agent found it
     content_hash    TEXT,                    -- SHA-256 of the stored file, for duplicate checks
-    thumb_data      BLOB                     -- cached JPEG thumbnail
+    thumb_data      BLOB,                    -- cached JPEG thumbnail
+    -- Inherited from a platform Accommodation / Restaurant's Master Image Catalog (catalog_image_sync.py):
+    platform_image_id INTEGER,               -- platform_catalog_images.image_id
+    platform_version INTEGER,
+    local_edited    INTEGER NOT NULL DEFAULT 0,  -- the tenant re-captioned it: platform caption changes don't overwrite
+    removed_by_platform INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_supplier_documents_tenant ON supplier_documents(tenant_id);
 CREATE INDEX idx_supplier_documents_supplier ON supplier_documents(supplier_id);
@@ -3148,6 +3153,45 @@ CREATE TABLE IF NOT EXISTS platform_poi_images (
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_platform_poi_images_poi ON platform_poi_images(poi_id);
+-- Master Image Catalogs of platform Accommodation and Restaurants (image_owners.py)
+CREATE TABLE IF NOT EXISTS platform_catalog_images (
+    image_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity          TEXT NOT NULL CHECK (entity IN ('accommodation','restaurants')),
+    record_id       INTEGER NOT NULL,       -- platform_accommodation / platform_restaurants id (no FK, like platform_poi_images)
+    title           TEXT NOT NULL,
+    description     TEXT,
+    image_date      TEXT,
+    sort_order      INTEGER,
+    source          TEXT,
+    contributor     TEXT,
+    source_url      TEXT,
+    licence         TEXT,
+    content_hash    TEXT,
+    file_name       TEXT,
+    mime_type       TEXT,
+    file_size       INTEGER,
+    file_data       BLOB NOT NULL,
+    thumb_data      BLOB,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    version         INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_platform_catalog_images_rec ON platform_catalog_images(entity, record_id);
+-- Their changes waiting for a tenant's review (catalog_image_sync.py)
+CREATE TABLE IF NOT EXISTS supplier_image_updates (
+    update_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    supplier_id     INTEGER NOT NULL REFERENCES suppliers(supplier_id),
+    platform_image_id INTEGER NOT NULL,     -- platform_catalog_images.image_id
+    change          TEXT NOT NULL CHECK (change IN ('new','changed','removed')),
+    version         INTEGER NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','skipped')),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_by      INTEGER REFERENCES users(user_id),
+    decided_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_image_updates_tenant ON supplier_image_updates(tenant_id, status);
 
 CREATE TABLE IF NOT EXISTS poi_image_updates (
     update_id       INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -13,6 +13,12 @@ serve all of them:
 * platform_poi  -- a platform Point of Interest's Master Image Catalog
                    (platform_poi_images), curated by the SystemAdmin. Platform
                    uploads are staged under the reserved TMS Platform tenant.
+* platform_accommodation / platform_restaurant -- the Master Image Catalog
+                   of a platform Accommodation or Restaurant
+                   (platform_catalog_images, Oct 2026). Tenants' Suppliers
+                   linked to them inherit the images (catalog_image_sync.py);
+                   an inherited image is a supplier_documents row with
+                   platform_image_id set, holding its own copy of the bytes.
 
 Every album row is returned with the same keys: image_id, title, description,
 authors, notes, sort_order, source, source_url, shown_date, image_date,
@@ -45,6 +51,34 @@ CREATE TABLE IF NOT EXISTS platform_poi_images (
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_platform_poi_images_poi ON platform_poi_images(poi_id);
+"""
+
+
+PLATFORM_CATALOG_DDL = """
+CREATE TABLE IF NOT EXISTS platform_catalog_images (
+    image_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity          TEXT NOT NULL CHECK (entity IN ('accommodation','restaurants')),
+    record_id       INTEGER NOT NULL,       -- platform_accommodation / platform_restaurants id (no FK, like platform_poi_images)
+    title           TEXT NOT NULL,
+    description     TEXT,
+    image_date      TEXT,
+    sort_order      INTEGER,
+    source          TEXT,
+    contributor     TEXT,
+    source_url      TEXT,
+    licence         TEXT,
+    content_hash    TEXT,
+    file_name       TEXT,
+    mime_type       TEXT,
+    file_size       INTEGER,
+    file_data       BLOB NOT NULL,
+    thumb_data      BLOB,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    version         INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_platform_catalog_images_rec ON platform_catalog_images(entity, record_id);
 """
 
 
@@ -84,6 +118,7 @@ class Kind:
     platform = False
     singular = plural = ""
     owner_word = ""           # used in sentences: "this hotel", "this point of interest"
+    unit = "item"             # "per POI", "per property"
 
     def owners(self, db, scope):
         raise NotImplementedError
@@ -152,8 +187,9 @@ class SupplierKind(Kind):
                           d.sort_order, d.source, d.source_url, COALESCE(d.image_date, substr(d.created_at, 1, 10)) AS shown_date,
                           d.image_date, (SELECT GROUP_CONCAT(term, ', ') FROM supplier_document_keywords k
                                          WHERE k.supplier_document_id = d.supplier_document_id) AS keywords,
-                          0 AS inherited, NULL AS licence
-                   FROM supplier_documents d WHERE d.supplier_id = ? AND d.tenant_id = ? AND d.is_deleted = 0
+                          (d.platform_image_id IS NOT NULL) AS inherited, m.licence
+                   FROM supplier_documents d LEFT JOIN platform_catalog_images m ON m.image_id = d.platform_image_id
+                   WHERE d.supplier_id = ? AND d.tenant_id = ? AND d.is_deleted = 0
                      AND d.document_type_id = ?""", [owner_id, scope, image_type_id(db, scope)])
 
     def image(self, db, scope, owner_id, image_id, size):
@@ -176,9 +212,18 @@ class SupplierKind(Kind):
             f"AND supplier_document_id IN ({','.join('?' * len(ids)) or 'NULL'})", [owner_id, scope] + ids)}
 
     def update(self, db, scope, owner_id, image_id, title, description, image_date, sort_order, licence=None):
+        r = db.execute("SELECT document_name AS image_name, description, image_date, platform_image_id, created_at "
+                       "FROM supplier_documents WHERE supplier_document_id = ? AND tenant_id = ?", (image_id, scope)).fetchone()
+        if r is None:
+            return
+        image_date = _kept_date(r, image_date)
+        edited = r["platform_image_id"] is not None and (
+            (r["image_name"] or "") != (title or "") or (r["description"] or "") != (description or "") or
+            (r["image_date"] or "") != (image_date or ""))
         db.execute("UPDATE supplier_documents SET document_name = ?, description = ?, image_date = ?, sort_order = ?, "
+                   "local_edited = CASE WHEN ? THEN 1 ELSE COALESCE(local_edited, 0) END, "
                    "updated_at = datetime('now') WHERE supplier_document_id = ? AND tenant_id = ?",
-                   (title, description, image_date, sort_order, image_id, scope))
+                   (title, description, image_date, sort_order, 1 if edited else 0, image_id, scope))
 
     def delete(self, db, scope, owner_id, image_id):
         db.execute("UPDATE supplier_documents SET is_deleted = 1, updated_at = datetime('now') "
@@ -291,6 +336,7 @@ class PlatformPoiKind(Kind):
     key = "platform_poi"
     platform = True
     singular, plural, owner_word = "Point of Interest", "Points of Interest (platform)", "point of interest"
+    unit = "POI"
 
     def owners(self, db, scope):
         return [dict(r) for r in db.execute(
@@ -368,6 +414,113 @@ class PlatformPoiKind(Kind):
         poi_image_sync.push(db, owner_ids)
 
 
+class PlatformCatalogKind(Kind):
+    """The Master Image Catalog of a platform Accommodation or Restaurant."""
+    platform = True
+
+    def __init__(self, key, entity, table, pk, singular, plural, owner_word, type_col):
+        self.key, self.entity, self.table, self.pk = key, entity, table, pk
+        self.singular, self.plural, self.owner_word, self.type_col = singular, plural, owner_word, type_col
+        self.unit = owner_word
+
+    def owners(self, db, scope):
+        return [dict(r) for r in db.execute(
+            f"""SELECT p.{self.pk} AS id, p.name, COALESCE(c.label, p.city_text) AS city,
+                       {self._type_sql()} AS type_label
+                FROM {self.table} p LEFT JOIN cities c ON c.city_id = p.city_id
+                WHERE p.is_active = 1 ORDER BY p.name COLLATE NOCASE""")]
+
+    def owner(self, db, scope, owner_id):
+        r = db.execute(f"""SELECT p.{self.pk} AS id, p.name, {self._type_sql()} AS type_label,
+                                  COALESCE(c.label, p.city_text) AS city, p.website
+                           FROM {self.table} p LEFT JOIN cities c ON c.city_id = p.city_id
+                           WHERE p.{self.pk} = ?""", (owner_id,)).fetchone()
+        return dict(r, type_code=None, has_collector=True) if r else None
+
+    def _type_sql(self):
+        return f"COALESCE(p.{self.type_col}, '{self.singular}')" if self.type_col else f"'{self.singular}'"
+
+    def page_url(self, url_for, owner_id):
+        return url_for("platform_catalog.view_record", entity=self.entity, rid=owner_id)
+
+    def hashes(self, db, scope):
+        return {(r[0], r[1]): r[2] for r in db.execute(
+            "SELECT record_id, content_hash, title FROM platform_catalog_images WHERE entity = ? AND is_active = 1 "
+            "AND content_hash IS NOT NULL", (self.entity,))}
+
+    def max_sort(self, db, scope, owner_id):
+        return db.execute("SELECT COALESCE(MAX(sort_order), 0) FROM platform_catalog_images WHERE entity = ? "
+                          "AND record_id = ? AND is_active = 1", (self.entity, owner_id)).fetchone()[0]
+
+    def insert(self, db, scope, owner_id, it, batch):
+        cur = db.execute(
+            """INSERT INTO platform_catalog_images (entity, record_id, title, description, image_date, sort_order, source,
+                   contributor, source_url, licence, content_hash, file_name, mime_type, file_size, file_data, thumb_data)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (self.entity, owner_id, it["title"], it["description"], it["image_date"], it["sort_order"], batch["source"],
+             batch["contributor"], it["source_url"], it["licence"] if "licence" in it.keys() else None,
+             it["content_hash"], it["file_name"], it["mime_type"], it["file_size"], it["file_data"], it["thumb_data"]))
+        return cur.lastrowid
+
+    def _album_sql(self, db, scope, owner_id):
+        return ("""SELECT image_id, title, description, contributor AS authors, NULL AS notes, sort_order, source, source_url,
+                          COALESCE(image_date, substr(created_at, 1, 10)) AS shown_date, image_date, NULL AS keywords,
+                          0 AS inherited, licence
+                   FROM platform_catalog_images WHERE entity = ? AND record_id = ? AND is_active = 1""",
+                [self.entity, owner_id])
+
+    def image(self, db, scope, owner_id, image_id, size):
+        r = db.execute("SELECT 1 FROM platform_catalog_images WHERE image_id = ? AND entity = ? AND record_id = ?",
+                       (image_id, self.entity, owner_id)).fetchone()
+        return platform_catalog_image(db, image_id, size) if r else (None, None)
+
+    def owns(self, db, scope, owner_id, ids):
+        ids = list(ids)
+        return {r[0] for r in db.execute(
+            f"SELECT image_id FROM platform_catalog_images WHERE entity = ? AND record_id = ? AND is_active = 1 "
+            f"AND image_id IN ({','.join('?' * len(ids)) or 'NULL'})", [self.entity, owner_id] + ids)}
+
+    def update(self, db, scope, owner_id, image_id, title, description, image_date, sort_order, licence=None):
+        r = db.execute("SELECT title, description, image_date, licence, created_at FROM platform_catalog_images "
+                       "WHERE image_id = ?", (image_id,)).fetchone()
+        if r is None:
+            return
+        image_date = _kept_date(r, image_date)
+        changed = ((r["title"] or "") != (title or "") or (r["description"] or "") != (description or "") or
+                   (r["image_date"] or "") != (image_date or "") or (r["licence"] or "") != (licence or ""))
+        db.execute("UPDATE platform_catalog_images SET title = ?, description = ?, image_date = ?, sort_order = ?, "
+                   "licence = ?, version = version + ?, updated_at = datetime('now') WHERE image_id = ?",
+                   (title, description, image_date, sort_order, licence, 1 if changed else 0, image_id))
+
+    def delete(self, db, scope, owner_id, image_id):
+        db.execute("UPDATE platform_catalog_images SET is_active = 0, version = version + 1, updated_at = datetime('now') "
+                   "WHERE image_id = ?", (image_id,))
+
+    def has_images(self, db, scope, owner_id):
+        return db.execute("SELECT 1 FROM platform_catalog_images WHERE entity = ? AND record_id = ? AND is_active = 1 "
+                          "LIMIT 1", (self.entity, owner_id)).fetchone() is not None
+
+    def after_change(self, db, owner_ids):
+        import catalog_image_sync
+        catalog_image_sync.push(db, self.entity, owner_ids)
+
+
+def platform_catalog_image(db, image_id, size):
+    r = db.execute("SELECT file_data, mime_type, thumb_data FROM platform_catalog_images WHERE image_id = ?",
+                   (image_id,)).fetchone()
+    if r is None:
+        return None, None
+    if size == "thumb":
+        if r["thumb_data"]:
+            return r["thumb_data"], "image/jpeg"
+        thumb = make_thumb(r["file_data"])
+        if thumb:
+            db.execute("UPDATE platform_catalog_images SET thumb_data = ? WHERE image_id = ?", (thumb, image_id))
+            db.commit()
+            return thumb, "image/jpeg"
+    return r["file_data"], r["mime_type"] or "application/octet-stream"
+
+
 def platform_image(db, image_id, size):
     r = db.execute("SELECT file_data, mime_type, thumb_data FROM platform_poi_images WHERE image_id = ?", (image_id,)).fetchone()
     if r is None:
@@ -383,6 +536,13 @@ def platform_image(db, image_id, size):
     return r["file_data"], r["mime_type"] or "application/octet-stream"
 
 
-KINDS = {k.key: k for k in (SupplierKind(), PoiKind(), PlatformPoiKind())}
+PLATFORM_ACCOMMODATION = PlatformCatalogKind("platform_accommodation", "accommodation", "platform_accommodation",
+                                             "accommodation_id", "Accommodation", "Accommodation (platform)",
+                                             "property", "property_type")
+PLATFORM_RESTAURANT = PlatformCatalogKind("platform_restaurant", "restaurants", "platform_restaurants", "restaurant_id",
+                                          "Restaurant", "Restaurants (platform)", "restaurant", None)
+KINDS = {k.key: k for k in (SupplierKind(), PoiKind(), PlatformPoiKind(), PLATFORM_ACCOMMODATION, PLATFORM_RESTAURANT)}
+# Platform catalog entity -> its image kind.
+CATALOG_IMAGE_KINDS = {"pois": "platform_poi", "accommodation": "platform_accommodation", "restaurants": "platform_restaurant"}
 
-__all__ = ["KINDS", "PLATFORM_POI_DDL", "DESCRIPTION_MAX", "IMAGE_TYPE_LABEL", "platform_image"]
+__all__ = ["KINDS", "CATALOG_IMAGE_KINDS", "PLATFORM_CATALOG_DDL", "platform_catalog_image", "PLATFORM_POI_DDL", "DESCRIPTION_MAX", "IMAGE_TYPE_LABEL", "platform_image"]

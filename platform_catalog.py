@@ -79,7 +79,8 @@ CATALOGS = {
         ] + [(col, label, "yn", {"group": "Amenities"}) for col, label in AMENITIES],
         "list": [("property_type", "Type"), ("star_rating", "Stars"), ("city_label", "City"),
                  ("country_label", "Country")],
-        "references": [("tenant_catalog_links", "catalog_id", "entity = 'accommodation'")],
+        "references": [("tenant_catalog_links", "catalog_id", "entity = 'accommodation'"),
+                       ("platform_catalog_images", "record_id", "entity = 'accommodation'")],
     },
     "restaurants": {
         "table": "platform_restaurants", "pk": "restaurant_id", "label": "Restaurants", "singular": "Restaurant",
@@ -94,7 +95,8 @@ CATALOGS = {
             ("group_suitable", "Group Suitable", "yn", {}),
         ],
         "list": [("cuisine", "Cuisine"), ("city_label", "City"), ("country_label", "Country")],
-        "references": [("tenant_catalog_links", "catalog_id", "entity = 'restaurants'")],
+        "references": [("tenant_catalog_links", "catalog_id", "entity = 'restaurants'"),
+                       ("platform_catalog_images", "record_id", "entity = 'restaurants'")],
     },
     "embassies": {
         "table": "embassies", "pk": "embassy_id", "label": "Embassies & Consulates", "singular": "Mission",

@@ -57,6 +57,8 @@ MAX_IMAGE_BYTES = 12 * 1024 * 1024
 SKIP_WORDS = ("logo", "icon", "sprite", "favicon", "avatar", "badge", "flag", "map", "placeholder", "blank",
               "spinner", "loader", "tripadvisor", "button", "banner-ad", "payment", "qr")
 POI_FEATURE = "POI Image Collector"
+CATALOG_FEATURE = "Catalog Image Collector"   # platform Accommodation / Restaurants (Oct 2026)
+PLATFORM_KINDS = ("platform_poi", "platform_accommodation", "platform_restaurant")
 POI_AGENT_NAME = "TMS POI Image Collector"
 AVOID_SITES = ("booking.com", "tripadvisor.", "agoda.", "expedia.", "hotels.com", "trivago.", "kayak.",
                "facebook.com", "instagram.com", "pinterest.", "yelp.")
@@ -490,8 +492,29 @@ def platform_pois_for(db, ids):
     return out
 
 
+def platform_catalog_for(db, kind, ids):
+    """Platform Accommodation / Restaurants in the same shape as suppliers_for()."""
+    from image_owners import KINDS as K
+    k = K[kind]
+    out = []
+    for rid in ids:
+        r = db.execute(f"""SELECT p.{k.pk} AS id, p.name, p.website, COALESCE(c.label, p.city_text) AS city,
+                                  co.label AS country, {k._type_sql()} AS type_label
+                           FROM {k.table} p LEFT JOIN cities c ON c.city_id = p.city_id
+                           LEFT JOIN countries co ON co.country_id = p.country_id
+                           WHERE p.{k.pk} = ? AND p.is_active = 1""", (rid,)).fetchone()
+        if r:
+            out.append({"supplier_id": r["id"], "supplier_name": r["name"], "web_page": r["website"], "city": r["city"],
+                        "country": r["country"], "type_label": r["type_label"] or k.singular, "kind": kind})
+    return out
+
+
 def targets_for(db, kind, tenant_id, ids):
-    return platform_pois_for(db, ids) if kind == "platform_poi" else suppliers_for(db, tenant_id, ids)
+    if kind == "platform_poi":
+        return platform_pois_for(db, ids)
+    if kind in PLATFORM_KINDS:
+        return platform_catalog_for(db, kind, ids)
+    return suppliers_for(db, tenant_id, ids)
 
 
 def start_run(db, tenant_id, user_id, supplier_ids, per_supplier=8, scope_label=None, background=True, kind="supplier"):
@@ -499,7 +522,7 @@ def start_run(db, tenant_id, user_id, supplier_ids, per_supplier=8, scope_label=
     (no API key, allowance used up, nothing to do). kind='platform_poi':
     a TMS Agent run for the POI Master Image Catalog; tenant_id is then the
     TMS Platform tenant and the cost is a platform cost."""
-    platform = kind == "platform_poi"
+    platform = kind in PLATFORM_KINDS
     if not platform:
         over = ai_usage.check_limit(db, tenant_id)
         if over:
@@ -507,7 +530,8 @@ def start_run(db, tenant_id, user_id, supplier_ids, per_supplier=8, scope_label=
     anthropic_client(platform)  # fail now, not in the background, if the API isn't configured
     sups = targets_for(db, kind, tenant_id, supplier_ids)
     if not sups:
-        raise CollectorError("Choose at least one Point of Interest." if platform
+        raise CollectorError("Choose at least one Point of Interest." if kind == "platform_poi" else
+                             "Choose at least one property or restaurant." if platform
                              else "Choose at least one Hotel, Resort or Restaurant.")
     label = scope_label or (sups[0]["supplier_name"] if len(sups) == 1 else f"{len(sups)} {'POIs' if platform else 'suppliers'}")
     cur = db.execute("INSERT INTO image_agent_runs (tenant_id, user_id, scope_label, supplier_ids, per_supplier, owner_kind, "
@@ -544,7 +568,7 @@ def run_collection(db, run_id):
     run = db.execute("SELECT * FROM image_agent_runs WHERE run_id = ?", (run_id,)).fetchone()
     tenant_id = run["tenant_id"]
     kind = run["owner_kind"] if "owner_kind" in run.keys() and run["owner_kind"] else "supplier"
-    platform = kind == "platform_poi"
+    platform = kind in PLATFORM_KINDS
     lines = []
 
     def log(text):
@@ -554,7 +578,8 @@ def run_collection(db, run_id):
         db.commit()
 
     def meter(model, usage):
-        ai_usage.record(db, None if platform else tenant_id, POI_FEATURE if platform else FEATURE, model, usage,
+        ai_usage.record(db, None if platform else tenant_id,
+                        POI_FEATURE if kind == "platform_poi" else CATALOG_FEATURE if platform else FEATURE, model, usage,
                         user_id=run["user_id"], ref_type="image_agent_runs", ref_id=run_id, note=current["name"])
 
     current = {"name": run["scope_label"]}
