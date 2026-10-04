@@ -55,6 +55,21 @@
         <input class="form-control" id="coordinates" name="coordinates" value="{{ form.get('coordinates') if form is not none and form.get('coordinates') is not none else coords_default }}" placeholder="31.558000, 74.350700">
         <div class="form-text">Paste from Google Maps (decimal or degrees/minutes/seconds).</div></div>
     </div>
+    {% if entity == 'pois' %}
+    <h2 class="h6 text-muted text-uppercase mt-4">Additional links</h2>
+    <div class="small text-muted mb-2">Videos, photo galleries, documents and other pages about this place.</div>
+    <div id="linkRows">
+      {% for l in (links or []) + [{}] %}
+      <div class="row g-2 mb-2 link-row">
+        <div class="col-md-2"><select class="form-select form-select-sm" name="link_type" aria-label="Type">{% for v, lbl in link_types %}<option value="{{ v }}" {{ 'selected' if (l.link_type or 'video') == v else '' }}>{{ lbl }}</option>{% endfor %}</select></div>
+        <div class="col-md-6"><input class="form-control form-control-sm" name="link_url" value="{{ l.url or '' }}" placeholder="https://…" aria-label="URL"></div>
+        <div class="col-md-3"><input class="form-control form-control-sm" name="link_title" value="{{ l.title or '' }}" placeholder="Title (optional)" aria-label="Title"></div>
+        <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="removeLinkRow(this)" title="Remove"><i class="bi bi-x-lg"></i></button></div>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addLinkRow()"><i class="bi bi-plus-lg"></i> Add a link</button>
+    {% endif %}
     <h2 class="h6 text-muted text-uppercase mt-4">Contact</h2>
     <div class="row g-3">
       <div class="col-md-4"><label class="form-label" for="phone">Phone</label><input class="form-control" id="phone" name="phone" value="{{ val('phone') }}"></div>
@@ -65,7 +80,11 @@
     <div class="row g-3">
       <div class="col-md-6"><label class="form-label" for="alt_names">Alternate names</label><textarea class="form-control" id="alt_names" name="alt_names" rows="3" placeholder="Other spellings, one per line">{{ val('alt_names') }}</textarea>
         <div class="form-text">Imports that use one of these spellings match this record.</div></div>
+      {% if entity == 'pois' %}
+      <div class="col-12"><label class="form-label" for="notes">Notes / History</label><textarea class="form-control" id="notes" name="notes" rows="6" placeholder="History, significance, visiting notes. Imports add to this, never replace it.">{{ val('notes') }}</textarea></div>
+      {% else %}
       <div class="col-md-6"><label class="form-label" for="notes">Notes</label><textarea class="form-control" id="notes" name="notes" rows="3">{{ val('notes') }}</textarea></div>
+      {% endif %}
       <div class="col-md-8"><label class="form-label" for="source">Source</label><input class="form-control" id="source" name="source" value="{{ val('source') }}"></div>
       <div class="col-md-4"><label class="form-label" for="checked_on">Checked on</label><input class="form-control" type="date" id="checked_on" name="checked_on" value="{{ val('checked_on') }}"></div>
     </div>
@@ -80,6 +99,21 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/geography_picker.js') }}"></script>
+<script>
+  function addLinkRow() {
+    const rows = document.getElementById('linkRows');
+    const last = rows.querySelector('.link-row:last-child');
+    const row = last.cloneNode(true);
+    row.querySelectorAll('input').forEach(i => i.value = '');
+    rows.appendChild(row);
+  }
+  function removeLinkRow(btn) {
+    const rows = document.getElementById('linkRows');
+    const row = btn.closest('.link-row');
+    if (rows.querySelectorAll('.link-row').length > 1) row.remove();
+    else row.querySelectorAll('input').forEach(i => i.value = '');
+  }
+</script>
 <script>
   initGeographyPicker({ initial: {
     region_id: {{ (val('region_id') or '') | tojson }}, country_id: {{ (val('country_id') or '') | tojson }},

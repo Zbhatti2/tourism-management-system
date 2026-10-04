@@ -103,6 +103,42 @@ AGENTS = {
 # New Points of Interest proposed by the PDF agent (pdf_poi_agent.py): created when approved.
 FIELDS["platform_pois_new"] = {"name": ("Name", "text"), "city": ("City", "text"), "poi_type": ("POI Type", "text"),
                                **FIELDS["platform_pois"]}
+
+# Proposals can also carry these (the PDF importer's): text added to Notes /
+# History (never replacing it) and an Additional Link ("type | url | title").
+# Kept out of FIELDS so the enrichment agents don't research them.
+POI_EXTRA = {"notes": ("Notes / History (added)", "longtext"), "link": ("Additional link", "link")}
+PROPOSAL_FIELDS = {k: dict(v) for k, v in FIELDS.items()}
+PROPOSAL_FIELDS["platform_pois"].update(POI_EXTRA)
+PROPOSAL_FIELDS["platform_pois_new"].update(POI_EXTRA)
+
+
+def link_value(link_type, url, title=None):
+    return " | ".join([link_type, url] + ([title] if title else []))
+
+
+def parse_link_value(value):
+    parts = [x.strip() for x in str(value).split(" | ")]
+    if len(parts) == 1:
+        return None, parts[0], None
+    return parts[0], parts[1], (" | ".join(parts[2:]) or None)
+
+
+def _write_poi_extra(db, poi_id, field, value, source):
+    """Notes are appended (unless already there); a link is added unless
+    the POI has it."""
+    if field == "notes":
+        row = db.execute("SELECT notes FROM platform_pois WHERE poi_id = ?", (poi_id,)).fetchone()
+        if row is None:
+            raise AgentError("the POI no longer exists")
+        cur = row[0] or ""
+        if value.strip() and value.strip() not in cur:
+            db.execute("UPDATE platform_pois SET notes = ?, updated_at = datetime('now') WHERE poi_id = ?",
+                       ((cur.rstrip() + "\n\n" if cur.strip() else "") + value.strip(), poi_id))
+    elif field == "link":
+        import poi_links
+        typ, url, title = parse_link_value(value)
+        poi_links.add(db, poi_id, url, typ, title, source)
 ENTITY_LABELS["platform_pois_new"] = "New Point of Interest"
 
 
@@ -138,6 +174,10 @@ def validate(kind, raw):
             return ("Yes", None) if s in ("yes", "y", "true") else ("No", None) if s in ("no", "n", "false") else (None, "Yes or No")
         if kind == "url":
             return (v, None) if str(v).startswith(("http://", "https://")) else (None, "not a web address")
+        if kind == "longtext":
+            return str(v)[:12000], None
+        if kind == "link":
+            return (str(v)[:2000], None) if "http" in str(v) else (None, "not a web address")
     except (TypeError, ValueError):
         return None, "not a number"
     return str(v)[:2000], None
@@ -449,7 +489,7 @@ def decide(db, proposal_ids, approve, user_id):
                        "WHERE proposal_id = ?", (user_id, pid))
             rejected += 1
             continue
-        kind = FIELDS[p["entity"]][p["field"]][1]
+        kind = PROPOSAL_FIELDS[p["entity"]][p["field"]][1]
         value, err = validate(kind, p["proposed_value"])
         try:
             if err:
@@ -466,15 +506,21 @@ def decide(db, proposal_ids, approve, user_id):
                                    "decided_at = datetime('now'), error = NULL WHERE proposal_id = ?", (user_id, pid))
                     applied += 1
                     continue
-                cur = db.execute(f"UPDATE platform_pois SET {p['field']} = ?, updated_at = datetime('now') WHERE poi_id = ?",
-                                 (value, int(p["record_key"])))
-                if not cur.rowcount:
-                    raise AgentError("the POI no longer exists")
+                if p["field"] in POI_EXTRA:
+                    _write_poi_extra(db, int(p["record_key"]), p["field"], value, p["note"] or p["source_url"])
+                else:
+                    cur = db.execute(f"UPDATE platform_pois SET {p['field']} = ?, updated_at = datetime('now') WHERE poi_id = ?",
+                                     (value, int(p["record_key"])))
+                    if not cur.rowcount:
+                        raise AgentError("the POI no longer exists")
             elif p["entity"] == "city_flags":
                 db.execute("UPDATE cities SET is_checkpoint = ? WHERE city_id = ?",
                            (1 if value == "Yes" else 0, int(p["record_key"])))
             elif p["entity"] == "cities":
                 db.execute(f"UPDATE cities SET {p['field']} = ? WHERE city_id = ?", (value, int(p["record_key"])))
+            elif p["entity"] == "platform_pois" and p["field"] in POI_EXTRA:
+                _write_poi_extra(db, int(p["record_key"]), p["field"], value, p["note"] or p["source_url"])
+                touched_pois.add(int(p["record_key"]))
             elif p["entity"] == "platform_pois":
                 cur = db.execute(f"UPDATE platform_pois SET {p['field']} = ?, checked_on = ?, updated_at = datetime('now'), "
                                  "source = COALESCE(NULLIF(source, ''), ?) WHERE poi_id = ?",
@@ -493,7 +539,7 @@ def decide(db, proposal_ids, approve, user_id):
             applied += 1
         except Exception as e:
             db.execute("UPDATE platform_agent_proposals SET error = ? WHERE proposal_id = ?", (str(e)[:300], pid))
-            errors.append(f"{p['record_label']} — {FIELDS[p['entity']][p['field']][0]}: {e}")
+            errors.append(f"{p['record_label']} — {PROPOSAL_FIELDS[p['entity']][p['field']][0]}: {e}")
     db.commit()
     if touched_pois:
         import catalog_sync

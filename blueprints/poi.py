@@ -143,18 +143,23 @@ def _save_poi_links_from_form(db, form, poi_id):
     (see templates/poi/form.html's JS). DELETE-then-reinsert-all, same
     convention already used for Keywords/Hashtags elsewhere in the app;
     blank rows (no URL and no description) are skipped."""
+    import poi_links
     urls = form.getlist("link_url")
     descriptions = form.getlist("link_description")
+    types = form.getlist("link_type") or [""] * len(urls)
     db.execute("DELETE FROM poi_reference_links WHERE poi_id = ? AND tenant_id = ?", (poi_id, g.tenant_id))
     sort_order = 0
-    for url, description in zip(urls, descriptions):
+    for url, description, link_type in zip(urls, descriptions, types):
         url = url.strip()
         description = description.strip()
         if not url and not description:
             continue
+        if link_type not in poi_links.LINK_TYPE:
+            link_type = poi_links.guess_type(url, description)
         db.execute(
-            "INSERT INTO poi_reference_links (tenant_id, poi_id, url, description, sort_order) VALUES (?, ?, ?, ?, ?)",
-            (g.tenant_id, poi_id, url or None, description or None, sort_order),
+            "INSERT INTO poi_reference_links (tenant_id, poi_id, url, description, link_type, sort_order) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (g.tenant_id, poi_id, url or None, description or None, link_type, sort_order),
         )
         sort_order += 1
     db.commit()
@@ -248,7 +253,8 @@ def _back_to_list(poi_id=None):
 
 @poi_bp.context_processor
 def _poi_list_context():
-    return {"poi_list_url": _list_url}
+    import poi_links
+    return {"poi_list_url": _list_url, "link_types": poi_links.LINK_TYPES}
 
 
 @poi_bp.route("/")
@@ -342,12 +348,13 @@ def _links_from_form(form):
     on this form)."""
     urls = form.getlist("link_url")
     descriptions = form.getlist("link_description")
+    types = form.getlist("link_type") or [""] * len(urls)
     rows = []
-    for url, description in zip(urls, descriptions):
+    for url, description, link_type in zip(urls, descriptions, types):
         url = url.strip()
         description = description.strip()
         if url or description:
-            rows.append({"url": url, "description": description})
+            rows.append({"url": url, "description": description, "link_type": link_type})
     return rows
 
 

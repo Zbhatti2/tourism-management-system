@@ -817,6 +817,21 @@ def _migration_tour_planner(db):
     db.commit()
 
 
+def _migration_poi_links(db):
+    """Additional Links for POIs (poi_links.py): platform_poi_links (the old
+    Image URL / Video URL values move there) and a link type on tenants'
+    poi_reference_links."""
+    import poi_links
+    db.executescript(poi_links.DDL)
+    if not _column_exists(db, "poi_reference_links", "link_type"):
+        db.execute("ALTER TABLE poi_reference_links ADD COLUMN link_type TEXT NOT NULL DEFAULT 'other'")
+    poi_links.migrate_old_columns(db)
+    # PDF importer v2 (pdf_poi_agent.py): the same PDF read twice is recognised by its fingerprint.
+    if not _column_exists(db, "platform_agent_uploads", "file_hash"):
+        db.execute("ALTER TABLE platform_agent_uploads ADD COLUMN file_hash TEXT")
+    db.commit()
+
+
 def _migration_city_checkpoint_flag(db):
     """cities.is_checkpoint: a good overnight stop for tour groups (set by
     the platform, or proposed by a tenant's Tour Planner)."""
@@ -854,6 +869,7 @@ MIGRATIONS = [
     ("2026_10_pdf_poi_agent", _migration_pdf_poi_agent),
     ("2026_10_tour_planner", _migration_tour_planner),
     ("2026_10_city_checkpoint_flag", _migration_city_checkpoint_flag),
+    ("2026_10_poi_links", _migration_poi_links),
 ]
 
 

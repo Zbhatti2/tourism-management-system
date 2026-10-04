@@ -44,3 +44,15 @@ involves the same records, undo that one first.
 
 Transport Hubs use the same Find duplicates, Merge and Merge log
 screens; the buttons are on the Transport Hubs list.
+
+## Notes / History and Additional links (Points of Interest)
+
+A POI's **Notes / History** holds its history, significance and visiting
+notes. Imports and the PDF agent add to it, never replace it.
+
+**Additional links** replaces the old Image URL and Video URL fields. Their
+values were moved here. Add as many links as you like, each with a **Type**
+(Video, Images, Document or Other) and an optional title. Tenants' copies
+of a POI receive its links when the catalog syncs. A tenant's own links are
+never removed.
+

@@ -791,6 +791,9 @@ def apply(db, entity, mode, staged, file_name):
         else:
             st["result"] = "unchanged"
             counts["unchanged"] += 1
+    if entity == "pois":  # Image URL / Video URL columns become Additional Links
+        import poi_links
+        poi_links.migrate_old_columns(db)
     db.commit()
     return counts
 

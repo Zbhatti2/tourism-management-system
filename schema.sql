@@ -2541,7 +2541,8 @@ CREATE TABLE poi_reference_links (
     url             TEXT,
     description     TEXT,
     sort_order      INTEGER DEFAULT 0,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    link_type       TEXT NOT NULL DEFAULT 'other'   -- video / images / document / other (poi_links.py)
 );
 CREATE INDEX idx_poi_reference_links_tenant ON poi_reference_links(tenant_id);
 CREATE INDEX idx_poi_reference_links_poi ON poi_reference_links(poi_id);
@@ -2787,11 +2788,23 @@ CREATE TABLE IF NOT EXISTS platform_pois (
     description      TEXT,
     entry_fee        TEXT,
     opening_hours    TEXT,
-    image_url        TEXT,
-    video_url        TEXT
+    image_url        TEXT,                  -- unused since Oct 2026: see platform_poi_links
+    video_url        TEXT                   -- unused since Oct 2026: see platform_poi_links
 );
 CREATE INDEX IF NOT EXISTS idx_platform_pois_city ON platform_pois(city_id);
 CREATE INDEX IF NOT EXISTS idx_platform_pois_country ON platform_pois(country_id);
+-- Additional Links per platform POI (poi_links.py)
+CREATE TABLE IF NOT EXISTS platform_poi_links (
+    link_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    poi_id          INTEGER NOT NULL REFERENCES platform_pois(poi_id),
+    url             TEXT NOT NULL,
+    link_type       TEXT NOT NULL DEFAULT 'other',  -- video / images / document / other
+    title           TEXT,
+    source          TEXT,                   -- where the link came from (a PDF and page, an import...)
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_platform_poi_links_poi ON platform_poi_links(poi_id);
 CREATE TABLE IF NOT EXISTS platform_accommodation (
     accommodation_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT NOT NULL,
@@ -3101,7 +3114,8 @@ CREATE TABLE IF NOT EXISTS platform_agent_uploads (
     file_size       INTEGER,
     page_count      INTEGER,
     file_data       BLOB NOT NULL,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    file_hash       TEXT                    -- sha256: the same PDF read twice is recognised
 );
 CREATE INDEX IF NOT EXISTS idx_platform_agent_uploads_run ON platform_agent_uploads(run_id);
 

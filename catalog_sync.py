@@ -567,6 +567,9 @@ def sync_link(db, adapter, link, p=None, dry_run=False, first=False):
         return result
     if changes:
         adapter.write(link["local_id"], changes)
+    if adapter.entity == "pois":
+        import poi_links
+        poi_links.copy_to_tenant(db, adapter.tenant_id, link["local_id"], link["catalog_id"])
     db.execute("UPDATE tenant_catalog_links SET baseline = ?, pending = ?, dismissed = ?, synced_at = datetime('now') "
                "WHERE link_id = ?", (json.dumps(baseline), json.dumps(pending) if pending else None,
                                      json.dumps(dismissed) if dismissed else None, link["link_id"]))

@@ -65,18 +65,20 @@ def start_pdf():
     """POIs from a PDF (pdf_poi_agent.py): upload, then the run reads it."""
     import pdf_poi_agent
     db = get_db()
-    f = request.files.get("pdf")
-    if f is None or not f.filename:
+    files = [(f.filename.replace("\\", "/").split("/")[-1][:150], f.read())
+             for f in request.files.getlist("pdf") if f and f.filename]
+    if not files:
         flash("Choose a PDF file.", "error")
         return redirect(url_for("platform_agents.index"))
-    data = f.read()
-    params = {"poi_type_id": _int(request.form.get("poi_type_id"))}
+    params = {"poi_type_id": _int(request.form.get("poi_type_id")),
+              "mode": request.form.get("mode") if request.form.get("mode") in pdf_poi_agent.MODES else "multi",
+              "again": bool(request.form.get("again"))}
     if params["poi_type_id"]:
         r = db.execute("SELECT label FROM poi_types WHERE poi_type_id = ?", (params["poi_type_id"],)).fetchone()
         params["poi_type_label"] = r[0] if r else None
-    name = f.filename.replace("\\", "/").split("/")[-1][:150]
+    name = files[0][0] if len(files) == 1 else f"{len(files)} PDFs"
     try:
-        run_id = pdf_poi_agent.start(db, name, data, params, g.user_id)
+        run_id = pdf_poi_agent.start(db, files, params, g.user_id)
     except (pdf_poi_agent.PdfError, pa.AgentError) as e:
         flash(str(e), "error")
         return redirect(url_for("platform_agents.index"))
@@ -92,7 +94,7 @@ def run_pdf(run_id):
     import pdf_poi_agent
     from io import BytesIO
     from flask import send_file
-    up = pdf_poi_agent.upload(get_db(), run_id)
+    up = pdf_poi_agent.upload(get_db(), run_id, request.args.get("u", type=int))
     if up is None:
         abort(404)
     return send_file(BytesIO(up["file_data"]), mimetype="application/pdf", download_name=up["file_name"])
@@ -199,7 +201,7 @@ def run_page(run_id):
                                       AND i.status = 'pending') AS pending
                               FROM image_import_batches b WHERE b.batch_id = ?""", (run["batch_id"],)).fetchone()
     return render_template("platform_agents/run.html", photo_batch=batch, run=run, agent=pa.AGENTS[run["agent_key"]], groups=_grouped(rows),
-                           counts=counts, show=show, cost=cost, calls=calls, searches=searches, fields=pa.FIELDS,
+                           counts=counts, show=show, cost=cost, calls=calls, searches=searches, fields=pa.PROPOSAL_FIELDS,
                            entity_labels=pa.ENTITY_LABELS, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
                            status_url=url_for("platform_agents.run_status", run_id=run_id),
                            stop_url=url_for("platform_agents.stop_run", run_id=run_id),
@@ -222,7 +224,7 @@ def review():
         args.append(agent_key)
     rows = db.execute(sql + " ORDER BY p.entity, p.record_label, p.proposal_id LIMIT 600", args).fetchall()
     return render_template("platform_agents/review.html", groups=_grouped(rows), agents=pa.AGENTS, agent_key=agent_key,
-                           fields=pa.FIELDS, entity_labels=pa.ENTITY_LABELS, total=pa.pending_count(db))
+                           fields=pa.PROPOSAL_FIELDS, entity_labels=pa.ENTITY_LABELS, total=pa.pending_count(db))
 
 
 @platform_agents_bp.route("/decide", methods=["POST"])

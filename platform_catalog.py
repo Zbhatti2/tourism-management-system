@@ -60,11 +60,11 @@ CATALOGS = {
             ("description", "Description", "textarea", {}),
             ("entry_fee", "Entry Fee", "text", {}),
             ("opening_hours", "Days / Hours Open", "text", {}),
-            ("image_url", "Image URL", "url", {}),
-            ("video_url", "Video URL", "url", {}),
+            # Image / video links: Additional Links (poi_links.py), not fields.
         ],
         "list": [("poi_type_label", "Type"), ("city_label", "City"), ("country_label", "Country")],
-        "references": [("tenant_catalog_links", "catalog_id", "entity = 'pois'"), ("platform_poi_images", "poi_id")],
+        "references": [("tenant_catalog_links", "catalog_id", "entity = 'pois'"), ("platform_poi_images", "poi_id"),
+                       ("platform_poi_links", "poi_id")],
     },
     "accommodation": {
         "table": "platform_accommodation", "pk": "accommodation_id", "label": "Accommodation",

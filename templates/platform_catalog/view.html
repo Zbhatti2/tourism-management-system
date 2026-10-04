@@ -54,9 +54,17 @@
       </dl>
     </div></div>
   </div>
+  {% if links %}
+  <div class="col-12"><div class="card shadow-sm border-0"><div class="card-body">
+    <h2 class="h6 text-muted text-uppercase">Additional links</h2>
+    <ul class="list-unstyled small mb-0">{% for l in links %}
+      <li class="mb-1"><span class="badge bg-light text-dark border me-1">{{ link_types.get(l.link_type, 'Other') }}</span>
+        <a href="{{ l.url }}" target="_blank" rel="noopener">{{ l.title or l.url }}</a>{% if l.source %} <span class="text-muted">· {{ l.source }}</span>{% endif %}</li>{% endfor %}</ul>
+  </div></div></div>
+  {% endif %}
   {% if row.notes %}
   <div class="col-12"><div class="card shadow-sm border-0"><div class="card-body">
-    <h2 class="h6 text-muted text-uppercase">Notes</h2>
+    <h2 class="h6 text-muted text-uppercase">{{ 'Notes / History' if entity == 'pois' else 'Notes' }}</h2>
     <div class="small" style="white-space: pre-line;">{{ row.notes }}</div>
   </div></div></div>
   {% endif %}
