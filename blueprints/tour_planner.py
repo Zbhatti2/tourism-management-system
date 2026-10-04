@@ -103,6 +103,11 @@ def workspace(plan_id):
     key = request.args.get("stage")
     if key not in smap:
         key = next((k for k in tp.STAGE_KEYS if smap[k]["built"] and not smap[k]["approved_at"]), "brief")
+    # Stages approved before approval resolved their open flags: settle them now.
+    fixed = sum(tp.resolve_open_flags(db, plan_id, k, smap, smap[k]["approved_at"])
+                for k in tp.STAGE_KEYS if smap[k]["built"] and smap[k]["approved_at"])
+    if fixed:
+        plan = _plan(db, plan_id)
     st = smap[key]
     brief = tp.brief_of(plan)
     if key == "grid" and st["data"] is None and tp.previous_approved(smap, "grid"):
@@ -125,6 +130,7 @@ def workspace(plan_id):
         status_url=url_for("tour_planner.run_status", plan_id=plan_id, run_id=run["run_id"]) if run else None,
         stop_url=url_for("tour_planner.run_stop", plan_id=plan_id, run_id=run["run_id"]) if run else None,
         unit="step", allowance=_allowance(db), criteria=tp.criteria_of(brief), flag_statuses=tp.FLAG_STATUSES, open_flags=tp.open_flag_count(smap, brief),
+        stage_open_flags=len(tp.open_flags(smap, brief, key)) if smap[key]["built"] else 0,
         ready=tour_design.current_version(db, plan), ready_missing=tour_design.missing_for_ready(smap),
         ready_changed=tour_design.changed_since(db, plan, smap, brief),
         journey=tp.journey_grid(smap["route"]["data"], None) if key in ("route", "checkpoints") and smap["route"]["data"] else None,
@@ -307,11 +313,15 @@ def answer_flags(plan_id, key):
     if key not in smap or not smap[key]["data"]:
         abort(404)
     flags = smap[key]["data"].get("flags") or []
+    before = (tp.brief_of(_plan(db, plan_id)).get("flag_responses") or {}).get(key) or {}
     responses = {}
     for i, f in enumerate(flags):
         status = request.form.get(f"fs_{i}") or "open"
         note = (request.form.get(f"fn_{i}") or "").strip()[:1000]
         responses[str(f)] = {"status": status if status in tp.FLAG_STATUS else "open", "note": note}
+        was = before.get(str(f)) or {}
+        if was.get("accepted_on") and status == "resolved":  # still as accepted with the approval
+            responses[str(f)]["accepted_on"] = was["accepted_on"]
     tp.save_flag_responses(db, plan_id, key, responses)
     log_action("Update", "tour_plans", plan_id, f"Answered the Tour Planner flags: {tp.STAGE[key]['label']}")
     if request.form.get("action") == "revise":
@@ -437,6 +447,9 @@ def approve_stage(plan_id, key):
             db.execute("UPDATE tour_plan_stages SET result = ? WHERE plan_id = ? AND stage_key = 'checkpoints'",
                        (json.dumps(data, ensure_ascii=False), plan_id))
     tp.approve(db, plan_id, key, g.user_id)
+    resolved = tp.resolve_open_flags(db, plan_id, key, tp.stages(db, plan_id))
+    if resolved:
+        flash(f"{resolved} open flag{'s' if resolved != 1 else ''} marked Checked / resolved with the approval.", "info")
     if proposed:
         flash(f"{proposed} new checkpoint cit{'y' if proposed == 1 else 'ies'} suggested to TMS for flagging "
               "as overnight checkpoints.", "info")

@@ -97,6 +97,13 @@ changing or un-approving the stage, and the agents of the later stages
 read them. **Save and ask the agent to revise this stage** saves them and
 re-runs the stage with your answers.
 
+**Approving a stage accepts it as it stands.** Every flag still **Open**
+becomes **Checked / resolved**, marked *Accepted with the stage approval*
+and its date. Flags you answered keep your answer, so one set to **Noted,
+I'll handle it** stays on the printed to-do list. The Approve button says
+how many open flags it will settle. You can still change any flag after
+approving; setting one back to Open keeps it Open.
+
 ## Printing the flags
 
 **Print** on a stage's Flags card prints that stage's flags that still
