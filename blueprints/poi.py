@@ -16,7 +16,7 @@ import mimetypes
 import os
 from io import BytesIO
 
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from auth.decorators import login_required
 import catalog_sync
@@ -231,10 +231,31 @@ def _poi_country_options(db):
     ).fetchall()
 
 
+def _list_url():
+    """Back to the Points of Interest list exactly as the user left it
+    (type, city, province, country, search)."""
+    return url_for("poi.list_pois", **(session.get("poi_list_args") or {}))
+
+
+def _back_to_list(poi_id=None):
+    """After a save or delete: back to that list, with the POI just changed
+    highlighted."""
+    url = _list_url()
+    if poi_id:
+        url += ("&" if "?" in url else "?") + f"hl={poi_id}#p{poi_id}"
+    return redirect(url)
+
+
+@poi_bp.context_processor
+def _poi_list_context():
+    return {"poi_list_url": _list_url}
+
+
 @poi_bp.route("/")
 @login_required
 def list_pois():
     db = get_db()
+    session["poi_list_args"] = {k: v for k, v in request.args.items() if v and k != "hl"}
     q = request.args.get("q", "").strip()
     poi_type_id = request.args.get("poi_type_id", "").strip()
     city = request.args.get("city", "").strip()
@@ -276,7 +297,7 @@ def list_pois():
         catalog_pending=catalog_sync.pending_count(db, g.tenant_id),
         image_updates_pending=poi_image_sync.pending_count(db, g.tenant_id),
         poi_type_id=poi_type_id, city=city, state=state, country_id=country_id,
-        poi_types=_poi_types(db), city_options=_poi_city_options(db),
+        highlight=request.args.get("hl", type=int), poi_types=_poi_types(db), city_options=_poi_city_options(db),
         state_options=_poi_state_options(db), country_options=_poi_country_options(db),
     )
 
@@ -409,7 +430,7 @@ def edit_poi(poi_id):
         _save_poi_links_from_form(db, request.form, poi_id)
         log_action("Update", "point_of_interest", poi_id, f"Updated point of interest {f['name']}")
         flash("Point of interest updated.", "success")
-        return redirect(url_for("poi.view_poi", poi_id=poi_id))
+        return _back_to_list(poi_id)
     return render_template(
         "poi/form.html", poi=poi, poi_types=_poi_types(db),
         contacts=_contacts(db), organizations=_organizations(db),
@@ -434,7 +455,7 @@ def delete_poi(poi_id):
     db.commit()
     log_action("Delete", "point_of_interest", poi_id, f"Deleted point of interest {poi['name']}")
     flash(f"'{poi['name']}' deleted.", "success")
-    return redirect(url_for("poi.list_pois"))
+    return _back_to_list()
 
 
 # ---------------------------------------------------------- images/photographs

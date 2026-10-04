@@ -75,7 +75,7 @@
       </thead>
       <tbody>
         {% for p in pois %}
-        <tr onclick="window.location='{{ url_for('poi.view_poi', poi_id=p.poi_id) }}'" style="cursor:pointer;">
+        <tr id="p{{ p.poi_id }}" class="{{ 'table-warning' if highlight == p.poi_id else '' }}" onclick="window.location='{{ url_for('poi.view_poi', poi_id=p.poi_id) }}'" style="cursor:pointer;">
           <td><strong>{{ p.name }}</strong>{% if p.poi_id in catalog_ids %} <i class="bi bi-cloud-check text-primary small" title="From the Platform Catalog"></i>{% endif %}</td>
           <td>{% if p.type_label %}<span class="badge bg-secondary-subtle text-dark">{{ p.type_label }}</span>{% endif %}</td>
           <td class="text-muted small">{{ p.city_label or "" }}</td>

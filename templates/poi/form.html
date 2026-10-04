@@ -111,7 +111,7 @@
     </div>
   </div>
   <div class="card-footer bg-white d-flex gap-2 justify-content-end">
-    <a href="{{ url_for('poi.view_poi', poi_id=poi.poi_id) if poi else url_for('poi.list_pois') }}" class="btn btn-outline-secondary">Cancel</a>
+    <a href="{{ url_for('poi.view_poi', poi_id=poi.poi_id) if poi else poi_list_url() }}" class="btn btn-outline-secondary">Cancel</a>
     <button class="btn btn-primary" type="submit">Save</button>
   </div>
 </form>
