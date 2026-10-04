@@ -38,9 +38,30 @@
 {% endmacro %}
 {% macro flags_list(flags) %}
 {% if flags %}
+{% set answers = (brief.flag_responses or {}).get(key) or {} %}
+{% set open_n = flags|reject('in', answers.keys()|list)|list|length %}
 <div class="card shadow-sm border-0 mb-3 border-start border-warning border-3"><div class="card-body py-2">
-  <h3 class="h6 mb-1"><i class="bi bi-flag"></i> Flags</h3>
-  <ul class="small mb-0">{% for f in flags %}<li>{{ f }}</li>{% endfor %}</ul>
+  <form method="post" action="{{ url_for('tour_planner.answer_flags', plan_id=plan.plan_id, key=key) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h3 class="h6 mb-0"><i class="bi bi-flag"></i> Flags <span class="small fw-normal text-muted">— {{ flags|length - open_n }} of {{ flags|length }} answered</span></h3>
+    <span class="small text-muted">Answer each one; the agent reads your answers in the later stages.</span>
+  </div>
+  <ol class="small mb-2 ps-3">{% for f in flags %}{% set a = answers.get(f) or {} %}
+    <li class="mb-2">
+      <div class="{{ 'text-muted text-decoration-line-through' if a.status in ('resolved', 'dismissed') else '' }}">{{ f }}</div>
+      <div class="row g-1 mt-1">
+        <div class="col-md-3"><select class="form-select form-select-sm" name="fs_{{ loop.index0 }}" aria-label="Status">
+          {% for v, lbl in flag_statuses %}<option value="{{ v }}" {{ 'selected' if (a.status or 'open') == v else '' }}>{{ lbl }}</option>{% endfor %}</select></div>
+        <div class="col-md-9"><input class="form-control form-control-sm" name="fn_{{ loop.index0 }}" value="{{ a.note or '' }}" placeholder="Your answer or instruction, e.g. 'Confirmed with our Gilgit agent: road open mid-March'"></div>
+      </div>
+    </li>{% endfor %}</ol>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-outline-primary" type="submit" name="action" value="save"><i class="bi bi-check2"></i> Save answers</button>
+    {% if key != 'grid' %}<button class="btn btn-sm btn-primary" type="submit" name="action" value="revise"><i class="bi bi-arrow-repeat"></i> Save and ask the agent to revise this stage</button>{% endif %}
+    <span class="small text-muted align-self-center">Saving answers doesn't change or un-approve the stage; revising re-runs it.</span>
+  </div>
+  </form>
 </div></div>
 {% endif %}
 {% endmacro %}
