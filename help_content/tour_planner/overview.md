@@ -57,7 +57,8 @@ Each stage shows its status on the left: *Ready*, *Working…*, *To review*,
    criteria clears the checkpoints so the agent can choose again.
 4. **Journey grid**: worked out from the route and checkpoints, with the drive
    times between every pair of checkpoints and city by city along the
-   route.
+   route. In the city-by-city table, the **Checkpoint** column marks each
+   overnight stop (highlighted) with its nights, the start city included.
 
 5. **Hotels and dining**: for each checkpoint, 2–3 hotels that can take the
    whole group, with one recommended:

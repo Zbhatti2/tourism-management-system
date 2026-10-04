@@ -1314,7 +1314,14 @@ def journey_grid(route, checkpoints):
                         "minutes_max": cum[hi]["minutes_max"] - cum[lo]["minutes_max"],
                         "partial": cum[hi]["partial"]})
         grid.append({"from": a, "cells": row})
-    return {"legs": legs, "cumulative": cum, "checkpoints": cps, "grid": grid,
+    nights = {}  # nights at each checkpoint city, out and back together
+    for cp in (checkpoints or {}).get("checkpoints") or []:
+        if cp.get("city") in names:
+            try:
+                nights[cp["city"]] = nights.get(cp["city"], 0) + int(cp.get("nights") or 0)
+            except (TypeError, ValueError):
+                nights.setdefault(cp["city"], 0)
+    return {"legs": legs, "cumulative": cum, "checkpoints": cps, "grid": grid, "nights": nights,
             "total_km": round(km, 1), "total_minutes": mins, "total_minutes_max": mins_max, "partial": unknown}
 
 
