@@ -17,6 +17,11 @@ Agents
                details, coordinates, amenities or the Reference Room Rate.
 * restaurants -- platform Restaurants missing rating, class, cuisine, price
                range, group suitability, contact details or coordinates.
+* pdf, pdf_accommodation, pdf_restaurants -- read uploaded PDFs for content
+               and images (pdf_poi_agent.py, pdf_catalog_agent.py).
+
+SECTIONS groups them for the TMS Agents menu: Content Enrichment, Image
+Collectors, PDF Agents, Geography & Distances.
 
 Every run is narrow by design (a chosen country / city / list, capped in
 size), works in batches (one Claude call with web search per batch), and each
@@ -132,6 +137,32 @@ AGENTS = {
                      "ones, and stages its photos for the Master Image Catalog."},
 }
 
+AGENTS["pdf_accommodation"] = {
+    "label": "Accommodation from a PDF", "icon": "file-earmark-pdf", "entity": "platform_accommodation", "batch": 1,
+    "max": 1, "blurb": "Reads a PDF (a hotel directory, brochure, rate sheet or fact sheet): proposes new properties and "
+                       "updates to known ones, and stages its photos for the Master Image Catalog."}
+AGENTS["pdf_restaurants"] = {
+    "label": "Restaurants from a PDF", "icon": "file-earmark-pdf", "entity": "platform_restaurants", "batch": 1,
+    "max": 1, "blurb": "Reads a PDF (a food guide, menu, brochure or listing): proposes new restaurants and updates to "
+                       "known ones, and stages its photos for the Master Image Catalog."}
+PDF_AGENTS = ("pdf", "pdf_accommodation", "pdf_restaurants")
+
+# The TMS Agents menu (Zeb, Oct 2026): agents grouped by what they do.
+SECTIONS = {
+    "enrichment": {"label": "Content Enrichment", "icon": "magic", "agents": ("pois", "accommodation", "restaurants"),
+                   "blurb": "Research the web to fill the gaps in the Points of Interest, Accommodation and Restaurants "
+                            "catalogs."},
+    "images": {"label": "Image Collectors", "icon": "images", "agents": (),
+               "blurb": "Find photos for the Master Image Catalogs of Points of Interest, Hotels and Restaurants. "
+                        "Tenants inherit what you keep."},
+    "pdf": {"label": "PDF Agents", "icon": "file-earmark-pdf", "agents": PDF_AGENTS,
+            "blurb": "Read PDFs (guides, brochures, directories) for content and images: new records and updates, "
+                     "with every value tied to its page."},
+    "geo": {"label": "Geography & Distances", "icon": "globe-americas", "agents": ("geography", "distances"),
+            "blurb": "Coordinates, time zones and altitude for cities; road distances and drive times between them."},
+}
+SECTION_OF = {a: k for k, sec in SECTIONS.items() for a in sec["agents"]}
+
 # New Points of Interest proposed by the PDF agent (pdf_poi_agent.py): created when approved.
 FIELDS["platform_pois_new"] = {"name": ("Name", "text"), "city": ("City", "text"), "poi_type": ("POI Type", "text"),
                                **FIELDS["platform_pois"]}
@@ -140,9 +171,19 @@ FIELDS["platform_pois_new"] = {"name": ("Name", "text"), "city": ("City", "text"
 # History (never replacing it) and an Additional Link ("type | url | title").
 # Kept out of FIELDS so the enrichment agents don't research them.
 POI_EXTRA = {"notes": ("Notes / History (added)", "longtext"), "link": ("Additional link", "link")}
+# New Accommodation / Restaurants from the PDF agents (pdf_catalog_agent.py), and
+# text they add to a record's Notes.
+CATALOG_NOTES = {"notes": ("Notes (added)", "longtext")}
+FIELDS["platform_accommodation_new"] = {"name": ("Name", "text"), "city": ("City", "text"),
+                                        "property_type": ("Property type", "text"), **FIELDS["platform_accommodation"]}
+FIELDS["platform_restaurants_new"] = {"name": ("Name", "text"), "city": ("City", "text"), **FIELDS["platform_restaurants"]}
+NEW_CATALOG_ENTITIES = {"platform_accommodation_new": "platform_accommodation",
+                        "platform_restaurants_new": "platform_restaurants"}
 PROPOSAL_FIELDS = {k: dict(v) for k, v in FIELDS.items()}
 PROPOSAL_FIELDS["platform_pois"].update(POI_EXTRA)
 PROPOSAL_FIELDS["platform_pois_new"].update(POI_EXTRA)
+for _e in ("platform_accommodation", "platform_restaurants", "platform_accommodation_new", "platform_restaurants_new"):
+    PROPOSAL_FIELDS[_e].update(CATALOG_NOTES)
 
 
 def link_value(link_type, url, title=None):
@@ -172,6 +213,8 @@ def _write_poi_extra(db, poi_id, field, value, source):
         typ, url, title = parse_link_value(value)
         poi_links.add(db, poi_id, url, typ, title, source)
 ENTITY_LABELS["platform_pois_new"] = "New Point of Interest"
+ENTITY_LABELS["platform_accommodation_new"] = "New Accommodation"
+ENTITY_LABELS["platform_restaurants_new"] = "New Restaurant"
 
 
 def _number(v):
@@ -481,10 +524,14 @@ def run(db, run_id):
     total = 0
     try:
         client = anthropic_client()
-        if agent_key == "pdf":
-            import pdf_poi_agent
-            total = pdf_poi_agent.run(db, run_id, client, log, meter,
-                                      lambda: agent_runs.cancelled(db, "platform_agent_runs", run_id))
+        if agent_key in PDF_AGENTS:
+            stop = lambda: agent_runs.cancelled(db, "platform_agent_runs", run_id)  # noqa: E731
+            if agent_key == "pdf":
+                import pdf_poi_agent
+                total = pdf_poi_agent.run(db, run_id, client, log, meter, stop)
+            else:
+                import pdf_catalog_agent
+                total = pdf_catalog_agent.run(db, run_id, agent_key, client, log, meter, stop)
             if agent_runs.cancelled(db, "platform_agent_runs", run_id):
                 return
             log(f"Done: {total} value(s) to review." if total else "Done: nothing new was found.")
@@ -614,8 +661,28 @@ def decide(db, proposal_ids, approve, user_id):
                 if not cur.rowcount:
                     raise AgentError("the POI no longer exists")
                 touched_pois.add(int(p["record_key"]))
-            elif p["entity"] in CATALOG_ENTITIES:
-                table, pk, sync_entity = CATALOG_ENTITIES[p["entity"]]
+            elif p["entity"] in CATALOG_ENTITIES or p["entity"] in NEW_CATALOG_ENTITIES:
+                base_entity = NEW_CATALOG_ENTITIES.get(p["entity"], p["entity"])
+                table, pk, sync_entity = CATALOG_ENTITIES[base_entity]
+                if p["entity"] in NEW_CATALOG_ENTITIES:
+                    import pdf_catalog_agent
+                    if p["record_key"].startswith("new:"):
+                        pdf_catalog_agent.create_new_record(db, p["record_key"], p["entity"], user_id)
+                        p = db.execute("SELECT * FROM platform_agent_proposals WHERE proposal_id = ?", (pid,)).fetchone()
+                    touched.setdefault(sync_entity, set()).add(int(p["record_key"]))
+                    if p["field"] in pdf_catalog_agent.NEW_FIELDS:  # went into the record when it was created
+                        if p["status"] == "pending":
+                            db.execute("UPDATE platform_agent_proposals SET status = 'approved', decided_by = ?, "
+                                       "decided_at = datetime('now'), error = NULL WHERE proposal_id = ?", (user_id, pid))
+                        applied += 1
+                        continue
+                if p["field"] == "notes":
+                    _append_notes(db, table, pk, int(p["record_key"]), value)
+                    touched.setdefault(sync_entity, set()).add(int(p["record_key"]))
+                    db.execute("UPDATE platform_agent_proposals SET status = 'approved', decided_by = ?, "
+                               "decided_at = datetime('now'), error = NULL WHERE proposal_id = ?", (user_id, pid))
+                    applied += 1
+                    continue
                 if kind == "yesno":
                     value = 1 if value == "Yes" else 0
                 extra = ", ref_rate_as_of = ?" if p["field"] == "ref_room_rate" else ""
@@ -647,6 +714,17 @@ def decide(db, proposal_ids, approve, user_id):
             catalog_sync.push(db, sync_entity, sorted(ids))
         db.commit()
     return applied, rejected, errors
+
+
+def _append_notes(db, table, pk, rid, value):
+    """Text from a PDF is added to the record's Notes (unless already there)."""
+    row = db.execute(f"SELECT notes FROM {table} WHERE {pk} = ?", (rid,)).fetchone()
+    if row is None:
+        raise AgentError("the record no longer exists")
+    cur = row[0] or ""
+    if value.strip() and value.strip() not in cur:
+        db.execute(f"UPDATE {table} SET notes = ?, updated_at = datetime('now') WHERE {pk} = ?",
+                   ((cur.rstrip() + "\n\n" if cur.strip() else "") + value.strip(), rid))
 
 
 def pending_count(db):

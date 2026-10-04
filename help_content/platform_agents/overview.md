@@ -1,11 +1,26 @@
 ---
 title: TMS Agents
 order: 1
-keywords: [agents, ai, platform, geography, distances, drive time, points of interest, accommodation, hotels, restaurants, reference room rate, enrichment, review, approve]
+keywords: [agents, menu, pdf agents, image collectors, content enrichment, ai, platform, geography, distances, drive time, points of interest, accommodation, hotels, restaurants, reference room rate, enrichment, review, approve]
 ---
 **TMS Agents** are platform-level AI agents, a **TMS System Admin**
 screen. They research the shared catalogs on the web and **propose**
 values. Nothing is saved until you approve it.
+
+## The menu
+
+**TMS Agents** in the sidebar opens into sub-menus:
+
+- **Overview**: every section at a glance, with what's waiting for review.
+- **Content Enrichment**: POI, Accommodation and Restaurant Enrichment.
+- **Image Collectors**: photos for the Points of Interest, Hotels and
+  Restaurants Master Image Catalogs, with how many records have none yet.
+- **PDF Agents**: POIs, Accommodation and Restaurants from a PDF.
+- **Geography & Distances**: the Geography and Distances & Drive Times
+  agents.
+- **Review Queue**: every value still waiting, from every run.
+
+Each section lists its own recent runs.
 
 ## The agents
 
@@ -120,12 +135,33 @@ PDF** opens the file.
 Up to 300 pages and 40 MB per upload. It costs roughly 1 to 3 cents a page,
 as a platform cost.
 
-## POI Image Collector
+## Accommodation and Restaurants from a PDF
 
-The **POI Image Collector** card opens the POI Master Image Catalog's
-import page. There the agent finds photos of platform Points of
-Interest, and you curate them before tenants receive them. See *Platform
-Catalogs → POI Master Image Catalog*.
+The same reading works for hotel directories, brochures, rate sheets, food
+guides and menus, on the **PDF Agents** page:
+
+- **Accommodation from a PDF** proposes star rating, rooms, the Reference
+  Room Rate (converted to US dollars, with the original price in the note),
+  amenities, address, phone, email, website and coordinates. Choose the
+  **Property Type** for new places when the PDF doesn't say.
+- **Restaurants from a PDF** proposes rating, class, cuisine, currency,
+  price per person, group suitability, contact details and coordinates.
+- What else the PDF says about a place is offered for its **Notes**, only
+  the sentences it doesn't already have.
+- New hotels and restaurants are created when you approve them, and their
+  photos are then assigned to them.
+- Its photos go to the Accommodation or Restaurants Master Image Catalog
+  for curation.
+- A PDF this agent has already read is refused unless you tick **Read it
+  again anyway**. Another PDF agent can still read it.
+
+## Image Collectors
+
+The **Image Collectors** page has a card for Points of Interest, Hotels and
+Restaurants. Each shows how many records have no photos yet and its recent
+runs. **Open the collector** opens that Master Image Catalog's import page,
+where the agent finds photos and you curate them before tenants receive
+them. See *Platform Catalogs → Master Image Catalog*.
 
 ## Watching a run
 

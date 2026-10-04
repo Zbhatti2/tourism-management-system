@@ -23,10 +23,20 @@ Each stage shows its status on the left: *Ready*, *Working…*, *To review*,
 *Approved*. A stage runs only after the stages before it are approved.
 
 1. **Tour Brief**: the tour, its dates and length, the travelling parties
-   and their rooms, guides, vehicles and drivers. TMS works out the rooms
-   and the vehicles for you; with one guide per minibus, 24 guests fill
-   two 14-seaters, 12 guests and a guide in each. **Save and approve the
-   brief** to go on.
+   and their rooms, transport and guides. **Save and approve the brief** to
+   go on.
+   - The **Total** line under the travelling parties adds up guests,
+     doubles and singles as you type, and warns when the rooms sleep fewer
+     than the guests.
+   - **Transport and guides**: Transport type, Max guests per vehicle,
+     Guides, and the **Total vehicle capacity**, which counts every seat
+     including the driver's and the guide's. TMS works out the vehicles.
+     For example, with one guide in each vehicle, 24 guests in 15-seaters
+     need two vehicles: 12 guests, a guide and the driver in each. Leave
+     Max guests per vehicle empty to fill every seat left. The **Total
+     capacity** shows vehicles × seats against the people riding.
+   - **Print** (top right of the Tour card) opens the saved brief on one
+     page, with the totals and transport, ready to print.
 2. **Route and POIs**: the main route city by city, with distances and drive
    times, the attractions on and near it, and the detours they need. TMS's
    own distances are used wherever they exist; anything from the web shows

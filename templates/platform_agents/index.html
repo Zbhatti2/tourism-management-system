@@ -1,61 +1,59 @@
 {% extends "base.html" %}
-{% block title %}TMS System Admin — TMS Agents{% endblock %}
+{% block title %}TMS System Admin — TMS Agents{% if section %} — {{ sections[section].label }}{% endif %}{% endblock %}
+{% macro pdf_card(key, noun, plural, example, extra) %}
+<div class="col-lg-4">
+  <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+    <h2 class="h6"><i class="bi bi-{{ agents[key].icon }} me-1"></i>{{ agents[key].label }}</h2>
+    <p class="small text-muted">{{ agents[key].blurb }} Each value shows the PDF page it came from; new {{ plural }} are created only when you approve them.
+      Scanned and printed-to-PDF files work too. Up to 300 pages and 40 MB; typically 1–3 cents per page.{% if waiting.get(key) %} <strong>{{ waiting[key] }}</strong> value{{ 's' if waiting[key] != 1 }} waiting for review.{% endif %}</p>
+    <form method="post" action="{{ url_for('platform_agents.start_pdf', agent_key=key) }}" enctype="multipart/form-data" class="mt-auto">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="form-label small text-muted mb-0">The PDF holds</label>
+      <select class="form-select form-select-sm mb-2" name="mode">
+        <option value="multi">Several {{ plural }} per PDF (a guide, a list)</option>
+        <option value="per_poi">One PDF per {{ noun }} (named after it)</option></select>
+      <label class="form-label small text-muted mb-0">PDF file(s)</label>
+      <input class="form-control form-control-sm mb-2" type="file" name="pdf" accept=".pdf,application/pdf" multiple required>
+      {{ extra }}
+      <div class="small text-muted mb-2">One PDF per {{ noun }}: name each file after it, like photos — <code>{{ example }}.pdf</code>, <code>{{ example }} - 2.pdf</code>.</div>
+      <div class="form-check small mb-2"><input class="form-check-input" type="checkbox" name="again" id="again-{{ key }}" value="1">
+        <label class="form-check-label" for="again-{{ key }}">Read it again anyway</label> <span class="text-muted">(a PDF this agent already read is otherwise refused)</span></div>
+      <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-upload"></i> Upload and read</button>
+    </form>
+  </div></div>
+</div>
+{% endmacro %}
 {% block content %}
+{% if section %}<nav class="mb-2"><a href="{{ url_for('platform_agents.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> TMS Agents</a></nav>{% endif %}
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin</div>
-    <h1 class="h3 mb-0">TMS Agents</h1>
-    <div class="small text-muted">Platform-level AI agents that research the shared catalogs on the web. Every value they find waits for your approval, with its source.
+    <div class="text-uppercase small text-muted fw-semibold">TMS System Admin · TMS Agents</div>
+    <h1 class="h3 mb-0">{% if section %}<i class="bi bi-{{ sections[section].icon }} me-1"></i>{{ sections[section].label }}{% else %}TMS Agents{% endif %}</h1>
+    <div class="small text-muted">{% if section %}{{ sections[section].blurb }} {% else %}Platform-level AI agents that research the shared catalogs. {% endif %}Every value they find waits for your approval, with its source.
       Their cost is a platform cost (the "Platform agents" line on AI Usage).</div>
   </div>
   <a href="{{ url_for('platform_agents.review') }}" class="btn {{ 'btn-warning' if pending else 'btn-outline-secondary' }}"><i class="bi bi-check2-square"></i> Review queue{% if pending %} <span class="badge bg-dark">{{ pending }}</span>{% endif %}</a>
 </div>
 
+{% if not section %}
 <div class="row g-3 mb-3">
-  {# Geography #}
-  <div class="col-lg-4">
-    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
-      <h2 class="h6"><i class="bi bi-{{ agents.geography.icon }} me-1"></i>{{ agents.geography.label }}</h2>
-      <p class="small text-muted">{{ agents.geography.blurb }} <strong>{{ gaps.geography }}</strong> cities have gaps.</p>
-      <form method="post" action="{{ url_for('platform_agents.start', agent_key='geography') }}" class="mt-auto">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label class="form-label small text-muted mb-0">Country</label>
-        <select class="form-select form-select-sm mb-2" name="country_id"><option value="">Any</option>
-          {% for c in countries %}<option value="{{ c.country_id }}" {{ 'selected' if c.label == 'Pakistan' else '' }}>{{ c.label }}</option>{% endfor %}</select>
-        <label class="form-label small text-muted mb-0">Province / state (optional)</label>
-        <select class="form-select form-select-sm mb-2" name="state_id"><option value="">Any</option>
-          {% for s in states %}<option value="{{ s.state_id }}">{{ s.label }} · {{ s.country }}</option>{% endfor %}</select>
-        <div class="d-flex gap-2 align-items-end mb-2">
-          <div><label class="form-label small text-muted mb-0">How many (max {{ agents.geography.max }})</label>
-            <input class="form-control form-control-sm" type="number" name="limit" value="20" min="1" max="{{ agents.geography.max }}"></div>
-          <div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="only_missing" value="1" id="g_missing" checked>
-            <label class="form-check-label small" for="g_missing">Only cities with gaps</label></div>
-        </div>
-        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
-      </form>
-    </div></div>
+  {% for key, sec in sections.items() %}
+  <div class="col-md-6 col-xl-3">
+    <a class="card shadow-sm border-0 h-100 text-decoration-none text-reset" href="{{ url_for('platform_agents.index', section=key) }}"><div class="card-body">
+      <h2 class="h6"><i class="bi bi-{{ sec.icon }} me-1"></i>{{ sec.label }}</h2>
+      <p class="small text-muted mb-2">{{ sec.blurb }}</p>
+      <ul class="list-unstyled small mb-0">
+        {% if key == 'images' %}{% for c in collectors %}<li><i class="bi bi-{{ c.icon }} me-1 text-muted"></i>{{ c.label }} <span class="text-muted">· {{ c.without }} of {{ c.total }} without photos</span></li>{% endfor %}
+        {% else %}{% for a in sec.agents %}<li><i class="bi bi-{{ agents[a].icon }} me-1 text-muted"></i>{{ agents[a].label }}{% if waiting.get(a) %} <span class="badge bg-warning-subtle text-dark">{{ waiting[a] }} to review</span>{% endif %}</li>{% endfor %}{% endif %}
+      </ul>
+    </div></a>
   </div>
-  {# Distances #}
-  <div class="col-lg-4">
-    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
-      <h2 class="h6"><i class="bi bi-{{ agents.distances.icon }} me-1"></i>{{ agents.distances.label }}</h2>
-      <p class="small text-muted">{{ agents.distances.blurb }} <strong>{{ gaps.distances }}</strong> existing pairs have gaps.</p>
-      <form method="post" action="{{ url_for('platform_agents.start', agent_key='distances') }}" class="mt-auto">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="form-check"><input class="form-check-input" type="radio" name="mode" value="from" id="d_from" checked>
-          <label class="form-check-label small" for="d_from">From one city to others</label></div>
-        <select class="form-select form-select-sm mb-1" name="from_city_id"><option value="">— from —</option>
-          {% for c in cities %}<option value="{{ c.city_id }}">{{ c.label }} · {{ c.state }}{% if c.country != 'Pakistan' %}, {{ c.country }}{% endif %}</option>{% endfor %}</select>
-        <select class="form-select form-select-sm mb-1" name="to_city_ids" multiple size="5" title="Ctrl/Cmd-click to pick several">
-          {% for c in cities %}<option value="{{ c.city_id }}">{{ c.label }} · {{ c.state }}{% if c.country != 'Pakistan' %}, {{ c.country }}{% endif %}</option>{% endfor %}</select>
-        <div class="form-text mt-0 mb-2">Destinations: Ctrl/Cmd-click to pick several (max {{ agents.distances.max }}).</div>
-        <div class="form-check mb-2"><input class="form-check-input" type="radio" name="mode" value="gaps" id="d_gaps">
-          <label class="form-check-label small" for="d_gaps">Fill the gaps in existing distances</label></div>
-        <input type="hidden" name="limit" value="{{ agents.distances.max }}">
-        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
-      </form>
-    </div></div>
-  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if section == 'enrichment' %}
+<div class="row g-3 mb-3">
   {# POIs #}
   <div class="col-lg-4">
     <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
@@ -79,11 +77,8 @@
       </form>
     </div></div>
   </div>
-</div>
-
-<div class="row g-3 mb-3">
   {# accommodation #}
-  <div class="col-lg-6">
+  <div class="col-lg-4">
     <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
       <h2 class="h6"><i class="bi bi-{{ agents.accommodation.icon }} me-1"></i>{{ agents.accommodation.label }}</h2>
       <p class="small text-muted">{{ agents.accommodation.blurb }} <strong>{{ gaps.accommodation }}</strong> properties have gaps. Approved changes reach tenants through Catalog Sync, where a tenant's own Reference Room Rate is kept.</p>
@@ -106,7 +101,7 @@
     </div></div>
   </div>
   {# restaurants #}
-  <div class="col-lg-6">
+  <div class="col-lg-4">
     <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
       <h2 class="h6"><i class="bi bi-{{ agents.restaurants.icon }} me-1"></i>{{ agents.restaurants.label }}</h2>
       <p class="small text-muted">{{ agents.restaurants.blurb }} <strong>{{ gaps.restaurants }}</strong> restaurants have gaps. Approved changes reach tenants through Catalog Sync.</p>
@@ -126,52 +121,95 @@
     </div></div>
   </div>
 </div>
-
-<div class="card shadow-sm border-0 mb-3">
-  <div class="card-body">
-    <h2 class="h6"><i class="bi bi-{{ agents.pdf.icon }} me-1"></i>{{ agents.pdf.label }}</h2>
-    <p class="small text-muted mb-2">{{ agents.pdf.blurb }} Each proposed value shows the PDF page it came from; new Points of Interest are created only when you approve them.
-      Scanned and printed-to-PDF files work too. The text goes to Description and Notes / History, links to Additional Links, and each photo to its place.
-      Text a POI already has is recognised and not proposed again. Up to 300 pages and 40 MB; typically 1–3 cents per page.</p>
-    <form method="post" action="{{ url_for('platform_agents.start_pdf') }}" enctype="multipart/form-data" class="row g-2 align-items-end">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="col-md-3"><label class="form-label small text-muted mb-0">The PDF holds</label>
-        <select class="form-select form-select-sm" name="mode" id="pdfMode">
-          <option value="multi">Several POIs per PDF (a guide, a list)</option>
-          <option value="per_poi">One PDF per POI (named after the POI)</option></select></div>
-      <div class="col-md-4"><label class="form-label small text-muted mb-0">PDF file(s)</label>
-        <input class="form-control form-control-sm" type="file" name="pdf" accept=".pdf,application/pdf" multiple required></div>
-      <div class="col-md-3"><label class="form-label small text-muted mb-0">POI Type for new places when the PDF doesn't say</label>
-        <select class="form-select form-select-sm" name="poi_type_id"><option value="">— none —</option>
-          {% for t in all_poi_types %}<option value="{{ t.poi_type_id }}">{{ t.label }}</option>{% endfor %}</select></div>
-      <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" type="submit"><i class="bi bi-upload"></i> Upload and read</button></div>
-      <div class="col-12 small text-muted">One PDF per POI: name each file after its POI, like photos — <code>Gurdwara Rori Sahib.pdf</code>, <code>Gurdwara Rori Sahib - 2.pdf</code>.
-        <span class="form-check form-check-inline ms-2"><input class="form-check-input" type="checkbox" name="again" id="pdfAgain" value="1"><label class="form-check-label" for="pdfAgain">Read it again anyway</label></span>
-        <span>(a PDF already read is otherwise refused)</span></div>
-    </form>
+{% elif section == 'geo' %}
+<div class="row g-3 mb-3">
+  {# Geography #}
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+      <h2 class="h6"><i class="bi bi-{{ agents.geography.icon }} me-1"></i>{{ agents.geography.label }}</h2>
+      <p class="small text-muted">{{ agents.geography.blurb }} <strong>{{ gaps.geography }}</strong> cities have gaps.</p>
+      <form method="post" action="{{ url_for('platform_agents.start', agent_key='geography') }}" class="mt-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label small text-muted mb-0">Country</label>
+        <select class="form-select form-select-sm mb-2" name="country_id"><option value="">Any</option>
+          {% for c in countries %}<option value="{{ c.country_id }}" {{ 'selected' if c.label == 'Pakistan' else '' }}>{{ c.label }}</option>{% endfor %}</select>
+        <label class="form-label small text-muted mb-0">Province / state (optional)</label>
+        <select class="form-select form-select-sm mb-2" name="state_id"><option value="">Any</option>
+          {% for s in states %}<option value="{{ s.state_id }}">{{ s.label }} · {{ s.country }}</option>{% endfor %}</select>
+        <div class="d-flex gap-2 align-items-end mb-2">
+          <div><label class="form-label small text-muted mb-0">How many (max {{ agents.geography.max }})</label>
+            <input class="form-control form-control-sm" type="number" name="limit" value="20" min="1" max="{{ agents.geography.max }}"></div>
+          <div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="only_missing" value="1" id="g_missing" checked>
+            <label class="form-check-label small" for="g_missing">Only cities with gaps</label></div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
+      </form>
+    </div></div>
+  </div>
+  {# Distances #}
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+      <h2 class="h6"><i class="bi bi-{{ agents.distances.icon }} me-1"></i>{{ agents.distances.label }}</h2>
+      <p class="small text-muted">{{ agents.distances.blurb }} <strong>{{ gaps.distances }}</strong> existing pairs have gaps.</p>
+      <form method="post" action="{{ url_for('platform_agents.start', agent_key='distances') }}" class="mt-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-check"><input class="form-check-input" type="radio" name="mode" value="from" id="d_from" checked>
+          <label class="form-check-label small" for="d_from">From one city to others</label></div>
+        <select class="form-select form-select-sm mb-1" name="from_city_id"><option value="">— from —</option>
+          {% for c in cities %}<option value="{{ c.city_id }}">{{ c.label }} · {{ c.state }}{% if c.country != 'Pakistan' %}, {{ c.country }}{% endif %}</option>{% endfor %}</select>
+        <select class="form-select form-select-sm mb-1" name="to_city_ids" multiple size="5" title="Ctrl/Cmd-click to pick several">
+          {% for c in cities %}<option value="{{ c.city_id }}">{{ c.label }} · {{ c.state }}{% if c.country != 'Pakistan' %}, {{ c.country }}{% endif %}</option>{% endfor %}</select>
+        <div class="form-text mt-0 mb-2">Destinations: Ctrl/Cmd-click to pick several (max {{ agents.distances.max }}).</div>
+        <div class="form-check mb-2"><input class="form-check-input" type="radio" name="mode" value="gaps" id="d_gaps">
+          <label class="form-check-label small" for="d_gaps">Fill the gaps in existing distances</label></div>
+        <input type="hidden" name="limit" value="{{ agents.distances.max }}">
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run</button>
+      </form>
+    </div></div>
   </div>
 </div>
-
-<div class="card shadow-sm border-0 mb-3">
-  <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
-    <div>
-      <h2 class="h6 mb-1"><i class="bi bi-images me-1"></i>POI Image Collector</h2>
-      <div class="small text-muted">Finds photos of platform Points of Interest (official sites, tourism boards, Wikimedia Commons) for the POI Master Image Catalog,
-        with each photo's source and licence. Photos wait for your curation; tenants inherit what you add.</div>
-    </div>
-    <a href="{{ url_for('images.import_kind', kind='platform_poi') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-stars"></i> Open</a>
-  </div>
+{% elif section == 'pdf' %}
+<div class="row g-3 mb-3">
+  {% set poi_extra %}<label class="form-label small text-muted mb-0">POI Type for new places when the PDF doesn't say</label>
+    <select class="form-select form-select-sm mb-2" name="poi_type_id"><option value="">— none —</option>
+      {% for t in all_poi_types %}<option value="{{ t.poi_type_id }}">{{ t.label }}</option>{% endfor %}</select>{% endset %}
+  {{ pdf_card('pdf', 'POI', 'Points of Interest', 'Gurdwara Rori Sahib', poi_extra) }}
+  {% set acc_extra %}<label class="form-label small text-muted mb-0">Property Type for new places when the PDF doesn't say</label>
+    <select class="form-select form-select-sm mb-2" name="property_type"><option value="">— Hotel —</option>
+      {% for t in property_types %}<option>{{ t }}</option>{% endfor %}</select>{% endset %}
+  {{ pdf_card('pdf_accommodation', 'property', 'properties', 'Pearl-Continental Lahore', acc_extra) }}
+  {{ pdf_card('pdf_restaurants', 'restaurant', 'restaurants', 'Andaaz Restaurant', '') }}
 </div>
+<p class="small text-muted">Text a record already has is recognised and not proposed again; what's new is added to its Notes (Notes / History for POIs). Photos go to one upload for curation, each assigned to its place.</p>
+{% elif section == 'images' %}
+<div class="row g-3 mb-3">
+  {% for c in collectors %}
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0 h-100"><div class="card-body d-flex flex-column">
+      <h2 class="h6"><i class="bi bi-{{ c.icon }} me-1"></i>{{ c.label }} Image Collector</h2>
+      <p class="small text-muted">Finds photos ({{ c.what }}) for the {{ c.label }} Master Image Catalog, with each photo's source and licence.
+        Photos wait for your curation; tenants inherit what you keep. <strong>{{ c.without }}</strong> of {{ c.total }} have no photos yet.</p>
+      {% if c.runs %}
+      <ul class="list-unstyled small mb-2">{% for r in c.runs %}<li><a href="{{ url_for('images.agent_run', run_id=r.run_id) }}">{{ r.scope_label }}</a>
+        <span class="text-muted">· {{ r.created_at[:10] }} · {{ r.images_staged or 0 }} photo{{ 's' if r.images_staged != 1 }}</span></li>{% endfor %}</ul>
+      {% endif %}
+      <a href="{{ url_for('images.import_kind', kind=c.kind) }}" class="btn btn-outline-primary btn-sm mt-auto align-self-start"><i class="bi bi-stars"></i> Open the collector</a>
+    </div></div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 
+{% if section != 'images' %}
 <div class="card shadow-sm border-0">
-  <div class="card-header bg-white small fw-semibold">Recent runs</div>
+  <div class="card-header bg-white small fw-semibold">Recent runs{% if section %} — {{ sections[section].label }}{% endif %}</div>
   <div class="table-responsive">
     <table class="table table-sm table-hover mb-0 small align-middle">
       <thead><tr><th>Started</th><th>Agent</th><th>Covers</th><th>Status</th><th class="text-end">Values found</th><th class="text-end">To review</th><th></th></tr></thead>
       <tbody>
         {% for r in runs %}
         <tr>
-          <td>{{ r.created_at[:16] }}</td><td>{{ agents[r.agent_key].label }}</td><td>{{ r.scope_label }}</td>
+          <td>{{ r.created_at[:16] }}</td><td>{{ agents[r.agent_key].label if r.agent_key in agents else r.agent_key }}</td><td>{{ r.scope_label }}</td>
           <td>{% if r.status in ('queued', 'running') %}<span class="badge bg-primary-subtle text-primary">Working{% if r.items_total %} {{ r.items_done }}/{{ r.items_total }}{% endif %}</span>{% elif r.status == 'done' %}<span class="badge bg-success-subtle text-success">Finished</span>{% else %}<span class="badge bg-danger-subtle text-danger">Failed</span>{% endif %}</td>
           <td class="text-end">{{ r.proposals }}</td><td class="text-end">{% if r.waiting %}<strong>{{ r.waiting }}</strong>{% else %}0{% endif %}</td>
           <td class="text-end"><a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('platform_agents.run_page', run_id=r.run_id) }}">Open</a></td>
@@ -183,4 +221,5 @@
     </table>
   </div>
 </div>
+{% endif %}
 {% endblock %}

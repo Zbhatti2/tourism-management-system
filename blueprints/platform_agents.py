@@ -26,14 +26,50 @@ def _int(v):
         return None
 
 
+IMAGE_COLLECTORS = [
+    {"kind": "platform_poi", "label": "Points of Interest", "icon": "geo-alt", "table": "platform_pois", "pk": "poi_id",
+     "images": "SELECT 1 FROM platform_poi_images i WHERE i.poi_id = t.poi_id AND i.is_active = 1",
+     "what": "official sites, tourism boards, Wikimedia Commons"},
+    {"kind": "platform_accommodation", "label": "Hotels", "icon": "building", "table": "platform_accommodation",
+     "pk": "accommodation_id",
+     "images": "SELECT 1 FROM platform_catalog_images i WHERE i.entity = 'accommodation' AND i.record_id = t.accommodation_id "
+               "AND i.is_active = 1",
+     "what": "the property's own website, tourism boards, booking and travel sites"},
+    {"kind": "platform_restaurant", "label": "Restaurants", "icon": "cup-hot", "table": "platform_restaurants",
+     "pk": "restaurant_id",
+     "images": "SELECT 1 FROM platform_catalog_images i WHERE i.entity = 'restaurants' AND i.record_id = t.restaurant_id "
+               "AND i.is_active = 1",
+     "what": "the restaurant's own website and social pages, review and travel sites"},
+]
+
+
+def _image_collectors(db):
+    from platform_lookups import platform_tenant_id
+    pid = platform_tenant_id(db)
+    out = []
+    for c in IMAGE_COLLECTORS:
+        total, without = db.execute(f"SELECT COUNT(*), SUM(CASE WHEN EXISTS ({c['images']}) THEN 0 ELSE 1 END) "
+                                    f"FROM {c['table']} t WHERE t.is_active = 1").fetchone()
+        runs = db.execute("SELECT * FROM image_agent_runs WHERE tenant_id = ? AND owner_kind = ? ORDER BY run_id DESC LIMIT 5",
+                          (pid, c["kind"])).fetchall()
+        out.append(dict(c, total=total or 0, without=without or 0, runs=runs))
+    return out
+
+
 @platform_agents_bp.route("/")
+@platform_agents_bp.route("/<any(enrichment, images, pdf, geo):section>")
 @system_admin_required
-def index():
+def index(section=None):
+    """TMS Agents: an overview, or one section of the menu (Content
+    Enrichment, Image Collectors, PDF Agents, Geography & Distances)."""
     db = get_db()
     pa.mark_stale(db)
-    runs = db.execute("""SELECT r.*, (SELECT COUNT(*) FROM platform_agent_proposals p WHERE p.run_id = r.run_id
-                                      AND p.status = 'pending') AS waiting
-                         FROM platform_agent_runs r ORDER BY r.run_id DESC LIMIT 20""").fetchall()
+    g.nav_section = section or "overview"
+    keys = pa.SECTIONS[section]["agents"] if section else tuple(pa.AGENTS)
+    runs = db.execute(f"""SELECT r.*, (SELECT COUNT(*) FROM platform_agent_proposals p WHERE p.run_id = r.run_id
+                                       AND p.status = 'pending') AS waiting
+                          FROM platform_agent_runs r WHERE r.agent_key IN ({','.join('?' * len(keys)) or 'NULL'})
+                          ORDER BY r.run_id DESC LIMIT 20""", keys).fetchall()
     countries = db.execute("""SELECT DISTINCT co.country_id, co.label FROM countries co JOIN states s ON s.country_id = co.country_id
                               JOIN cities ci ON ci.state_id = s.state_id ORDER BY co.label""").fetchall()
     states = db.execute("""SELECT s.state_id, s.label, co.label AS country FROM states s JOIN countries co ON co.country_id = s.country_id
@@ -64,23 +100,49 @@ def index():
                                ")").fetchone()[0]
     all_poi_types = db.execute("""SELECT pt.poi_type_id, pt.label FROM poi_types pt JOIN tenants t ON t.tenant_id = pt.tenant_id
                                   WHERE t.is_platform = 1 AND pt.is_active = 1 ORDER BY pt.label""").fetchall()
-    return render_template("platform_agents/index.html", agents=pa.AGENTS, runs=runs, countries=countries, states=states,
+    waiting = dict(db.execute("""SELECT r.agent_key, COUNT(*) FROM platform_agent_proposals p
+                                 JOIN platform_agent_runs r ON r.run_id = p.run_id WHERE p.status = 'pending'
+                                 GROUP BY r.agent_key""").fetchall())
+    return render_template("platform_agents/index.html", section=section, sections=pa.SECTIONS, waiting=waiting,
+                           collectors=_image_collectors(db) if section in (None, "images") else [],
+                           agents=pa.AGENTS, runs=runs, countries=countries, states=states,
                            cities=cities, poi_cities=poi_cities, poi_types=poi_types, gaps=gaps,
                            pending=pa.pending_count(db), all_poi_types=all_poi_types, catalog_cities=catalog_cities,
                            property_types=PROPERTY_TYPES)
 
 
 @platform_agents_bp.route("/start-pdf", methods=["POST"])
+@platform_agents_bp.route("/start-pdf/<agent_key>", methods=["POST"])
 @system_admin_required
-def start_pdf():
-    """POIs from a PDF (pdf_poi_agent.py): upload, then the run reads it."""
+def start_pdf(agent_key="pdf"):
+    """A PDF agent: upload, then the run reads it. POIs (pdf_poi_agent.py);
+    Accommodation and Restaurants (pdf_catalog_agent.py)."""
     import pdf_poi_agent
+    if agent_key not in pa.PDF_AGENTS:
+        abort(404)
     db = get_db()
+    back = url_for("platform_agents.index", section="pdf")
     files = [(f.filename.replace("\\", "/").split("/")[-1][:150], f.read())
              for f in request.files.getlist("pdf") if f and f.filename]
     if not files:
         flash("Choose a PDF file.", "error")
-        return redirect(url_for("platform_agents.index"))
+        return redirect(back)
+    if agent_key != "pdf":
+        import pdf_catalog_agent
+        spec = pdf_catalog_agent.spec_of(agent_key)
+        ptype = request.form.get("property_type") or None
+        params = {"mode": request.form.get("mode") if request.form.get("mode") in spec["modes"] else "multi",
+                  "again": bool(request.form.get("again")),
+                  "property_type": ptype if ptype in PROPERTY_TYPES else None}
+        try:
+            run_id = pdf_catalog_agent.start(db, agent_key, files, params, g.user_id)
+        except (pdf_poi_agent.PdfError, pa.AgentError) as e:
+            flash(str(e), "error")
+            return redirect(back)
+        pa.launch(run_id)
+        log_action("TMSAgent", "platform_agent_runs", run_id,
+                   f"Started TMS Agent {pa.AGENTS[agent_key]['label']}: {files[0][0] if len(files) == 1 else str(len(files)) + ' PDFs'}")
+        return redirect(url_for("platform_agents.run_page", run_id=run_id))
     params = {"poi_type_id": _int(request.form.get("poi_type_id")),
               "mode": request.form.get("mode") if request.form.get("mode") in pdf_poi_agent.MODES else "multi",
               "again": bool(request.form.get("again"))}
@@ -92,7 +154,7 @@ def start_pdf():
         run_id = pdf_poi_agent.start(db, files, params, g.user_id)
     except (pdf_poi_agent.PdfError, pa.AgentError) as e:
         flash(str(e), "error")
-        return redirect(url_for("platform_agents.index"))
+        return redirect(back)
     pa.launch(run_id)
     log_action("TMSAgent", "platform_agent_runs", run_id, f"Started TMS Agent POIs from a PDF: {name}")
     return redirect(url_for("platform_agents.run_page", run_id=run_id))
@@ -137,7 +199,7 @@ def start(agent_key):
                           to_city_ids=[int(x) for x in f.getlist("to_city_ids") if x.isdigit()])
             if not params["from_city_id"] or not params["to_city_ids"]:
                 flash("Choose a starting city and at least one destination.", "error")
-                return redirect(url_for("platform_agents.index"))
+                return redirect(url_for("platform_agents.index", section="geo"))
             r = db.execute("SELECT label FROM cities WHERE city_id = ?", (params["from_city_id"],)).fetchone()
             label = f"From {r[0] if r else '?'}"
     elif agent_key in ("accommodation", "restaurants"):
@@ -164,7 +226,7 @@ def start(agent_key):
         run_id = pa.start_run(db, agent_key, params, g.user_id, label)
     except pa.AgentError as e:
         flash(str(e), "error")
-        return redirect(url_for("platform_agents.index"))
+        return redirect(url_for("platform_agents.index", section=pa.SECTION_OF.get(agent_key)))
     log_action("TMSAgent", "platform_agent_runs", run_id, f"Started TMS Agent {pa.AGENTS[agent_key]['label']}: {label}")
     return redirect(url_for("platform_agents.run_page", run_id=run_id))
 
@@ -206,6 +268,7 @@ def run_page(run_id):
     run = db.execute("SELECT * FROM platform_agent_runs WHERE run_id = ?", (run_id,)).fetchone()
     if run is None:
         abort(404)
+    g.nav_section = pa.SECTION_OF.get(run["agent_key"], "overview")
     show = request.args.get("show", "pending")
     sql = "SELECT * FROM platform_agent_proposals WHERE run_id = ?"
     if show in pa.PROPOSAL_STATUSES:
@@ -221,7 +284,7 @@ def run_page(run_id):
                                      (SELECT COUNT(*) FROM image_import_items i WHERE i.batch_id = b.batch_id
                                       AND i.status = 'pending') AS pending
                               FROM image_import_batches b WHERE b.batch_id = ?""", (run["batch_id"],)).fetchone()
-    return render_template("platform_agents/run.html", photo_batch=batch, run=run, agent=pa.AGENTS[run["agent_key"]], groups=_grouped(rows),
+    return render_template("platform_agents/run.html", sections=pa.SECTIONS, photo_batch=batch, run=run, agent=pa.AGENTS[run["agent_key"]], groups=_grouped(rows),
                            counts=counts, show=show, cost=cost, calls=calls, searches=searches, fields=pa.PROPOSAL_FIELDS,
                            entity_labels=pa.ENTITY_LABELS, now_utc=db.execute("SELECT datetime('now')").fetchone()[0],
                            status_url=url_for("platform_agents.run_status", run_id=run_id),
@@ -229,13 +292,16 @@ def run_page(run_id):
                            unit=RUN_UNITS.get(run["agent_key"], "records"))
 
 
-RUN_UNITS = {"geography": "cities", "distances": "city pairs", "pois": "POIs", "pdf": "steps"}
+RUN_UNITS = {"geography": "cities", "distances": "city pairs", "pois": "POIs", "pdf": "steps",
+             "accommodation": "properties", "restaurants": "restaurants", "pdf_accommodation": "steps",
+             "pdf_restaurants": "steps"}
 
 
 @platform_agents_bp.route("/review")
 @system_admin_required
 def review():
     db = get_db()
+    g.nav_section = "review"
     agent_key = request.args.get("agent")
     sql = """SELECT p.*, r.agent_key FROM platform_agent_proposals p JOIN platform_agent_runs r ON r.run_id = p.run_id
              WHERE p.status = 'pending'"""
@@ -274,7 +340,7 @@ def decide():
         flash(f"Not applied: {e}", "error")
     if applied:
         log_action("TMSAgentApprove", "platform_agent_proposals", None, f"Approved {applied} TMS Agent value(s)")
-        flash(f"Approved and saved {applied} value{'s' if applied != 1 else ''}. Points of Interest changes are synced to tenants.", "success")
+        flash(f"Approved and saved {applied} value{'s' if applied != 1 else ''}. Catalog changes are synced to tenants.", "success")
     if rejected:
         log_action("TMSAgentReject", "platform_agent_proposals", None, f"Rejected {rejected} TMS Agent value(s)")
         flash(f"Rejected {rejected} value{'s' if rejected != 1 else ''}.", "success")

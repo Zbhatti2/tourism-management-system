@@ -111,7 +111,8 @@ DEFAULT_BRIEF = {
     "name": "", "standard": "4-Star", "start_city": "Islamabad", "start_date": "", "destination": "",
     "route_note": "", "return_mode": "overland", "fly_home": True, "tour_days": 10, "weather_days": 0,
     "max_drive_hours": 8, "parties": [], "guides": 2, "guide_seating": "one_per_minibus",
-    "vehicle_type": "Minibus", "vehicle_seats": 14, "drivers_included": True, "currency": "USD",
+    "vehicle_type": "Minibus", "vehicle_seats": 14, "vehicle_capacity": 15, "max_guests_per_vehicle": None,
+    "drivers_included": True, "currency": "USD",
     "interests": "", "notes": "", "checkpoint_criteria": {}, "flag_responses": {},
 }
 
@@ -126,8 +127,11 @@ def criteria_of(brief):
     return c
 RETURN_MODES = {"overland": "Overland, the same way back", "fly": "Fly back from the destination",
                 "one_way": "One way (tour ends at the destination)"}
-GUIDE_SEATING = {"one_per_minibus": "One guide in each minibus", "suv": "Guides in a separate SUV",
+GUIDE_SEATING = {"one_per_minibus": "One guide in each vehicle", "suv": "Guides in a separate SUV",
                  "none": "No guides"}
+
+
+TRANSPORT_TYPES = ["Car (sedan)", "SUV / Jeep", "Hiace van", "Minibus", "Coaster", "Coach / Bus"]
 
 
 def brief_of(plan):
@@ -136,7 +140,30 @@ def brief_of(plan):
         b.update(json.loads(plan["brief"] or "{}"))
     except ValueError:
         pass
+    return normalise_transport(b)
+
+
+def normalise_transport(b):
+    """Transport (Zeb, Oct 2026): Transport Type, Max Guests per Vehicle,
+    Guides and the Total Vehicle Capacity including the driver and guides.
+    Older briefs only had 'seats per vehicle' (guests and guide, without the
+    driver): their capacity is that plus the driver."""
+    if not b.get("vehicle_capacity"):
+        b["vehicle_capacity"] = int(b.get("vehicle_seats") or 14) + 1
+    b["vehicle_capacity"] = max(int(b["vehicle_capacity"]), 3)
+    b["vehicle_seats"] = b["vehicle_capacity"] - 1
     return b
+
+
+def transport_figures(brief):
+    """(seats left for guests in each vehicle, guide riding in each, the
+    planner's max guests per vehicle or None)."""
+    capacity = int(brief.get("vehicle_capacity") or 15)
+    guide_in = 1 if brief.get("guide_seating") == "one_per_minibus" and int(brief.get("guides") or 0) else 0
+    room = max(capacity - 1 - guide_in, 1)  # one seat is the driver's
+    wanted = brief.get("max_guests_per_vehicle")
+    wanted = int(wanted) if wanted not in (None, "", 0, "0") else None
+    return room, guide_in, wanted
 
 
 def group_figures(brief):
@@ -145,23 +172,26 @@ def group_figures(brief):
     guests = sum(int(p.get("guests") or 0) for p in parties)
     doubles = sum(int(p.get("doubles") or 0) for p in parties)
     singles = sum(int(p.get("singles") or 0) for p in parties)
-    seats = max(int(brief.get("vehicle_seats") or 14), 2)
     guides = int(brief.get("guides") or 0)
-    if brief.get("guide_seating") == "one_per_minibus" and guides:
-        per_bus = seats - 1
+    room, guide_in, wanted = transport_figures(brief)
+    per_bus = min(wanted, room) if wanted else room
+    if guide_in:
         buses = max(math.ceil(guests / per_bus), guides) if guests else 0
     else:
-        per_bus = seats
-        buses = math.ceil(guests / seats) if guests else 0
+        buses = math.ceil(guests / per_bus) if guests else 0
     split = []
     if buses:
         base, extra = divmod(guests, buses)
         split = [base + (1 if i < extra else 0) for i in range(buses)]
     suv = 1 if brief.get("guide_seating") == "suv" and guides else 0
     drivers = buses + suv
+    capacity = int(brief.get("vehicle_capacity") or 15)
+    riding = guests + buses + (min(guides, buses) if guide_in else 0)  # guests, drivers, guides in the vehicles
     return {"guests": guests, "doubles": doubles, "singles": singles, "guest_rooms": doubles + singles,
             "guide_rooms": guides, "driver_rooms": drivers if brief.get("drivers_included") else 0,
-            "vehicles": buses, "per_vehicle": split, "suv": suv, "drivers": drivers}
+            "vehicles": buses, "per_vehicle": split, "suv": suv, "drivers": drivers,
+            "max_guests_per_vehicle": per_bus, "vehicle_capacity": capacity, "total_capacity": buses * capacity,
+            "riding": riding, "guides_in_vehicles": min(guides, buses) if guide_in else 0}
 
 
 def brief_problems(brief):
@@ -181,6 +211,10 @@ def brief_problems(brief):
         g, d, s = int(p.get("guests") or 0), int(p.get("doubles") or 0), int(p.get("singles") or 0)
         if g and 2 * d + s < g:
             out.append(f"{p.get('label') or 'A party'}: {g} guests but rooms for only {2 * d + s}.")
+    room, guide_in, wanted = transport_figures(brief)
+    if wanted and wanted > room:
+        out.append(f"Max guests per vehicle is {wanted}, but a vehicle of {brief.get('vehicle_capacity')} seats has room "
+                   f"for only {room} guests after the driver{' and guide' if guide_in else ''}.")
     return out
 
 
@@ -620,7 +654,9 @@ BRIEF_TOOL = {"name": "report_brief", "description": "The Tour Brief read from t
                   "route_note": {"type": "string"}, "return_mode": {"type": "string", "enum": list(RETURN_MODES)},
                   "fly_home": {"type": "boolean"}, "tour_days": {"type": "integer"}, "guides": {"type": "integer"},
                   "guide_seating": {"type": "string", "enum": list(GUIDE_SEATING)},
-                  "vehicle_type": {"type": "string"}, "vehicle_seats": {"type": "integer"},
+                  "vehicle_type": {"type": "string"},
+                  "vehicle_capacity": {"type": "integer", "description": "Seats in each vehicle, counting the driver and guide"},
+                  "max_guests_per_vehicle": {"type": "integer"},
                   "drivers_included": {"type": "boolean"}, "interests": {"type": "string"}, "notes": {"type": "string"},
                   "parties": {"type": "array", "items": {"type": "object", "properties": {
                       "label": {"type": "string"}, "origin_city": {"type": "string"}, "origin_country": {"type": "string"},
@@ -694,6 +730,9 @@ def dismiss_questions(db, plan_id):
 
 def merge_brief(brief, found):
     """The parsed request on top of the current brief (non-empty values only)."""
+    found = dict(found)
+    if found.get("vehicle_seats") and not found.get("vehicle_capacity"):  # an older-style answer
+        found["vehicle_capacity"] = int(found["vehicle_seats"]) + 1
     b = dict(brief)
     for k, v in found.items():
         if k == "questions" or v in (None, "", []):
@@ -705,7 +744,7 @@ def merge_brief(brief, found):
             continue
         if k in DEFAULT_BRIEF:
             b[k] = v
-    return b
+    return normalise_transport(b)
 
 
 # ---- stage: route -------------------------------------------------------------------------------------------------
