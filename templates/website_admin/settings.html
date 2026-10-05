@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Website — Settings{% endblock %}
+{% block content %}
+{% set title = 'Settings & Groups' %}{% set subtitle = 'Your public website on your own domain: what it says, how it looks, and the policies customers see.' %}
+{% include "website_admin/_nav.html" %}
+<form method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+    <h2 class="h6">The site</h2>
+    <div class="row g-3">
+      <div class="col-md-4"><div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" role="switch" id="enabled" name="enabled" value="1" {{ 'checked' if s.enabled else '' }}>
+        <label class="form-check-label fw-semibold" for="enabled">Website is live</label></div>
+        <div class="form-text">Off: only your test addresses (below) can show your tours. On: your domain shows them too.</div></div>
+      <div class="col-md-4"><label class="form-label" for="website_domain">Domain</label>
+        <input class="form-control" id="website_domain" name="website_domain" value="{{ s.website_domain or '' }}" placeholder="www.mavietours.com">
+        <div class="form-text">Where your website runs (its own app in Coolify). Only this domain and your test addresses may use your tours' data.</div></div>
+      <div class="col-md-4"><label class="form-label" for="site_title">Site title</label>
+        <input class="form-control" id="site_title" name="site_title" value="{{ s.site_title or '' }}"></div>
+      <div class="col-12"><label class="form-label" for="banner_text">Banner (the strip under the header)</label>
+        <input class="form-control" id="banner_text" name="banner_text" value="{{ s.banner_text or '' }}" placeholder="Take a look at our newest Tours to Sikh Gurdwaras in Pakistan & Northern Pakistan"></div>
+      <div class="col-md-6"><label class="form-label" for="logo">Logo</label>
+        {% if s.has_logo %}<div class="mb-1"><img src="{{ url_for('website_admin.image', kind='logo', owner_id=0) }}" alt="Logo" style="max-height: 60px;"></div>{% endif %}
+        <input class="form-control" type="file" id="logo" name="logo" accept="image/*"></div>
+      <div class="col-md-6"><label class="form-label" for="hero">Background picture (home page)</label>
+        {% if s.has_hero %}<div class="mb-1"><img src="{{ url_for('website_admin.image', kind='hero', owner_id=0) }}" alt="Background" style="max-height: 60px;"></div>{% endif %}
+        <input class="form-control" type="file" id="hero" name="hero" accept="image/*"></div>
+      <div class="col-md-3"><label class="form-label" for="color_primary">Band colour</label>
+        <input class="form-control form-control-color w-100" type="color" id="color_primary" name="color_primary" value="{{ s.color_primary }}"></div>
+      <div class="col-md-3"><label class="form-label" for="color_accent">Accent colour</label>
+        <input class="form-control form-control-color w-100" type="color" id="color_accent" name="color_accent" value="{{ s.color_accent }}"></div>
+      <div class="col-12"><label class="form-label" for="about_text">About us</label>
+        <textarea class="form-control" id="about_text" name="about_text" rows="4">{{ s.about_text or '' }}</textarea></div>
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm border-0 mb-3" id="api"><div class="card-body">
+    <h2 class="h6">Connection to your website</h2>
+    <p class="small text-muted">Your website is its own project (for Ma Vie: the <code>ma-vie-tours-website</code> repository). It reads your published tours and sends enquiries, booking requests and chats to TMS with these two values, kept in its <code>js/config.js</code>. The key is not a secret: it only says whose published tours to show.</p>
+    <div class="row g-3">
+      <div class="col-md-7"><label class="form-label" for="api_base">TMS address for the website (TMS_API)</label>
+        <div class="input-group"><input class="form-control font-monospace" id="api_base" value="{{ api_base }}" readonly>
+          <button class="btn btn-outline-secondary" type="button" data-copy="api_base"><i class="bi bi-clipboard"></i> Copy</button></div></div>
+      <div class="col-md-5"><label class="form-label" for="site_key">Website key (SITE_KEY)</label>
+        <div class="input-group"><input class="form-control font-monospace" id="site_key" value="{{ site_key }}" readonly>
+          <button class="btn btn-outline-secondary" type="button" data-copy="site_key"><i class="bi bi-clipboard"></i> Copy</button></div></div>
+      <div class="col-md-7"><label class="form-label" for="test_origins">Test addresses (one per line)</label>
+        <textarea class="form-control font-monospace" id="test_origins" name="test_origins" rows="2" placeholder="http://localhost:8080">{{ s.test_origins or '' }}</textarea>
+        <div class="form-text">Web addresses that may show your tours before the site is live, e.g. <code>http://localhost:8080</code> on your PC or a test address in Coolify.</div></div>
+      <div class="col-md-5 d-flex align-items-end"><button class="btn btn-outline-danger btn-sm" type="submit" form="new-key-form"
+          onclick="return confirm('Make a new key? The website stops working until its js/config.js has the new key and it is redeployed.')"><i class="bi bi-arrow-repeat"></i> Make a new key</button></div>
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+    <h2 class="h6">Contact</h2>
+    <div class="row g-3">
+      <div class="col-md-4"><label class="form-label" for="contact_email">Email</label><input class="form-control" type="email" id="contact_email" name="contact_email" value="{{ s.contact_email or '' }}"></div>
+      <div class="col-md-4"><label class="form-label" for="contact_phone">Phone</label><input class="form-control" id="contact_phone" name="contact_phone" value="{{ s.contact_phone or '' }}"></div>
+      <div class="col-md-4"><label class="form-label" for="whatsapp">WhatsApp number</label><input class="form-control" id="whatsapp" name="whatsapp" value="{{ s.whatsapp or '' }}" placeholder="+1 555 123 4567"></div>
+      <div class="col-md-8"><label class="form-label" for="address">Address</label><input class="form-control" id="address" name="address" value="{{ s.address or '' }}"></div>
+      <div class="col-md-4"><label class="form-label" for="notify_email">Send new enquiries to</label><input class="form-control" type="email" id="notify_email" name="notify_email" value="{{ s.notify_email or '' }}">
+        <div class="form-text">Everything also lands in the Website Inbox.</div></div>
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+    <h2 class="h6">Booking, payments and policies</h2>
+    <p class="small text-muted">Shown on every tour page and with the booking form. A tour can have its own payment terms and cancellation policy (Tours on the website).</p>
+    <div class="row g-3">
+      <div class="col-md-3"><label class="form-label" for="default_deposit_pct">Deposit (% of the price)</label><input class="form-control" id="default_deposit_pct" name="default_deposit_pct" inputmode="numeric" value="{{ s.default_deposit_pct or '' }}" placeholder="{{ s.deposit_pct }}"></div>
+      <div class="col-md-3"><label class="form-label" for="default_deadline_days">Booking deadline (days before departure)</label><input class="form-control" id="default_deadline_days" name="default_deadline_days" inputmode="numeric" value="{{ s.default_deadline_days or '' }}" placeholder="{{ s.deadline_days }}"></div>
+      {% for k, label in [('payment_methods', 'Payment methods'), ('payment_terms', 'Payment terms'), ('deposit_policy', 'Deposits'),
+                          ('booking_terms', 'Booking terms'), ('cancellation_policy', 'Cancellation policy'), ('refund_policy', 'Refunds'),
+                          ('privacy_policy', 'Privacy (how you use customers\' details)')] %}
+      <div class="col-md-6"><label class="form-label" for="{{ k }}">{{ label }}</label><textarea class="form-control" id="{{ k }}" name="{{ k }}" rows="3">{{ s[k] or '' }}</textarea></div>
+      {% endfor %}
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+    <h2 class="h6">Chat</h2>
+    <div class="row g-3">
+      <div class="col-md-4"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" role="switch" id="chat_enabled" name="chat_enabled" value="1" {{ 'checked' if s.chat_enabled else '' }}>
+        <label class="form-check-label" for="chat_enabled">Show the chat window</label></div></div>
+      <div class="col-md-8"><label class="form-label" for="chat_welcome">Welcome message</label><input class="form-control" id="chat_welcome" name="chat_welcome" value="{{ s.chat_welcome or '' }}" placeholder="Hello! Ask me anything about our tours."></div>
+    </div>
+  </div></div>
+  <div class="d-flex justify-content-end mb-4"><button class="btn btn-primary" type="submit"><i class="bi bi-check2"></i> Save settings</button></div>
+</form>
+
+<div class="card shadow-sm border-0 mb-3" id="groups"><div class="card-body">
+  <h2 class="h6">Group boxes on the home page</h2>
+  <p class="small text-muted">Each Group with a published tour is a box with a picture and a caption (e.g. Sikh Gurdwaras, Northern Pakistan). Groups are kept in Table Maintenance → Package Groups.</p>
+  <div class="row g-3">
+    {% for gr in groups %}
+    <div class="col-md-6 col-xl-4">
+      <form method="post" action="{{ url_for('website_admin.save_group', group_id=gr.package_group_id) }}" enctype="multipart/form-data" class="border rounded p-2 h-100">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="d-flex gap-2">
+          <div style="width: 96px; height: 72px; background: #eee;" class="rounded overflow-hidden flex-shrink-0">
+            {% if gr.has_image %}<img src="{{ url_for('website_admin.image', kind='group', owner_id=gr.package_group_id) }}" alt="" style="width: 100%; height: 100%; object-fit: cover;">{% endif %}</div>
+          <div class="flex-grow-1"><strong>{{ gr.label }}</strong>{% if not gr.is_active %} <span class="badge bg-secondary">inactive</span>{% endif %}
+            <div class="small text-muted">{{ gr.published }} published tour{{ 's' if gr.published != 1 }}</div>
+            <div class="form-check small"><input class="form-check-input" type="checkbox" name="web_show" value="1" id="show{{ gr.package_group_id }}" {{ 'checked' if gr.web_show != 0 else '' }}><label class="form-check-label" for="show{{ gr.package_group_id }}">Show on the website</label></div></div>
+        </div>
+        <input class="form-control form-control-sm mt-2" name="web_caption" value="{{ gr.web_caption or '' }}" placeholder="Caption, e.g. Sikh Gurdwaras">
+        <input class="form-control form-control-sm mt-1" name="web_blurb" value="{{ gr.web_blurb or '' }}" placeholder="One line about these tours">
+        <div class="d-flex gap-1 mt-1"><input class="form-control form-control-sm" type="file" name="image" accept="image/*"><button class="btn btn-sm btn-outline-primary" type="submit">Save</button></div>
+      </form>
+    </div>
+    {% else %}<p class="small text-muted">No groups yet.</p>{% endfor %}
+  </div>
+</div></div>
+<form id="new-key-form" method="post" action="{{ url_for('website_admin.new_key') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+<script>document.querySelectorAll("[data-copy]").forEach(function (b) { b.addEventListener("click", function () {
+  var el = document.getElementById(b.getAttribute("data-copy")); el.select(); navigator.clipboard.writeText(el.value);
+  b.innerHTML = '<i class="bi bi-check2"></i> Copied'; }); });</script>
+{% endblock %}

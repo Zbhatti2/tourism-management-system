@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Website — Tours{% endblock %}
+{% block content %}
+{% set title = 'Tours on the website' %}{% set subtitle = 'Open a package to publish it, with its price, departures, photos and what customers need to know.' %}
+{% include "website_admin/_nav.html" %}
+<div class="card shadow-sm border-0"><div class="table-responsive">
+  <table class="table table-hover mb-0 align-middle">
+    <thead><tr><th>Tour</th><th>Group</th><th>On the website</th><th class="text-end">Price (US$)</th><th class="text-end">Upcoming departures</th><th class="text-end">Own photos</th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr onclick="window.location='{{ url_for('website_admin.tour', package_id=r.package_id) }}'" style="cursor:pointer;">
+        <td><code class="small">{{ r.package_code }}</code> {{ r.web_title }}</td>
+        <td>{{ r.group_label or '—' }}</td>
+        <td>{% if r.published %}<span class="badge bg-success-subtle text-success">Published</span> <span class="small text-muted">/tours/{{ r.slug }}</span>{% else %}<span class="badge bg-light text-muted border">Not published</span>{% endif %}</td>
+        <td class="text-end">{{ '{:,.0f}'.format(r.price_usd) if r.price_usd else '—' }}</td>
+        <td class="text-end">{{ r.upcoming }}</td>
+        <td class="text-end">{{ r.photos }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-5">No packages yet. Create them in Package Management.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% if not s.enabled %}<p class="small text-muted mt-3">The website is not live yet: switch it on in Settings & Groups when you're ready. Until then only your test addresses (Settings & Groups → Connection to your website) show your tours.</p>{% endif %}
+{% endblock %}

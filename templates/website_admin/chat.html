@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Website Chat — {{ c.visitor_name or 'Visitor' }}{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('website_admin.chats') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Website Chats</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div><div class="text-uppercase small text-muted fw-semibold">Website chat · started {{ c.created_at[:16] }} UTC{% if c.page %} on {{ c.page }}{% endif %}</div>
+    <h1 class="h3 mb-0">{{ c.visitor_name or 'Visitor' }}</h1>
+    {% if c.visitor_email %}<div class="small"><a href="mailto:{{ c.visitor_email }}">{{ c.visitor_email }}</a></div>{% endif %}</div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="badge fs-6 bg-light text-dark border" id="chat-status">{{ statuses[c.status] }}</span>
+    <form method="post" class="d-flex gap-1"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm btn-primary" name="action" value="take" title="The AI stops answering; you reply">Take over</button>
+      <button class="btn btn-sm btn-outline-secondary" name="action" value="to_ai">Hand back to the AI</button>
+      <button class="btn btn-sm btn-outline-danger" name="action" value="close">Close</button></form>
+  </div>
+</div>
+<div class="card shadow-sm border-0" style="max-width: 860px;">
+  <div class="card-body" id="chat-log" style="height: 52vh; overflow-y: auto; background: #f7f5f0;">
+    {% for m in msgs %}<div class="mb-2 d-flex {{ 'justify-content-start' if m.role == 'visitor' else 'justify-content-end' if m.role in ('ai', 'staff') else 'justify-content-center' }}" data-id="{{ m.message_id }}">
+      <div class="p-2 rounded {{ {'visitor': 'bg-white border', 'ai': 'bg-secondary-subtle', 'staff': 'bg-primary-subtle', 'system': 'text-muted fst-italic small'}[m.role] }}" style="max-width: 80%; white-space: pre-wrap;"><div class="small text-muted">{{ {'visitor': 'Visitor', 'ai': 'AI assistant', 'staff': 'Team', 'system': ''}[m.role] }} · {{ m.created_at[11:16] }}</div>{{ m.text }}</div></div>{% endfor %}
+  </div>
+  <form class="card-footer bg-white d-flex gap-2" id="reply-form" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="reply">
+    <textarea class="form-control" name="text" id="reply-text" rows="2" placeholder="Reply to the visitor (Enter sends; Shift+Enter for a new line)…"></textarea>
+    <button class="btn btn-primary" type="submit"><i class="bi bi-send"></i> Send</button>
+  </form>
+</div>
+<p class="small text-muted mt-2">Replying takes the chat over: the AI stops answering until you hand it back. The visitor sees your reply within a few seconds.</p>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var log = document.getElementById("chat-log"), form = document.getElementById("reply-form"), ta = document.getElementById("reply-text");
+  var POLL = {{ url_for('website_admin.chat_poll', chat_id=c.chat_id) | tojson }}, POST = {{ url_for('website_admin.chat_action', chat_id=c.chat_id) | tojson }};
+  var WHO = {visitor: "Visitor", ai: "AI assistant", staff: "Team", system: ""};
+  var CLS = {visitor: "bg-white border", ai: "bg-secondary-subtle", staff: "bg-primary-subtle", system: "text-muted fst-italic small"};
+  var JUST = {visitor: "justify-content-start", ai: "justify-content-end", staff: "justify-content-end", system: "justify-content-center"};
+  function lastId() { var n = log.querySelectorAll("[data-id]"); return n.length ? Number(n[n.length - 1].getAttribute("data-id")) : 0; }
+  log.scrollTop = log.scrollHeight;
+  function poll() {
+    fetch(POLL + "?after=" + lastId()).then(function (r) { return r.json(); }).then(function (d) {
+      document.getElementById("chat-status").textContent = d.status_label;
+      d.messages.forEach(function (m) {
+        var row = document.createElement("div"); row.className = "mb-2 d-flex " + JUST[m.role]; row.setAttribute("data-id", m.message_id);
+        var b = document.createElement("div"); b.className = "p-2 rounded " + CLS[m.role]; b.style.maxWidth = "80%"; b.style.whiteSpace = "pre-wrap";
+        var h = document.createElement("div"); h.className = "small text-muted"; h.textContent = WHO[m.role] + " · " + m.created_at.slice(11, 16);
+        b.appendChild(h); b.appendChild(document.createTextNode(m.text)); row.appendChild(b); log.appendChild(row);
+      });
+      if (d.messages.length) log.scrollTop = log.scrollHeight;
+    }).catch(function () {});
+  }
+  setInterval(function () { if (!document.hidden) poll(); }, 4000);
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    if (!ta.value.trim()) return;
+    var fd = new FormData(form); fd.append("ajax", "1");
+    fetch(POST, {method: "POST", body: fd}).then(function (r) { return r.json(); }).then(function () { ta.value = ""; poll(); });
+  });
+  ta.addEventListener("keydown", function (ev) { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); form.requestSubmit(); } });
+})();
+</script>
+{% endblock %}

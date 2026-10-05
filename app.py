@@ -63,6 +63,17 @@ MODULES = [
         {"key": "packages", "label": "Package Management", "icon": "map", "endpoint": "packages.list_packages"},
         {"key": "tour_prompts", "label": "Prompt List", "icon": "chat-square-text", "endpoint": "tour_prompts.index"},
     ]},
+    # The tenant's public website (website.py, blueprints/website_admin.py, blueprints/site.py).
+    {"key": "website_admin", "label": "Website", "icon": "globe2", "roles": ["TenantAdmin", "User"], "children": [
+        {"key": "website_admin", "label": "Settings & Groups", "icon": "sliders", "endpoint": "website_admin.settings",
+         "section": "settings"},
+        {"key": "website_admin", "label": "Tours on the website", "icon": "signpost", "endpoint": "website_admin.tours",
+         "section": "tours"},
+        {"key": "website_admin", "label": "Website Inbox", "icon": "inbox", "endpoint": "website_admin.inbox",
+         "section": "inbox"},
+        {"key": "website_admin", "label": "Website Chats", "icon": "chat-dots", "endpoint": "website_admin.chats",
+         "section": "chats"},
+    ]},
     # Foundations for Zeb's "First Agents" plan (Sept 2026) -- Agent Runs +
     # Human Review Queue. Single top-level entry (Review Queue is a tab on
     # the Agent Runs page, not a separate sidebar child -- see
@@ -199,6 +210,8 @@ def create_app():
     from blueprints.ai_agents import ai_agents_bp
     from blueprints.tour_planner import tour_planner_bp
     from blueprints.tour_tools import tour_prompts_bp, tour_todos_bp
+    from blueprints.website_admin import website_admin_bp
+    from blueprints.site_api import site_api_bp
     from blueprints.users import users_bp
     from blueprints.tenants_admin import tenants_admin_bp
     from blueprints.platform_lookups import platform_lookups_bp
@@ -232,6 +245,8 @@ def create_app():
     app.register_blueprint(tour_planner_bp, url_prefix="/tour-planner")
     app.register_blueprint(tour_todos_bp, url_prefix="/tour-planner/todos")
     app.register_blueprint(tour_prompts_bp, url_prefix="/tour-planner/prompts")
+    app.register_blueprint(website_admin_bp, url_prefix="/website")
+    app.register_blueprint(site_api_bp, url_prefix="/api/site/v1/<key>")  # the tenants' own websites call this
     app.register_blueprint(billing_ar_bp, url_prefix="/accounting/billing-ar")
     app.register_blueprint(purchasing_ap_bp, url_prefix="/accounting/purchasing-ap")
     app.register_blueprint(accounts_gl_bp, url_prefix="/accounting/accounts-gl")
