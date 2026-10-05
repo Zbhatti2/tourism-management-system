@@ -3357,3 +3357,145 @@ CREATE TABLE IF NOT EXISTS agent_prompts (
     is_deleted      INTEGER NOT NULL DEFAULT 0                -- kept so a deleted seed isn't put back
 );
 CREATE INDEX IF NOT EXISTS idx_agent_prompts_user ON agent_prompts(tenant_id, user_id, is_deleted);
+
+-- Tenant websites (website.py). package_groups gets web_show, web_caption, web_blurb,
+-- web_image_data, web_image_mime, web_slug (added by the 2026_10_website migration).
+
+CREATE TABLE IF NOT EXISTS tenant_websites (
+    tenant_id       INTEGER PRIMARY KEY REFERENCES tenants(tenant_id),
+    enabled         INTEGER NOT NULL DEFAULT 0,
+    site_title      TEXT,
+    banner_text     TEXT,                   -- the strip under the header, e.g. "Take a look at our newest tours..."
+    about_text      TEXT,
+    contact_email   TEXT,
+    contact_phone   TEXT,
+    whatsapp        TEXT,                   -- number for the WhatsApp button, digits with country code
+    address         TEXT,
+    color_primary   TEXT,                   -- dark band colour, e.g. #3b5556
+    color_accent    TEXT,                   -- buttons and headings, e.g. #e3b45b
+    logo_data       BLOB,
+    logo_mime       TEXT,
+    hero_data       BLOB,
+    hero_mime       TEXT,
+    payment_methods TEXT,
+    payment_terms   TEXT,
+    deposit_policy  TEXT,
+    booking_terms   TEXT,
+    cancellation_policy TEXT,
+    refund_policy   TEXT,
+    privacy_policy  TEXT,
+    default_deposit_pct INTEGER,            -- e.g. 25 (% of the tour price)
+    default_deadline_days INTEGER,          -- book at least N days before departure
+    notify_email    TEXT,                   -- who is told about new enquiries and bookings
+    chat_enabled    INTEGER NOT NULL DEFAULT 1,
+    chat_welcome    TEXT,
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS package_web (
+    package_id      INTEGER PRIMARY KEY REFERENCES packages(package_id),
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    published       INTEGER NOT NULL DEFAULT 0,
+    slug            TEXT,
+    title           TEXT,                   -- the name on the website (defaults to the package name)
+    tagline         TEXT,                   -- caption under the tour's photo, e.g. "10 Days - 15 Gurdwaras"
+    overview        TEXT,
+    highlights      TEXT,                   -- one per line: "TREKKING: We embark on..."
+    who_for         TEXT,
+    requirements    TEXT,                   -- fitness, passports, visas, vaccinations...
+    packing_list    TEXT,
+    difficulty      TEXT,
+    max_altitude_m  INTEGER,
+    lodging         TEXT,
+    group_size_min  INTEGER,
+    group_size_max  INTEGER,
+    price_usd       NUMERIC,                -- "from" price per person
+    single_supplement_usd NUMERIC,
+    deposit_usd     NUMERIC,                -- per person; or deposit_pct
+    deposit_pct     INTEGER,
+    deadline_days   INTEGER,                -- book at least N days before departure (else the site default)
+    included        TEXT,                   -- defaults to the package's inclusions
+    excluded        TEXT,
+    payment_terms   TEXT,                   -- this tour's own, else the site's
+    cancellation_policy TEXT,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (tenant_id, slug)
+);
+CREATE TABLE IF NOT EXISTS package_web_images (
+    image_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    package_id      INTEGER NOT NULL REFERENCES packages(package_id),
+    caption         TEXT,
+    file_data       BLOB NOT NULL,
+    mime_type       TEXT,
+    thumb_data      BLOB,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_package_web_images_pkg ON package_web_images(package_id);
+CREATE TABLE IF NOT EXISTS package_departures (
+    departure_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    package_id      INTEGER NOT NULL REFERENCES packages(package_id),
+    start_date      TEXT NOT NULL,
+    end_date        TEXT,
+    price_usd       NUMERIC,                -- per person; else the tour's price
+    seats           INTEGER,
+    seats_taken     INTEGER NOT NULL DEFAULT 0,
+    booking_deadline TEXT,                  -- else start_date - deadline days
+    status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','full','closed','cancelled')),
+    notes           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_package_departures_pkg ON package_departures(package_id, start_date);
+CREATE TABLE IF NOT EXISTS web_enquiries (
+    enquiry_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    kind            TEXT NOT NULL CHECK (kind IN ('enquiry','booking')),
+    package_id      INTEGER REFERENCES packages(package_id),
+    departure_id    INTEGER REFERENCES package_departures(departure_id),
+    name            TEXT NOT NULL,
+    email           TEXT NOT NULL,
+    phone           TEXT,
+    country         TEXT,
+    travellers      INTEGER,
+    doubles         INTEGER,
+    singles         INTEGER,
+    message         TEXT,
+    details         TEXT,                   -- JSON: traveller names, dietary / medical notes, how they heard of us
+    status          TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','in_progress','confirmed','closed','spam')),
+    staff_note      TEXT,
+    handled_by      INTEGER REFERENCES users(user_id),
+    handled_at      TEXT,
+    ip              TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_web_enquiries_tenant ON web_enquiries(tenant_id, status, created_at);
+
+-- The website's chat window (website_chat.py).
+
+CREATE TABLE IF NOT EXISTS web_chats (
+    chat_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    token           TEXT NOT NULL UNIQUE,       -- the visitor's key to their chat (kept in their browser)
+    status          TEXT NOT NULL DEFAULT 'ai' CHECK (status IN ('ai','waiting','human','closed')),
+    visitor_name    TEXT,
+    visitor_email   TEXT,
+    page            TEXT,                       -- where the chat started
+    ip              TEXT,
+    staff_user_id   INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    last_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    staff_seen_id   INTEGER NOT NULL DEFAULT 0  -- last message the team has seen
+);
+CREATE INDEX IF NOT EXISTS idx_web_chats_tenant ON web_chats(tenant_id, status, last_at);
+CREATE TABLE IF NOT EXISTS web_chat_messages (
+    message_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id         INTEGER NOT NULL REFERENCES web_chats(chat_id),
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    role            TEXT NOT NULL CHECK (role IN ('visitor','ai','staff','system')),
+    text            TEXT NOT NULL,
+    user_id         INTEGER REFERENCES users(user_id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_web_chat_messages_chat ON web_chat_messages(chat_id, message_id);

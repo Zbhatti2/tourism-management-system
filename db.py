@@ -900,6 +900,16 @@ def _migration_tour_tools(db):
     tour_tools.migrate(db)
 
 
+def _migration_website(db):
+    """Tenant websites (website.py): site settings, each package's website
+    page, its photos and departures, group images, the Website Inbox, and
+    the chat window (website_chat.py)."""
+    import website
+    import website_chat
+    website.migrate(db, _column_exists)
+    website_chat.migrate(db)
+
+
 def _migration_city_checkpoint_flag(db):
     """cities.is_checkpoint: a good overnight stop for tour groups (set by
     the platform, or proposed by a tenant's Tour Planner)."""
@@ -944,6 +954,7 @@ MIGRATIONS = [
     ("2026_10_reference_room_rate", _migration_reference_room_rate),
     ("2026_10_package_groups", _migration_package_groups),
     ("2026_10_tour_tools", _migration_tour_tools),
+    ("2026_10_website", _migration_website),
 ]
 
 

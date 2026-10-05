@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Website Inbox{% endblock %}
+{% block content %}
+{% set title = 'Website Inbox' %}{% set subtitle = 'Enquiries and booking requests sent from your website.' %}{% set preview = none %}
+{% include "website_admin/_nav.html" %}
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto flex-grow-1"><input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search name, email or message…"></div>
+  <div class="col-auto"><select class="form-select" name="kind"><option value="">Enquiries and bookings</option>
+    <option value="enquiry" {{ 'selected' if kind == 'enquiry' else '' }}>Enquiries</option><option value="booking" {{ 'selected' if kind == 'booking' else '' }}>Booking requests</option></select></div>
+  <div class="col-auto"><select class="form-select" name="status"><option value="open" {{ 'selected' if status == 'open' else '' }}>New and in progress</option>
+    {% for k, l in statuses.items() %}<option value="{{ k }}" {{ 'selected' if status == k else '' }}>{{ l }}</option>{% endfor %}<option value="all" {{ 'selected' if status == 'all' else '' }}>All</option></select></div>
+  <div class="col-auto"><button class="btn btn-outline-secondary" type="submit">Search</button></div>
+</form>
+<div class="card shadow-sm border-0"><div class="table-responsive">
+  <table class="table table-hover mb-0 align-middle">
+    <thead><tr><th>Received</th><th>Type</th><th>From</th><th>Tour / departure</th><th class="text-end">Travellers</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for e in rows %}
+      <tr onclick="window.location='{{ url_for('website_admin.enquiry', enquiry_id=e.enquiry_id) }}'" style="cursor:pointer;" class="{{ 'fw-semibold' if e.status == 'new' else '' }}">
+        <td class="small">{{ e.created_at[:16] }}</td>
+        <td>{% if e.kind == 'booking' %}<span class="badge bg-primary-subtle text-primary">Booking</span>{% else %}<span class="badge bg-light text-dark border">Enquiry</span>{% endif %}</td>
+        <td>{{ e.name }}<div class="small text-muted">{{ e.email }}</div></td>
+        <td>{{ e.tour or '—' }}{% if e.start_date %}<div class="small text-muted">departs {{ e.start_date }}</div>{% endif %}</td>
+        <td class="text-end">{{ e.travellers or '' }}</td>
+        <td><span class="badge {{ {'new': 'bg-warning text-dark', 'in_progress': 'bg-info-subtle text-info-emphasis', 'confirmed': 'bg-success-subtle text-success'}.get(e.status, 'bg-light text-muted border') }}">{{ statuses[e.status] }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-5">Nothing here.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% endblock %}

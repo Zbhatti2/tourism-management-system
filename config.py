@@ -103,6 +103,15 @@ class Config:
     # Key for the platform-level TMS Agents (platform_agents.py), so their cost
     # is billed separately from tenants' agents. Unset = use ANTHROPIC_API_KEY.
     PLATFORM_ANTHROPIC_API_KEY = os.environ.get("PLATFORM_ANTHROPIC_API_KEY")
+    # Email for the tenant websites (mailer.py): new enquiries / bookings are
+    # sent to the tenant and acknowledged to the customer. All unset = no
+    # email; everything still lands in the Website Inbox. Set in Coolify.
+    MAIL_SERVER = os.environ.get("MAIL_SERVER")
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", "587") or 587)
+    MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
+    MAIL_FROM = os.environ.get("MAIL_FROM")
+    MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "false").strip().lower() in ("1", "true", "yes")
 
     # Whether the session cookie requires HTTPS. Must stay False for local
     # use (Start_TMS.bat serves plain http://127.0.0.1, where a Secure cookie

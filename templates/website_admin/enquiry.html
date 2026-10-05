@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Website {{ e.kind|capitalize }} — {{ e.name }}{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('website_admin.inbox') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Website Inbox</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div><div class="text-uppercase small text-muted fw-semibold">Website {{ 'booking request' if e.kind == 'booking' else 'enquiry' }} · {{ e.created_at[:16] }} UTC</div>
+    <h1 class="h3 mb-0">{{ e.name }}</h1>
+    <div class="small"><a href="mailto:{{ e.email }}">{{ e.email }}</a>{% if e.phone %} · {{ e.phone }}{% endif %}{% if e.country %} · {{ e.country }}{% endif %}</div></div>
+  <span class="badge fs-6 bg-light text-dark border">{{ statuses[e.status] }}</span>
+</div>
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+      <dl class="row mb-0 small">
+        <dt class="col-sm-4">Tour</dt><dd class="col-sm-8">{{ e.tour or '—' }}{% if e.package_code %} <span class="text-muted">({{ e.package_code }})</span>{% endif %}</dd>
+        {% if e.start_date %}<dt class="col-sm-4">Departure</dt><dd class="col-sm-8">{{ e.start_date }}{% if e.end_date %} – {{ e.end_date }}{% endif %}</dd>{% endif %}
+        {% if e.travellers %}<dt class="col-sm-4">Travellers</dt><dd class="col-sm-8">{{ e.travellers }}{% if e.doubles or e.singles %} · {{ e.doubles or 0 }} double, {{ e.singles or 0 }} single room{{ 's' if (e.singles or 0) != 1 }}{% endif %}</dd>{% endif %}
+        {% for k, label in [('traveller_names', 'Traveller names'), ('travel_month', 'When'), ('dietary', 'Dietary needs'), ('medical', 'Medical / mobility'), ('preferred_contact', 'Contact by'), ('heard_from', 'Heard of us from')] %}
+        {% if details.get(k) %}<dt class="col-sm-4">{{ label }}</dt><dd class="col-sm-8" style="white-space: pre-line;">{{ details[k] }}</dd>{% endif %}{% endfor %}
+      </dl>
+      {% if e.message %}<hr><div style="white-space: pre-line;">{{ e.message }}</div>{% endif %}
+    </div></div>
+  </div>
+  <div class="col-lg-5">
+    <form method="post" class="card shadow-sm border-0"><div class="card-body">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="form-label" for="status">Status</label>
+      <select class="form-select mb-2" id="status" name="status">{% for k, l in statuses.items() %}<option value="{{ k }}" {{ 'selected' if e.status == k else '' }}>{{ l }}</option>{% endfor %}</select>
+      <label class="form-label" for="staff_note">Notes</label>
+      <textarea class="form-control mb-2" id="staff_note" name="staff_note" rows="5">{{ e.staff_note or '' }}</textarea>
+      {% if e.kind == 'booking' %}<div class="form-text mb-2">Marking a booking Confirmed adds its travellers to the departure's seats taken.</div>{% endif %}
+      <div class="d-flex justify-content-between align-items-center"><span class="small text-muted">{% if e.handler %}Last handled by {{ e.handler }}, {{ e.handled_at[:16] }}{% endif %}</span>
+        <button class="btn btn-primary" type="submit">Save</button></div>
+    </div></form>
+  </div>
+</div>
+{% endblock %}

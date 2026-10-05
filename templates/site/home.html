@@ -1,0 +1,95 @@
+{% extends "site/base.html" %}
+{% block content %}
+<section class="site-stage" style="{% if site.has_hero %}background-image: url('{{ img('hero', 0) }}');{% endif %}">
+  <div class="container">
+    {% if not data.groups %}
+    <div class="stage-title py-5 text-center"><h1>Our tours are coming soon.</h1><p class="mt-2">Write to us in the meantime: <a class="text-white" href="{{ surl('contact') }}">Contact us</a>.</p></div>
+    {% else %}
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+      <div class="stage-title"><h1 id="stage-heading">Choose a journey</h1></div>
+      <div class="stage-crumbs small" id="stage-crumbs"></div>
+    </div>
+
+    {# 1. the Group boxes #}
+    <div id="view-groups" class="row g-4 justify-content-center">
+      {% for gr in data.groups %}
+      <div class="col-sm-6 col-lg-4">
+        <a class="group-box" href="{{ surl('home', group=gr.slug) }}" data-group="{{ gr.id }}">
+          {% if gr.image %}<img src="{{ gr.image }}" alt="{{ gr.caption }}">{% else %}<div class="no-image"><i class="bi bi-image"></i></div>{% endif %}
+          <div class="cap"><h3>{{ gr.caption }}</h3><small>{{ gr.blurb or '' }}</small></div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# 2. a Group's tours, in a slider #}
+    <div id="view-tours" class="d-none">
+      <div class="slider">
+        <button class="slider-btn prev" type="button" aria-label="Previous"><i class="bi bi-chevron-left"></i></button>
+        <div class="slider-track" id="tour-track"></div>
+        <button class="slider-btn next" type="button" aria-label="Next"><i class="bi bi-chevron-right"></i></button>
+      </div>
+    </div>
+
+    {# 3. a tour's photos, in a slider #}
+    <div id="view-photos" class="d-none">
+      <div class="photo-stage">
+        <img class="main" id="photo-main" alt="">
+        <button class="nav-btn prev" type="button" aria-label="Previous photo"><i class="bi bi-chevron-left"></i></button>
+        <button class="nav-btn next" type="button" aria-label="Next photo"><i class="bi bi-chevron-right"></i></button>
+        <div class="caption"><h2 id="photo-title"></h2><div id="photo-caption" class="small"></div></div>
+        <a class="btn btn-accent btn-lg details-btn" id="details-btn" href="#">Tour details <i class="bi bi-arrow-right"></i></a>
+      </div>
+      <div class="thumbs" id="photo-thumbs"></div>
+    </div>
+
+    {# the other groups, small, to switch #}
+    <div id="group-strip" class="row g-3 mt-3 d-none group-strip">
+      {% for gr in data.groups %}
+      <div class="col-6 col-md-3 col-lg-2"><a class="group-box" href="{{ surl('home', group=gr.slug) }}" data-group="{{ gr.id }}">
+        {% if gr.image %}<img src="{{ gr.image }}" alt="{{ gr.caption }}">{% else %}<div class="no-image"><i class="bi bi-image"></i></div>{% endif %}
+        <div class="cap"><h3>{{ gr.caption }}</h3></div></a></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{# the bottom bar: the chosen tour's schedule, duration, group size, price #}
+<div class="tour-bar d-none" id="tour-bar">
+  <div class="container d-flex flex-wrap align-items-center gap-3 justify-content-between">
+    <select class="form-select form-select-lg" id="bar-departures" aria-label="Scheduled departures"></select>
+    <div class="fact"><i class="bi bi-calendar-event"></i>Duration: <span id="bar-duration"></span></div>
+    <div class="fact"><i class="bi bi-person-walking"></i>Group: <span id="bar-group"></span></div>
+    <div class="fact"><i class="bi bi-currency-dollar"></i>Price: <span id="bar-price"></span> <span class="muted">per person</span></div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-light btn-lg" id="bar-details" href="#">Details</a>
+      <a class="btn btn-accent btn-lg" id="bar-contact" href="{{ surl('contact') }}">Contact us</a>
+    </div>
+  </div>
+</div>
+
+<section class="site-section soft">
+  <div class="container">
+    <div class="row g-4 align-items-center">
+      <div class="col-lg-7">
+        <h2 class="section-title">Travel with {{ site.site_title }}</h2>
+        <p class="mb-0" style="white-space: pre-line;">{{ site.about_text or 'Small groups, local guides, and journeys planned with care from the first enquiry to the flight home.' }}</p>
+      </div>
+      <div class="col-lg-5">
+        <div class="form-card">
+          <h3 class="h5">Questions about a tour?</h3>
+          <p class="small mb-2">Ask in the chat, or send us a message and we'll reply within one business day.</p>
+          <a class="btn btn-accent" href="{{ surl('contact') }}"><i class="bi bi-envelope"></i> Send an enquiry</a>
+          <a class="btn btn-outline-accent ms-1" href="{{ surl('policies') }}">Booking &amp; policies</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>window.SITE = {{ data | tojson }}; window.SITE_PICK = {group: {{ pick_group | tojson }}, tour: {{ pick_tour | tojson }}};
+window.SITE_URLS = {home: {{ surl('home') | tojson }}, contact: {{ surl('contact') | tojson }}};</script>
+<script src="{{ url_for('static', filename='site/home.js') }}"></script>
+{% endblock %}

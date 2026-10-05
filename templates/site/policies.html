@@ -1,0 +1,16 @@
+{% extends "site/base.html" %}
+{% block title %}Booking & Policies — {{ site.site_title }}{% endblock %}
+{% block content %}
+<section class="site-section policy"><div class="container" style="max-width: 860px;">
+  <h1 class="section-title">Booking &amp; Policies</h1>
+  <p class="text-muted">A tour can have its own terms; they are shown on its page and take precedence.</p>
+  <h3>How to book</h3><p>Choose a departure on the tour's page and send the booking request. We confirm availability and send you the deposit details; your place is confirmed when the deposit is received. Bookings close {{ site.deadline_days }} days before departure unless a date says otherwise.</p>
+  <h3>Deposits</h3><p style="white-space: pre-line;">{{ site.deposit_policy }}</p>
+  <h3>Payment terms</h3><p style="white-space: pre-line;">{{ site.payment_terms }}</p>
+  <h3>Payment methods</h3><p style="white-space: pre-line;">{{ site.payment_methods }}</p>
+  <h3>Booking terms</h3><p style="white-space: pre-line;">{{ site.booking_terms }}</p>
+  <h3>Cancellation</h3><p style="white-space: pre-line;">{{ site.cancellation_policy }}</p>
+  <h3>Refunds</h3><p style="white-space: pre-line;">{{ site.refund_policy }}</p>
+  <h3 id="privacy">Privacy</h3><p style="white-space: pre-line;">{{ site.privacy_policy or 'We use the details you send only to answer you and to arrange your travel. We never sell them, and you can ask us to delete them at any time.' }}</p>
+</div></section>
+{% endblock %}

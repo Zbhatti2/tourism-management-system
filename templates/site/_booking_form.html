@@ -1,0 +1,35 @@
+{# The booking request. Needs: t (tour detail), form, book_departure. #}
+{% set f = form or {} %}
+{% set bookable = t.all_departures | selectattr('bookable') | list %}
+<form method="post" action="{{ surl('book') }}" class="form-card" id="booking-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="tour" value="{{ t.slug }}">
+  <input class="hp" type="text" name="website_url" tabindex="-1" autocomplete="off" aria-hidden="true">
+  {% if not bookable %}
+  <p class="mb-0">There are no departures open for booking just now. <a href="#enquire">Ask us</a> about the next dates or a private departure.</p>
+  {% else %}
+  <div class="row g-2">
+    <div class="col-md-6"><label class="form-label small" for="b-dep">Departure *</label>
+      <select class="form-select" id="b-dep" name="departure_id" required>
+        <option value="">Choose a date</option>
+        {% for d in bookable %}<option value="{{ d.departure_id }}" {{ 'selected' if (f.get('departure_id')|string == d.departure_id|string) or (book_departure == d.departure_id) else '' }}>{{ d.start_date }}{% if d.end_date %} – {{ d.end_date }}{% endif %} · {{ money(d.price) }}{% if d.seats_left is not none %} · {{ d.seats_left }} place{{ 's' if d.seats_left != 1 }} left{% endif %}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3"><label class="form-label small" for="b-travellers">Travellers *</label><input class="form-control" id="b-travellers" name="travellers" inputmode="numeric" required value="{{ f.get('travellers', '') }}"></div>
+    <div class="col-md-3"><label class="form-label small">Rooms</label><div class="input-group">
+      <input class="form-control" name="doubles" inputmode="numeric" placeholder="Doubles" aria-label="Double rooms" value="{{ f.get('doubles', '') }}">
+      <input class="form-control" name="singles" inputmode="numeric" placeholder="Singles" aria-label="Single rooms" value="{{ f.get('singles', '') }}"></div></div>
+    <div class="col-md-6"><label class="form-label small" for="b-name">Lead traveller's name *</label><input class="form-control" id="b-name" name="name" required value="{{ f.get('name', '') }}"></div>
+    <div class="col-md-6"><label class="form-label small" for="b-email">Email *</label><input class="form-control" type="email" id="b-email" name="email" required value="{{ f.get('email', '') }}"></div>
+    <div class="col-md-6"><label class="form-label small" for="b-phone">Phone / WhatsApp</label><input class="form-control" id="b-phone" name="phone" value="{{ f.get('phone', '') }}"></div>
+    <div class="col-md-6"><label class="form-label small" for="b-country">Country of residence</label><input class="form-control" id="b-country" name="country" value="{{ f.get('country', '') }}"></div>
+    <div class="col-12"><label class="form-label small" for="b-names">Names of all travellers (as in their passports)</label><textarea class="form-control" id="b-names" name="traveller_names" rows="2">{{ f.get('traveller_names', '') }}</textarea></div>
+    <div class="col-md-6"><label class="form-label small" for="b-diet">Dietary needs</label><input class="form-control" id="b-diet" name="dietary" value="{{ f.get('dietary', '') }}"></div>
+    <div class="col-md-6"><label class="form-label small" for="b-med">Medical or mobility needs</label><input class="form-control" id="b-med" name="medical" value="{{ f.get('medical', '') }}"></div>
+    <div class="col-12"><label class="form-label small" for="b-msg">Anything else</label><textarea class="form-control" id="b-msg" name="message" rows="2">{{ f.get('message', '') }}</textarea></div>
+    <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="b-terms" name="accept_terms" value="1" required {{ 'checked' if f.get('accept_terms') else '' }}>
+      <label class="form-check-label small" for="b-terms">I have read the <a href="#policies">payment terms, deposit, cancellation and refund policies</a>.</label></div></div>
+  </div>
+  <div class="small text-muted mt-2">This is a booking request: there is no payment now. We'll confirm availability and send the deposit details ({{ t.deposit }}).</div>
+  <button class="btn btn-accent btn-lg mt-3" type="submit"><i class="bi bi-calendar-check"></i> Request this booking</button>
+  {% endif %}
+</form>

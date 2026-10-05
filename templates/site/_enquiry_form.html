@@ -1,0 +1,22 @@
+{# The enquiry form. Needs: form (what was typed, or none), tour slug (optional), tours (optional list to pick from). #}
+{% set f = form or {} %}
+<form method="post" action="{{ surl('enquire') }}" class="form-card" id="enquire">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input class="hp" type="text" name="website_url" tabindex="-1" autocomplete="off" aria-hidden="true">
+  <h3 class="h5 mb-3">Send us a question</h3>
+  <div class="row g-2">
+    <div class="col-md-6"><label class="form-label small" for="q-name">Your name *</label><input class="form-control" id="q-name" name="name" required maxlength="150" value="{{ f.get('name', '') }}"></div>
+    <div class="col-md-6"><label class="form-label small" for="q-email">Email *</label><input class="form-control" type="email" id="q-email" name="email" required value="{{ f.get('email', '') }}"></div>
+    <div class="col-md-6"><label class="form-label small" for="q-phone">Phone / WhatsApp</label><input class="form-control" id="q-phone" name="phone" value="{{ f.get('phone', '') }}"></div>
+    <div class="col-md-6"><label class="form-label small" for="q-country">Country</label><input class="form-control" id="q-country" name="country" value="{{ f.get('country', '') }}"></div>
+    {% if tours is defined and tours %}
+    <div class="col-md-8"><label class="form-label small" for="q-tour">Tour</label>
+      <select class="form-select" id="q-tour" name="tour"><option value="">— General question —</option>
+        {% for t in tours %}<option value="{{ t.slug }}" {{ 'selected' if (f.get('tour') or pick) == t.slug else '' }}>{{ t.title }}</option>{% endfor %}</select></div>
+    {% elif tour_slug %}<input type="hidden" name="tour" value="{{ tour_slug }}">{% endif %}
+    <div class="col-md-4"><label class="form-label small" for="q-travellers">Travellers</label><input class="form-control" id="q-travellers" name="travellers" inputmode="numeric" value="{{ f.get('travellers', '') }}"></div>
+    <div class="col-12"><label class="form-label small" for="q-message">Your question *</label><textarea class="form-control" id="q-message" name="message" rows="4" required>{{ f.get('message', '') }}</textarea></div>
+  </div>
+  <button class="btn btn-accent mt-3" type="submit"><i class="bi bi-send"></i> Send</button>
+  <span class="small text-muted ms-2">We reply within one business day.</span>
+</form>

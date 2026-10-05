@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Website — {{ p.package_name }}{% endblock %}
+{% block content %}
+{% macro v(k) %}{{ form.get(k) if form is not none and form.get(k) is not none else (w.get(k) if w.get(k) is not none else '') }}{% endmacro %}
+<nav class="mb-2"><a href="{{ url_for('website_admin.tours') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Tours on the website</a>
+  · <a href="{{ url_for('packages.view_package', package_id=p.package_id) }}" class="text-decoration-none small">Package {{ p.package_code }}</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-uppercase small text-muted fw-semibold">Website</div>
+    <h1 class="h3 mb-0">{{ w.title or p.package_name }}</h1>
+    <div class="small text-muted">{{ p.group_label or 'No group' }} · {{ p.duration_days or '?' }} days · {% if w.published %}<span class="text-success">published</span>{% else %}not published{% endif %}</div>
+  </div>
+  {% if w.published %}<a class="btn btn-outline-primary" href="{{ preview }}tours/{{ w.slug }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> View on the website</a>{% endif %}
+</div>
+{% if not p.package_group_id %}<div class="alert alert-warning small">This package has no Group, so it won't appear under any Group box on the home page. Set its Group in Package Management.</div>{% endif %}
+
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-3"><div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" role="switch" id="published" name="published" value="1" {{ 'checked' if (form.get('published') if form is not none else w.published) else '' }}>
+        <label class="form-check-label fw-semibold" for="published">Publish on the website</label></div></div>
+      <div class="col-md-5"><label class="form-label" for="title">Title on the website</label><input class="form-control" id="title" name="title" value="{{ v('title') }}" placeholder="{{ p.package_name }}"></div>
+      <div class="col-md-4"><label class="form-label" for="slug">Web address</label><div class="input-group"><span class="input-group-text small">/tours/</span><input class="form-control" id="slug" name="slug" value="{{ v('slug') }}" placeholder="made from the title"></div></div>
+      <div class="col-md-8"><label class="form-label" for="tagline">Caption under the photo</label><input class="form-control" id="tagline" name="tagline" value="{{ v('tagline') }}" placeholder="10 Days - 15 Gurdwaras"></div>
+      <div class="col-md-4"><label class="form-label" for="sort_order">Order in its group</label><input class="form-control" id="sort_order" name="sort_order" inputmode="numeric" value="{{ v('sort_order') }}"></div>
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+    <h2 class="h6">Price and booking (US$)</h2>
+    <div class="row g-3">
+      <div class="col-md-3"><label class="form-label" for="price_usd">Price per person <span class="text-danger">*</span></label><input class="form-control" id="price_usd" name="price_usd" inputmode="decimal" value="{{ v('price_usd') }}"></div>
+      <div class="col-md-3"><label class="form-label" for="single_supplement_usd">Single room supplement</label><input class="form-control" id="single_supplement_usd" name="single_supplement_usd" inputmode="decimal" value="{{ v('single_supplement_usd') }}"></div>
+      <div class="col-md-2"><label class="form-label" for="deposit_usd">Deposit (US$)</label><input class="form-control" id="deposit_usd" name="deposit_usd" inputmode="decimal" value="{{ v('deposit_usd') }}"></div>
+      <div class="col-md-2"><label class="form-label" for="deposit_pct">or Deposit %</label><input class="form-control" id="deposit_pct" name="deposit_pct" inputmode="numeric" value="{{ v('deposit_pct') }}" placeholder="{{ s.deposit_pct }}"></div>
+      <div class="col-md-2"><label class="form-label" for="deadline_days">Book by (days before)</label><input class="form-control" id="deadline_days" name="deadline_days" inputmode="numeric" value="{{ v('deadline_days') }}" placeholder="{{ s.deadline_days }}"></div>
+      <div class="col-md-2"><label class="form-label" for="group_size_min">Group size from</label><input class="form-control" id="group_size_min" name="group_size_min" inputmode="numeric" value="{{ v('group_size_min') }}" placeholder="{{ p.min_pax or '' }}"></div>
+      <div class="col-md-2"><label class="form-label" for="group_size_max">to</label><input class="form-control" id="group_size_max" name="group_size_max" inputmode="numeric" value="{{ v('group_size_max') }}" placeholder="{{ p.max_pax or '' }}"></div>
+      <div class="col-md-4"><label class="form-label" for="payment_terms">This tour's payment terms <span class="text-muted small">(else the site's)</span></label><textarea class="form-control" id="payment_terms" name="payment_terms" rows="2">{{ v('payment_terms') }}</textarea></div>
+      <div class="col-md-4"><label class="form-label" for="cancellation_policy">This tour's cancellation policy <span class="text-muted small">(else the site's)</span></label><textarea class="form-control" id="cancellation_policy" name="cancellation_policy" rows="2">{{ v('cancellation_policy') }}</textarea></div>
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+    <h2 class="h6">About the tour</h2>
+    <div class="row g-3">
+      <div class="col-md-3"><label class="form-label" for="difficulty">Difficulty</label><input class="form-control" id="difficulty" name="difficulty" value="{{ v('difficulty') }}" placeholder="{{ p.difficulty_rating or 'e.g. Easy, Intermediate' }}"></div>
+      <div class="col-md-3"><label class="form-label" for="max_altitude_m">Max altitude (m)</label><input class="form-control" id="max_altitude_m" name="max_altitude_m" inputmode="numeric" value="{{ v('max_altitude_m') }}"></div>
+      <div class="col-md-6"><label class="form-label" for="lodging">Lodging</label><input class="form-control" id="lodging" name="lodging" value="{{ v('lodging') }}" placeholder="e.g. 4-star hotels, a homestay, camping"></div>
+      <div class="col-12"><label class="form-label" for="overview">Overview</label><textarea class="form-control" id="overview" name="overview" rows="6" placeholder="{{ p.description or '' }}">{{ v('overview') }}</textarea></div>
+      <div class="col-md-6"><label class="form-label" for="highlights">Highlights <span class="text-muted small">(one per line; "HEADING: text" works)</span></label><textarea class="form-control" id="highlights" name="highlights" rows="5">{{ v('highlights') }}</textarea></div>
+      <div class="col-md-6"><label class="form-label" for="who_for">Who this trip is for</label><textarea class="form-control" id="who_for" name="who_for" rows="5">{{ v('who_for') }}</textarea></div>
+      <div class="col-md-6"><label class="form-label" for="requirements">Requirements <span class="text-muted small">(passport, visa, fitness, insurance…)</span></label><textarea class="form-control" id="requirements" name="requirements" rows="4">{{ v('requirements') }}</textarea></div>
+      <div class="col-md-6"><label class="form-label" for="packing_list">Packing list <span class="text-muted small">(one per line)</span></label><textarea class="form-control" id="packing_list" name="packing_list" rows="4">{{ v('packing_list') }}</textarea></div>
+      <div class="col-md-6"><label class="form-label" for="included">What's included <span class="text-muted small">(one per line)</span></label><textarea class="form-control" id="included" name="included" rows="4" placeholder="{{ p.inclusions or '' }}">{{ v('included') }}</textarea></div>
+      <div class="col-md-6"><label class="form-label" for="excluded">Not included</label><textarea class="form-control" id="excluded" name="excluded" rows="4" placeholder="{{ p.exclusions or '' }}">{{ v('excluded') }}</textarea></div>
+    </div>
+    <p class="small text-muted mt-2 mb-0">The itinerary, hotels, restaurants and Points of Interest come from the package itself (its days, visits and components), with their photos and descriptions. Costs and supplier contacts are never shown.</p>
+  </div></div>
+  <div class="d-flex justify-content-end mb-4"><button class="btn btn-primary" type="submit"><i class="bi bi-check2"></i> Save</button></div>
+</form>
+
+<div class="card shadow-sm border-0 mb-3" id="departures"><div class="card-body">
+  <h2 class="h6">Departures (the schedule)</h2>
+  {% for d in departures %}<form id="dep{{ d.departure_id }}" method="post" action="{{ url_for('website_admin.departure', package_id=p.package_id, departure_id=d.departure_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>{% endfor %}
+  <form id="depnew" method="post" action="{{ url_for('website_admin.departure', package_id=p.package_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+  <div class="table-responsive"><table class="table table-sm align-middle mb-2">
+    <thead class="small text-muted"><tr><th>Start</th><th>End</th><th>Price US$</th><th>Seats</th><th>Taken</th><th>Book by</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+      {% for d in departures %}{% set f = 'dep' ~ d.departure_id %}
+      <tr>
+        <td><input form="{{ f }}" class="form-control form-control-sm" type="date" name="start_date" value="{{ d.start_date }}"></td>
+        <td><input form="{{ f }}" class="form-control form-control-sm" type="date" name="end_date" value="{{ d.end_date or '' }}"></td>
+        <td><input form="{{ f }}" class="form-control form-control-sm" name="price_usd" value="{{ d.price_usd or '' }}" placeholder="{{ w.price_usd or '' }}" style="width: 90px;"></td>
+        <td><input form="{{ f }}" class="form-control form-control-sm" name="seats" value="{{ d.seats or '' }}" style="width: 70px;"></td>
+        <td><input form="{{ f }}" class="form-control form-control-sm" name="seats_taken" value="{{ d.seats_taken or 0 }}" style="width: 70px;"></td>
+        <td><input form="{{ f }}" class="form-control form-control-sm" type="date" name="booking_deadline" value="{{ d.booking_deadline or '' }}" title="Empty: {{ d.deadline }}"></td>
+        <td><select form="{{ f }}" class="form-select form-select-sm" name="status">{% for k, l in statuses.items() %}<option value="{{ k }}" {{ 'selected' if d.status == k else '' }}>{{ l }}</option>{% endfor %}</select>
+          {% if d.status == 'open' and not d.bookable %}<div class="small text-muted">{{ d.label }}</div>{% endif %}</td>
+        <td><input form="{{ f }}" class="form-control form-control-sm" name="notes" value="{{ d.notes or '' }}"></td>
+        <td class="text-nowrap"><button form="{{ f }}" class="btn btn-sm btn-outline-primary" name="action" value="save">Save</button>
+          <button form="{{ f }}" class="btn btn-sm btn-outline-danger" name="action" value="delete" title="Delete"><i class="bi bi-trash"></i></button></td>
+      </tr>
+      {% endfor %}
+      <tr class="table-light">
+        <td><input form="depnew" class="form-control form-control-sm" type="date" name="start_date" required></td>
+        <td><input form="depnew" class="form-control form-control-sm" type="date" name="end_date"></td>
+        <td><input form="depnew" class="form-control form-control-sm" name="price_usd" placeholder="{{ w.price_usd or '' }}" style="width: 90px;"></td>
+        <td><input form="depnew" class="form-control form-control-sm" name="seats" style="width: 70px;"></td>
+        <td></td>
+        <td><input form="depnew" class="form-control form-control-sm" type="date" name="booking_deadline"></td>
+        <td></td><td><input form="depnew" class="form-control form-control-sm" name="notes"></td>
+        <td><button form="depnew" class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-lg"></i> Add</button></td>
+      </tr>
+    </tbody>
+  </table></div>
+  <div class="small text-muted">An empty price uses the tour's price; an empty "Book by" is {{ w.deadline_days or s.deadline_days }} days before the start; an empty end date follows from the tour's length. A confirmed booking in the Website Inbox adds its travellers to "Taken".</div>
+</div></div>
+
+<div class="card shadow-sm border-0 mb-3" id="photos"><div class="card-body">
+  <h2 class="h6">Photos</h2>
+  <p class="small text-muted">The tour's own photos come first in its picture slider; then up to {{ auto_images|length }} photos from its Points of Interest and hotels follow by themselves.</p>
+  {% if images %}
+  <form method="post" action="{{ url_for('website_admin.tour_images', package_id=p.package_id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="caption">
+    <div class="row g-2 mb-2">{% for i in images %}
+      <div class="col-6 col-md-3 col-xl-2"><div class="border rounded p-1">
+        <img src="{{ url_for('website_admin.image', kind='tour', owner_id=p.package_id, image_id=i.image_id) }}" alt="" style="width: 100%; height: 110px; object-fit: cover;">
+        <input class="form-control form-control-sm mt-1" name="caption_{{ i.image_id }}" value="{{ i.caption or '' }}" placeholder="Caption">
+        <div class="d-flex gap-1 mt-1"><input class="form-control form-control-sm" name="sort_{{ i.image_id }}" value="{{ i.sort_order }}" title="Order">
+          <button class="btn btn-sm btn-outline-danger" type="submit" form="del{{ i.image_id }}" title="Remove"><i class="bi bi-trash"></i></button></div>
+      </div></div>{% endfor %}
+    </div>
+    <button class="btn btn-sm btn-outline-primary mb-3" type="submit">Save captions and order</button>
+  </form>
+  {% for i in images %}<form id="del{{ i.image_id }}" method="post" action="{{ url_for('website_admin.tour_images', package_id=p.package_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete"><input type="hidden" name="image_id" value="{{ i.image_id }}"></form>{% endfor %}
+  {% endif %}
+  <form method="post" action="{{ url_for('website_admin.tour_images', package_id=p.package_id) }}" enctype="multipart/form-data" class="d-flex gap-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input class="form-control" type="file" name="photos" accept="image/*" multiple>
+    <button class="btn btn-outline-primary" type="submit"><i class="bi bi-upload"></i> Add photos</button>
+  </form>
+</div></div>
+{% endblock %}

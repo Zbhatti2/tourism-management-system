@@ -1,0 +1,25 @@
+{% extends "site/base.html" %}
+{% block title %}Contact Us — {{ site.site_title }}{% endblock %}
+{% block content %}
+<section class="site-section">
+  <div class="container">
+    <div class="row g-4">
+      <div class="col-lg-7">
+        <h1 class="section-title">Contact Us</h1>
+        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+        {% include "site/_enquiry_form.html" %}
+      </div>
+      <div class="col-lg-5">
+        <div class="facts-box">
+          <h2 class="h5 text-white">Talk to us</h2>
+          {% if site.contact_email %}<p class="mb-1"><i class="bi bi-envelope me-2"></i><a class="text-white" href="mailto:{{ site.contact_email }}">{{ site.contact_email }}</a></p>{% endif %}
+          {% if site.contact_phone %}<p class="mb-1"><i class="bi bi-telephone me-2"></i>{{ site.contact_phone }}</p>{% endif %}
+          {% if site.whatsapp %}<p class="mb-1"><i class="bi bi-whatsapp me-2"></i>{{ site.whatsapp }}</p>{% endif %}
+          {% if site.address %}<p class="mb-0"><i class="bi bi-geo-alt me-2"></i>{{ site.address }}</p>{% endif %}
+          <p class="small mt-3 mb-0">Or use the chat at the bottom of the page: it answers straight away, and a member of our team takes over whenever you ask.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
