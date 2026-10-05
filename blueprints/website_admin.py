@@ -42,6 +42,16 @@ def _upload(field):
     return data, mime
 
 
+def _public_base():
+    """This TMS's own address as visitors reach it. Behind Coolify's proxy
+    Flask sees http, but the public address is https."""
+    host = request.host
+    scheme = (request.headers.get("X-Forwarded-Proto") or request.scheme).split(",")[0].strip()
+    if scheme == "http" and not host.split(":")[0] in ("localhost", "127.0.0.1"):
+        scheme = "https"
+    return f"{scheme}://{host}"
+
+
 def site_url(s):
     """Where the tenant's own website is (its domain, else a test address)."""
     return website.site_address(s)
@@ -72,11 +82,12 @@ def settings():
         website.save_settings(db, g.tenant_id, values, logo=logo, hero=hero)
         log_action("Update", "tenant_websites", g.tenant_id, "Updated the website settings")
         flash("Website settings saved.", "success")
-        return redirect(url_for("website_admin.settings"))
+        section = f.get("section")
+        return redirect(url_for("website_admin.settings") + (f"#{section}" if section in ("site", "api", "contact", "policies", "chat") else ""))
     key = website.ensure_site_key(db, g.tenant_id)
     s = website.settings(db, g.tenant_id)
     return render_template("website_admin/settings.html", s=s, groups=website.groups_admin(db, g.tenant_id),
-                           site_key=key, api_base=request.host_url.rstrip("/") + url_for("site_api.site", key=key)[:-len("/site")],
+                           site_key=key, api_base=_public_base() + url_for("site_api.site", key=key)[:-len("/site")],
                            preview=site_url(s), help_id="website_admin/overview")
 
 
