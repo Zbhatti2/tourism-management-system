@@ -893,6 +893,13 @@ CREATE INDEX IF NOT EXISTS idx_package_groups_tenant ON package_groups(tenant_id
     db.commit()
 
 
+def _migration_tour_tools(db):
+    """Tour Design: each user's To-Do List (tour_todos) and Prompt List
+    (agent_prompts) -- tour_tools.py."""
+    import tour_tools
+    tour_tools.migrate(db)
+
+
 def _migration_city_checkpoint_flag(db):
     """cities.is_checkpoint: a good overnight stop for tour groups (set by
     the platform, or proposed by a tenant's Tour Planner)."""
@@ -936,6 +943,7 @@ MIGRATIONS = [
     ("2026_10_state_alt_names", _migration_state_alt_names),
     ("2026_10_reference_room_rate", _migration_reference_room_rate),
     ("2026_10_package_groups", _migration_package_groups),
+    ("2026_10_tour_tools", _migration_tour_tools),
 ]
 
 

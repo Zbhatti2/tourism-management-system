@@ -1,0 +1,52 @@
+{# Tour Design: the user's own To-Do List (tour_tools.py), after the User Notes
+   of Zeb's Book to Movie app. Opened by the To-Do button beside Help;
+   static/js/tour_todos.js fills it from /tour-planner/todos. #}
+<div class="modal fade" id="todo-modal" tabindex="-1" aria-labelledby="todoModalLabel">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="todoModalLabel"><i class="bi bi-check2-square me-1"></i>My To-Do List</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="todo-add-form" class="row g-2 align-items-end mb-1">
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="todo-subject">Subject</label>
+            <input type="text" class="form-control form-control-sm" id="todo-subject" maxlength="120" required>
+          </div>
+          <div class="col-sm-7">
+            <label class="form-label small text-muted mb-1" for="todo-task">Task</label>
+            <input type="text" class="form-control form-control-sm" id="todo-task" maxlength="1000" required>
+          </div>
+          <div class="col-sm-2"><button type="submit" class="btn btn-primary btn-sm w-100">Add</button></div>
+          <div class="col-12 small text-muted d-none" id="todo-plan-note"></div>
+        </form>
+        <div class="small text-danger mt-1 mb-2 d-none" id="todo-error"></div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2 mt-2">
+          <input type="search" class="form-control form-control-sm" id="todo-filter-subject" placeholder="Filter by subject…" style="min-width: 10rem; width: auto;" autocomplete="off">
+          <select class="form-select form-select-sm" id="todo-filter-status" style="width: auto;">
+            <option value="">All statuses</option>
+            <option value="open" selected>Open only</option>
+            <option value="closed">Closed only</option>
+          </select>
+          <select class="form-select form-select-sm" id="todo-sort" style="width: auto;">
+            <option value="created_at">Sort: Date</option>
+            <option value="subject">Sort: Subject</option>
+            <option value="status">Sort: Open/Closed</option>
+          </select>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="todo-sort-dir" title="Reverse sort order">↓ Newest first</button>
+          <div class="form-check form-check-inline small mb-0 d-none" id="todo-only-plan-wrap">
+            <input class="form-check-input" type="checkbox" id="todo-only-plan"><label class="form-check-label" for="todo-only-plan">Only this design</label>
+          </div>
+        </div>
+
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th style="width: 9.5rem">Date/Time</th><th style="width: 10rem">Subject</th><th>Task</th><th style="width: 6.5rem">Open/Closed</th><th style="width: 2rem"></th></tr></thead>
+          <tbody id="todo-rows"><tr><td colspan="5" class="text-muted">Loading…</td></tr></tbody>
+        </table>
+        <div class="small text-muted mt-2" id="todo-count"></div>
+      </div>
+    </div>
+  </div>
+</div>

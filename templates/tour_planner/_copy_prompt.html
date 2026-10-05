@@ -1,0 +1,20 @@
+<script>
+  // Copy a prompt to the clipboard; it counts as used (Date last used).
+  document.querySelectorAll('.js-copy-prompt').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-text') || (document.getElementById(btn.getAttribute('data-from') || '') || {}).value || '';
+      var done = function () {
+        var old = btn.innerHTML; btn.innerHTML = '<i class="bi bi-check2"></i> Copied';
+        setTimeout(function () { btn.innerHTML = old; }, 1500);
+        var fd = new FormData(); fd.append('csrf_token', '{{ csrf_token() }}');
+        fetch('{{ url_for("tour_prompts.index") }}' + btn.getAttribute('data-id') + '/used', {method: 'POST', body: fd});
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done);
+      } else {
+        var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } finally { document.body.removeChild(ta); }
+      }
+    });
+  });
+</script>

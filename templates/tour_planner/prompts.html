@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Prompt List{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-0">Prompt List</h1>
+    <div class="small text-muted">Your own prompts for the Tour Design agent. Open one to read or improve it, save it as a new prompt, copy it, or use it to start a new Tour Design. Only you see your list.</div>
+  </div>
+  <a href="{{ url_for('tour_prompts.new_prompt') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New Prompt</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto flex-grow-1" style="min-width: 220px;"><input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search titles and text…"></div>
+  <div class="col-auto"><select class="form-select" name="group">
+    <option value="">All groups</option>
+    {% for pg in package_groups %}<option value="{{ pg.package_group_id }}" {{ 'selected' if group == pg.package_group_id|string else '' }}>{{ pg.label }}</option>{% endfor %}
+    <option value="none" {{ 'selected' if group == 'none' else '' }}>No group</option></select></div>
+  <div class="col-auto"><select class="form-select" name="sort">
+    {% for k, v in [('last_used', 'Sort: Date last used'), ('group', 'Sort: Group'), ('title', 'Sort: Title'), ('updated', 'Sort: Last changed')] %}<option value="{{ k }}" {{ 'selected' if sort == k else '' }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-outline-secondary" type="submit">Search</button></div>
+  {% if q or group or sort != 'last_used' %}<div class="col-auto"><a href="{{ url_for('tour_prompts.index') }}" class="btn btn-link">Clear</a></div>{% endif %}
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Group</th><th>Title of Prompt</th><th>Date last used</th><th class="text-end">Used</th><th class="text-end"></th></tr></thead>
+      <tbody>
+        {% for p in prompts %}
+        <tr onclick="window.location='{{ url_for('tour_prompts.open_prompt', prompt_id=p.prompt_id) }}'" style="cursor:pointer;">
+          <td>{{ p.group_label or '—' }}</td>
+          <td><strong>{{ p.title }}</strong><div class="small text-muted text-truncate" style="max-width: 560px;">{{ p.body[:160] }}</div></td>
+          <td class="small">{{ p.last_used_at[:16] if p.last_used_at else 'Not used yet' }}</td>
+          <td class="text-end small text-muted">{{ p.use_count }}</td>
+          <td class="text-end text-nowrap" onclick="event.stopPropagation();">
+            <a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('tour_prompts.open_prompt', prompt_id=p.prompt_id) }}">Open</a>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 js-copy-prompt" data-id="{{ p.prompt_id }}" data-text="{{ p.body }}" title="Copy the prompt to paste it elsewhere"><i class="bi bi-clipboard"></i> Copy</button>
+            <a class="btn btn-sm btn-primary py-0" href="{{ url_for('tour_prompts.use', prompt_id=p.prompt_id) }}" title="Start a new Tour Design with this prompt"><i class="bi bi-stars"></i> Use</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-5">No prompts{{ ' match' if q or group else ' yet' }}. <a href="{{ url_for('tour_prompts.new_prompt') }}">Write one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}{% include "tour_planner/_copy_prompt.html" %}{% endblock %}

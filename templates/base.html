@@ -21,13 +21,21 @@
    highlighting below. A blueprint with no help section yet (or a
    help_id that doesn't resolve) just opens the tree's first page instead
    of erroring -- see static/js/help.js's openFirstAvailablePage. #}
+{% set show_todos = g.get('tenant_id') and request.blueprint in ('tour_planner', 'tour_prompts') %}
 <nav class="app-help" aria-label="Help">
+  {% if show_todos %}{# Tour Design: each user's To-Do List (tour_tools.py, _todo_modal.html) #}
+  <button type="button" id="todo-btn" class="app-help-link me-1"
+          data-plan-id="{{ plan.plan_id if plan is defined and plan else '' }}" data-plan-name="{{ plan.name if plan is defined and plan else '' }}">
+    <i class="bi bi-check2-square me-1"></i>To-Do <span class="badge rounded-pill bg-warning text-dark d-none" id="todo-open-count"></span>
+  </button>
+  {% endif %}
   <button type="button" id="app-help-btn" class="app-help-link"
           data-help-id="{{ help_id if help_id is defined else (request.blueprint ~ '/overview' if request.blueprint else 'getting-started/welcome') }}">
     <i class="bi bi-question-circle me-1"></i>Help
   </button>
 </nav>
 {% include "_help_drawer.html" %}
+{% if show_todos %}{% include "tour_planner/_todo_modal.html" %}{% endif %}
 <div class="d-flex" id="app-shell">
   <nav class="pims-sidebar d-flex flex-column flex-shrink-0 p-3">
     <a href="{{ url_for('tenants_admin.list_tenants') if g.role == 'SystemAdmin' else url_for('dashboard.index') }}" class="d-flex align-items-center mb-1 text-decoration-none">
@@ -103,6 +111,7 @@
 <script src="{{ url_for('static', filename='js/password_toggle.js') }}"></script>
 {% if session.get('auth_token') %}
 <script src="{{ url_for('static', filename='js/help.js') }}"></script>
+{% if show_todos %}<script src="{{ url_for('static', filename='js/tour_todos.js') }}" data-csrf="{{ csrf_token() }}" data-url="{{ url_for('tour_todos.list_todos') }}" id="tour-todos-js"></script>{% endif %}
 {% endif %}
 {% block scripts %}{% endblock %}
 </body>
