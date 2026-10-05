@@ -61,6 +61,7 @@ MODULES = [
     {"key": "tours_management", "label": "Tours Management", "icon": "signpost-2", "roles": ["TenantAdmin", "User"], "children": [
         {"key": "tour_planner", "label": "Tour Design", "icon": "compass", "endpoint": "tour_planner.index"},
         {"key": "packages", "label": "Package Management", "icon": "map", "endpoint": "packages.list_packages"},
+        {"key": "tour_prompts", "label": "Prompt List", "icon": "chat-square-text", "endpoint": "tour_prompts.index"},
     ]},
     # Foundations for Zeb's "First Agents" plan (Sept 2026) -- Agent Runs +
     # Human Review Queue. Single top-level entry (Review Queue is a tab on
@@ -197,6 +198,7 @@ def create_app():
     from blueprints.help import help_bp
     from blueprints.ai_agents import ai_agents_bp
     from blueprints.tour_planner import tour_planner_bp
+    from blueprints.tour_tools import tour_prompts_bp, tour_todos_bp
     from blueprints.users import users_bp
     from blueprints.tenants_admin import tenants_admin_bp
     from blueprints.platform_lookups import platform_lookups_bp
@@ -228,6 +230,8 @@ def create_app():
     app.register_blueprint(packages_bp, url_prefix="/packages")
     app.register_blueprint(ai_agents_bp, url_prefix="/ai-agents")
     app.register_blueprint(tour_planner_bp, url_prefix="/tour-planner")
+    app.register_blueprint(tour_todos_bp, url_prefix="/tour-planner/todos")
+    app.register_blueprint(tour_prompts_bp, url_prefix="/tour-planner/prompts")
     app.register_blueprint(billing_ar_bp, url_prefix="/accounting/billing-ar")
     app.register_blueprint(purchasing_ap_bp, url_prefix="/accounting/purchasing-ap")
     app.register_blueprint(accounts_gl_bp, url_prefix="/accounting/accounts-gl")

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ p.title if p else 'New Prompt' }} — Prompt List{% endblock %}
+{% block content %}
+{% set v = form if form is not none else {} %}
+<nav class="mb-2"><a href="{{ url_for('tour_prompts.index') }}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Prompt List</a></nav>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-0">{{ p.title if p else 'New Prompt' }}</h1>
+    {% if p %}<div class="small text-muted">{{ p.group_label or 'No group' }} · last used {{ p.last_used_at[:16] if p.last_used_at else 'never' }}{% if p.use_count %} ({{ p.use_count }}×){% endif %} · changed {{ p.updated_at[:16] }}</div>{% endif %}
+  </div>
+  {% if p %}
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary js-copy-prompt" data-id="{{ p.prompt_id }}" data-from="body"><i class="bi bi-clipboard"></i> Copy</button>
+    <a class="btn btn-primary" href="{{ url_for('tour_prompts.use', prompt_id=p.prompt_id) }}"><i class="bi bi-stars"></i> Use for a new Tour Design</a>
+  </div>
+  {% endif %}
+</div>
+<form method="post" class="card shadow-sm border-0">
+  <div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-2 mb-3">
+      <div class="col-md-8"><label class="form-label fw-semibold" for="title">Title of prompt</label>
+        <input class="form-control" id="title" name="title" maxlength="200" required value="{{ v.get('title') if v.get('title') is not none else (p.title if p else '') }}"></div>
+      <div class="col-md-4"><label class="form-label fw-semibold" for="package_group_id">Group</label>
+        {% set cur = (v.get('package_group_id') if v.get('package_group_id') is not none else (p.package_group_id|string if p and p.package_group_id else '')) %}
+        <select class="form-select" id="package_group_id" name="package_group_id"><option value="">— None —</option>
+          {% for pg in package_groups %}<option value="{{ pg.package_group_id }}" {{ 'selected' if cur == pg.package_group_id|string else '' }}>{{ pg.label }}</option>{% endfor %}</select></div>
+    </div>
+    <label class="form-label fw-semibold" for="body">Prompt</label>
+    <textarea class="form-control font-monospace" id="body" name="body" rows="22" style="font-size: .85rem;" required>{{ v.get('body') if v.get('body') is not none else (p.body if p else '') }}</textarea>
+    <div class="form-text">Write it as you would to the Tour Design agent: the tour, the group and where they come from, the dates and standard, and what you want worked out. Groups are the same as your Package Groups (Table Maintenance).</div>
+  </div>
+  <div class="card-footer bg-white d-flex gap-2 justify-content-between flex-wrap">
+    <div>{% if p %}<button class="btn btn-outline-danger" type="submit" form="delete-form"><i class="bi bi-trash"></i> Delete</button>{% endif %}</div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('tour_prompts.index') }}">Cancel</a>
+      {% if p %}<button class="btn btn-outline-primary" type="submit" name="action" value="save_as_new" title="Keep this prompt as it was and save your changes as a new prompt"><i class="bi bi-files"></i> Save as new prompt</button>{% endif %}
+      <button class="btn btn-primary" type="submit" name="action" value="save"><i class="bi bi-check2"></i> Save</button>
+    </div>
+  </div>
+</form>
+{% if p %}
+<form id="delete-form" method="post" action="{{ url_for('tour_prompts.delete_prompt', prompt_id=p.prompt_id) }}"
+      onsubmit="return confirm('Delete this prompt from your list?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% include "tour_planner/_copy_prompt.html" %}{% endblock %}

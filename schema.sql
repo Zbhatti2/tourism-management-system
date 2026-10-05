@@ -3327,3 +3327,33 @@ CREATE TABLE IF NOT EXISTS tour_plan_runs (
     cancel_requested INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_tour_plan_runs_plan ON tour_plan_runs(plan_id);
+
+-- Tour Design: each user's To-Do List and Prompt List (tour_tools.py).
+CREATE TABLE IF NOT EXISTS tour_todos (
+    todo_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    user_id         INTEGER NOT NULL REFERENCES users(user_id),
+    plan_id         INTEGER REFERENCES tour_plans(plan_id),   -- the Tour Design it was added in, if any
+    subject         TEXT NOT NULL,
+    task            TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_tour_todos_user ON tour_todos(tenant_id, user_id, status);
+CREATE TABLE IF NOT EXISTS agent_prompts (
+    prompt_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
+    user_id         INTEGER NOT NULL REFERENCES users(user_id),
+    agent           TEXT NOT NULL DEFAULT 'tour_design',      -- which AI agent the prompt is for
+    package_group_id INTEGER REFERENCES package_groups(package_group_id),
+    title           TEXT NOT NULL,
+    body            TEXT NOT NULL,
+    based_on_id     INTEGER REFERENCES agent_prompts(prompt_id),  -- saved as new from this one
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used_at    TEXT,
+    use_count       INTEGER NOT NULL DEFAULT 0,
+    is_deleted      INTEGER NOT NULL DEFAULT 0                -- kept so a deleted seed isn't put back
+);
+CREATE INDEX IF NOT EXISTS idx_agent_prompts_user ON agent_prompts(tenant_id, user_id, is_deleted);

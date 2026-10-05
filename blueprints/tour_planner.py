@@ -18,6 +18,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 import agent_runs
 import ai_usage
 import package_groups
+import tour_tools
 import tour_planner as tp
 from auth.decorators import login_required
 from db import get_db, log_action
@@ -92,14 +93,22 @@ def new_plan():
             db.execute("UPDATE tour_plans SET package_group_id = ? WHERE plan_id = ?", (gid, plan_id))
             db.commit()
         log_action("Create", "tour_plans", plan_id, f"New tour plan {name or '(from a request)'}")
+        pid = request.form.get("prompt_id", type=int)
+        if pid and text:  # started from the user's Prompt List: counts as used
+            tour_tools.mark_used(db, g.tenant_id, g.user_id, pid)
         if text and request.form.get("action") == "fill":
             try:
                 tp.start_run(db, g.tenant_id, g.user_id, plan_id, "brief")
             except tp.PlannerError as e:
                 flash(f"The brief couldn't be filled in automatically: {e}", "error")
         return redirect(url_for("tour_planner.workspace", plan_id=plan_id, stage="brief"))
+    tour_tools.seed_prompts(db, g.tenant_id, g.user_id)
+    my_prompts = tour_tools.prompts(db, g.tenant_id, g.user_id, agent="tour_design")
+    chosen = tour_tools.prompt(db, g.tenant_id, g.user_id, request.args.get("prompt", type=int)) \
+        if request.args.get("prompt") else None
     return render_template("tour_planner/new.html", allowance=_allowance(db),
-                           package_groups=package_groups.choices(db, g.tenant_id))
+                           package_groups=package_groups.choices(db, g.tenant_id), my_prompts=my_prompts, chosen=chosen,
+                           prompt_bodies={str(p["prompt_id"]): p["body"] for p in my_prompts})
 
 
 def _allowance(db):

@@ -1,0 +1,49 @@
+Prompt for AI Agent in TMS:
+============================
+Create a complete Tour plan that comprises of travel on the Major Route in Pakistan for a Group of 24 people from Islamabad/Rawalpindi to Kashgar and Back to Islamabad/Rawalpindi. The name of the Tour will be 'Karakoram Tour'. It will be a 4-Star Level Tour with flexibilty of staying in 3-star hotels if 4-star and above are not available.
+
+Tour Assembly/Meeting Point for the Tour will be Islamabad on March 15, 2027. People will be arriving in Islamabad form 4 different countries. 
+
+3 Couples will arrive from Sydney, Australia
+2 Couples will arrive from Los Angeles
+4 Individuals will arrive from London - each requiring a separate room
+5 Couples will Arrive from Newyork
+
+Calculate flight times and layovers where necessary
+
+
+(1) Identify all Major Attractions and Points of Interests (POI's) on the Route- begin from Islamabad/Rawalpindi.
+
+(2) Identify Checkpoints (Cities which have reasonable overnight accommodation, food/dining).
+
+(3) Identify Hotels, Restaurants and Airports at Checkpoints. (include Approx. costs for budget)
+
+(4) If there is any major POI on route and requires a deviation identify the distance and time (example Texila, etc)
+
+(5) Compute approximate Journey Time in normal weather and traffic between each city on the main route. 
+
+(6) Compute approximate Journey Time in normal weather and traffic between each Checkpoint. Output the data in a grid format.
+
+(7) Identify potential Transport providers (Divide equally into 14 Seater Mini-Buses, Driver to be provided by the transport service). 
+
+(8) The Tour will be a guided tour with 2 Tour Guides. Both will need accomodation, meals and seats in SUV's,
+
+(9) Create a List of emergency supplies and contents of a Medical Assistance Kit in each Vehicle. 
+
+(10) Create a Checklist of Spare Parts/Tires/ chains etc that may be rquired on the Journey
+
+(11) Identify Visa Locations in each Country and Identify any other regulatory issues besides Visa and Passport.
+
+(2) Flag any items or not understood or items I may have missed.
+
+
+ACCOMMODATIONS:
+Identify Hotel/Motel/Resort information for each 'Checkpoint' only on the above route where a group can comfortable stay. Select at least 5 Locations per Checkpoint. If there are more locations like in larger cities (like Karachi, Lahore, Islamabad/Rawalpindi, Multan) select upto 10 locations. If smaller Checkpoint Cities don't have 5 locations, then provide what you can (Note: Add Faisalabad to the Checkpoint list even though it is NOT on the main route).  
+
+F&B (EATING & DINING):
+Identify  Restaurant/Dining information in each City on the above route where a group can comfortably have meals.  Select at least 5 eating Locations per Checkpoint. If there are more eating locations like in larger cities (like Karachi, Lahore, Islamabad/Rawalpindi, Multan) select upto 15 locations. If smaller Checkpoint Cities don't have 5 locations, then provide what you can (Note: Add Faisalabad to the Checkpoint list even though it is NOT on the main route). 
+
+
+POINTS OF INTEREST (POI's):
+Identify ALL places of Interest in each City on the above route where a group can experience History, Culture, Faith/Religion and Recreation (example Botonical Gardens). Select at least Locations per Checkpoint. If there are more significant locations like in larger cities (such as Karachi, Lahore, Islamabad/Rawalpindi, Multan) select upto 10 locations. If smaller Checkpoint Cities don't have 5 locations, then provide what you can (Note: Add Faisalabad to the Checkpoint list even though it is NOT on the main route). This table will include all cities on the route (checkpoints as well as others). 
+ 
