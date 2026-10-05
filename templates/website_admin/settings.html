@@ -36,12 +36,12 @@
 
   <div class="card shadow-sm border-0 mb-3" id="api"><div class="card-body">
     <h2 class="h6">Connection to your website</h2>
-    <p class="small text-muted">Your website is its own project (for Ma Vie: the <code>ma-vie-tours-website</code> repository). It reads your published tours and sends enquiries, booking requests and chats to TMS with these two values, kept in its <code>js/config.js</code>. The key is not a secret: it only says whose published tours to show.</p>
+    <p class="small text-muted">Your website is its own project (for Ma Vie: the <code>ma-vie-tours-website</code> repository). It reads your published tours and sends enquiries, booking requests and chats to TMS with these two values, kept in its <code>js/config.js</code> (not in Coolify). The key is not a secret: it only says whose published tours to show.</p>
     <div class="row g-3">
-      <div class="col-md-7"><label class="form-label" for="api_base">TMS address for the website (TMS_API)</label>
-        <div class="input-group"><input class="form-control font-monospace" id="api_base" value="{{ api_base }}" readonly>
-          <button class="btn btn-outline-secondary" type="button" data-copy="api_base"><i class="bi bi-clipboard"></i> Copy</button></div></div>
-      <div class="col-md-5"><label class="form-label" for="site_key">Website key (SITE_KEY)</label>
+      <div class="col-md-7"><label class="form-label" for="tms_base">TMS address (TMS_BASE in js/config.js)</label>
+        <div class="input-group"><input class="form-control font-monospace" id="tms_base" value="{{ tms_base }}" readonly>
+          <button class="btn btn-outline-secondary" type="button" data-copy="tms_base"><i class="bi bi-clipboard"></i> Copy</button></div></div>
+      <div class="col-md-5"><label class="form-label" for="site_key">Website key (SITE_KEY in js/config.js)</label>
         <div class="input-group"><input class="form-control font-monospace" id="site_key" value="{{ site_key }}" readonly>
           <button class="btn btn-outline-secondary" type="button" data-copy="site_key"><i class="bi bi-clipboard"></i> Copy</button></div></div>
       <div class="col-md-7"><label class="form-label" for="test_origins">Test addresses (one per line)</label>
