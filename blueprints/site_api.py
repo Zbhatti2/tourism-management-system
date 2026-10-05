@@ -69,22 +69,26 @@ def _request_origin():
 
 @site_api_bp.before_request
 def _load_site():
+    origin = _request_origin()
     found = website.site_for_key(get_db(), g.site_key)
     if found is None:
-        raise ApiError("Unknown website key.", 404)
+        g.cors_origin = origin  # let the website read why: a wrong key in its js/config.js
+        raise ApiError("This website's key is not recognised by TMS. Check SITE_KEY in js/config.js.", 404)
     g.site_tenant_id, g.site = found
     live, tests = website.live_origins(g.site), website.test_origins(g.site)
-    allowed = tests | (live if g.site["enabled"] else set())
-    origin = _request_origin()
-    g.cors_origin = origin if origin in allowed else None
+    # The live domain may always read the answer -- before going live it is told
+    # so plainly instead of failing with a browser (CORS) error.
+    g.cors_origin = origin if origin in (tests | live) else None
     if request.method == "OPTIONS":
         return Response(status=204)
     if request.endpoint == "site_api.image":
         return None  # <img> requests: published images only, any page may show them
     if origin and g.cors_origin is None:
-        raise ApiError("This web address may not use this website's data.", 403)
-    if not origin and not g.site["enabled"]:
-        raise ApiError("The website is not live yet.", 403)
+        raise ApiError("This web address may not use this website's data. Add it to the Test addresses or set "
+                       "the Domain in TMS -> Website -> Settings & Groups.", 403)
+    if not g.site["enabled"] and origin not in tests:
+        raise ApiError("This website is not live yet. Switch it on in TMS -> Website -> Settings & Groups "
+                       "(Website is live).", 403)
 
 
 @site_api_bp.after_request
