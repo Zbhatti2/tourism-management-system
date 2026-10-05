@@ -87,7 +87,7 @@ def settings():
     key = website.ensure_site_key(db, g.tenant_id)
     s = website.settings(db, g.tenant_id)
     return render_template("website_admin/settings.html", s=s, groups=website.groups_admin(db, g.tenant_id),
-                           site_key=key, api_base=_public_base() + url_for("site_api.site", key=key)[:-len("/site")],
+                           site_key=key, tms_base=_public_base(),
                            preview=site_url(s), help_id="website_admin/overview")
 
 
