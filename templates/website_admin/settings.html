@@ -5,7 +5,7 @@
 {% include "website_admin/_nav.html" %}
 <form method="post" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+  <div class="card shadow-sm border-0 mb-3" id="site"><div class="card-body">
     <h2 class="h6">The site</h2>
     <div class="row g-3">
       <div class="col-md-4"><div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" role="switch" id="enabled" name="enabled" value="1" {{ 'checked' if s.enabled else '' }}>
@@ -31,6 +31,7 @@
       <div class="col-12"><label class="form-label" for="about_text">About us</label>
         <textarea class="form-control" id="about_text" name="about_text" rows="4">{{ s.about_text or '' }}</textarea></div>
     </div>
+    <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" type="submit" name="section" value="site"><i class="bi bi-check2"></i> Save</button></div>
   </div></div>
 
   <div class="card shadow-sm border-0 mb-3" id="api"><div class="card-body">
@@ -49,9 +50,10 @@
       <div class="col-md-5 d-flex align-items-end"><button class="btn btn-outline-danger btn-sm" type="submit" form="new-key-form"
           onclick="return confirm('Make a new key? The website stops working until its js/config.js has the new key and it is redeployed.')"><i class="bi bi-arrow-repeat"></i> Make a new key</button></div>
     </div>
+    <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" type="submit" name="section" value="api"><i class="bi bi-check2"></i> Save</button></div>
   </div></div>
 
-  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+  <div class="card shadow-sm border-0 mb-3" id="contact"><div class="card-body">
     <h2 class="h6">Contact</h2>
     <div class="row g-3">
       <div class="col-md-4"><label class="form-label" for="contact_email">Email</label><input class="form-control" type="email" id="contact_email" name="contact_email" value="{{ s.contact_email or '' }}"></div>
@@ -61,9 +63,10 @@
       <div class="col-md-4"><label class="form-label" for="notify_email">Send new enquiries to</label><input class="form-control" type="email" id="notify_email" name="notify_email" value="{{ s.notify_email or '' }}">
         <div class="form-text">Everything also lands in the Website Inbox.</div></div>
     </div>
+    <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" type="submit" name="section" value="contact"><i class="bi bi-check2"></i> Save</button></div>
   </div></div>
 
-  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+  <div class="card shadow-sm border-0 mb-3" id="policies"><div class="card-body">
     <h2 class="h6">Booking, payments and policies</h2>
     <p class="small text-muted">Shown on every tour page and with the booking form. A tour can have its own payment terms and cancellation policy (Tours on the website).</p>
     <div class="row g-3">
@@ -75,17 +78,18 @@
       <div class="col-md-6"><label class="form-label" for="{{ k }}">{{ label }}</label><textarea class="form-control" id="{{ k }}" name="{{ k }}" rows="3">{{ s[k] or '' }}</textarea></div>
       {% endfor %}
     </div>
+    <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" type="submit" name="section" value="policies"><i class="bi bi-check2"></i> Save</button></div>
   </div></div>
 
-  <div class="card shadow-sm border-0 mb-3"><div class="card-body">
+  <div class="card shadow-sm border-0 mb-3" id="chat"><div class="card-body">
     <h2 class="h6">Chat</h2>
     <div class="row g-3">
       <div class="col-md-4"><div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" role="switch" id="chat_enabled" name="chat_enabled" value="1" {{ 'checked' if s.chat_enabled else '' }}>
         <label class="form-check-label" for="chat_enabled">Show the chat window</label></div></div>
       <div class="col-md-8"><label class="form-label" for="chat_welcome">Welcome message</label><input class="form-control" id="chat_welcome" name="chat_welcome" value="{{ s.chat_welcome or '' }}" placeholder="Hello! Ask me anything about our tours."></div>
     </div>
+    <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" type="submit" name="section" value="chat"><i class="bi bi-check2"></i> Save</button></div>
   </div></div>
-  <div class="d-flex justify-content-end mb-4"><button class="btn btn-primary" type="submit"><i class="bi bi-check2"></i> Save settings</button></div>
 </form>
 
 <div class="card shadow-sm border-0 mb-3" id="groups"><div class="card-body">
