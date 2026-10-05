@@ -211,7 +211,7 @@ def create_app():
     from blueprints.tour_planner import tour_planner_bp
     from blueprints.tour_tools import tour_prompts_bp, tour_todos_bp
     from blueprints.website_admin import website_admin_bp
-    from blueprints.site import site_bp
+    from blueprints.site_api import site_api_bp
     from blueprints.users import users_bp
     from blueprints.tenants_admin import tenants_admin_bp
     from blueprints.platform_lookups import platform_lookups_bp
@@ -246,9 +246,7 @@ def create_app():
     app.register_blueprint(tour_todos_bp, url_prefix="/tour-planner/todos")
     app.register_blueprint(tour_prompts_bp, url_prefix="/tour-planner/prompts")
     app.register_blueprint(website_admin_bp, url_prefix="/website")
-    app.register_blueprint(site_bp, url_prefix="/site/<code>")
-    import site_router
-    site_router.init_app(app)  # the tenant's own domain serves its public site
+    app.register_blueprint(site_api_bp, url_prefix="/api/site/v1/<key>")  # the tenants' own websites call this
     app.register_blueprint(billing_ar_bp, url_prefix="/accounting/billing-ar")
     app.register_blueprint(purchasing_ap_bp, url_prefix="/accounting/purchasing-ap")
     app.register_blueprint(accounts_gl_bp, url_prefix="/accounting/accounts-gl")

@@ -10,7 +10,7 @@
     <h1 class="h3 mb-0">{{ w.title or p.package_name }}</h1>
     <div class="small text-muted">{{ p.group_label or 'No group' }} · {{ p.duration_days or '?' }} days · {% if w.published %}<span class="text-success">published</span>{% else %}not published{% endif %}</div>
   </div>
-  {% if w.published %}<a class="btn btn-outline-primary" href="{{ preview }}tours/{{ w.slug }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> View on the website</a>{% endif %}
+  {% if w.published and preview %}<a class="btn btn-outline-primary" href="{{ preview }}tours/{{ w.slug }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> View on the website</a>{% endif %}
 </div>
 {% if not p.package_group_id %}<div class="alert alert-warning small">This package has no Group, so it won't appear under any Group box on the home page. Set its Group in Package Management.</div>{% endif %}
 

@@ -42,8 +42,9 @@ def _upload(field):
     return data, mime
 
 
-def site_url(code):
-    return url_for("site.home", code=code.lower())
+def site_url(s):
+    """Where the tenant's own website is (its domain, else a test address)."""
+    return website.site_address(s)
 
 
 # ---- settings and groups ---------------------------------------------------------------------
@@ -67,18 +68,28 @@ def settings():
         except ValueError as e:
             flash(str(e), "error")
             return redirect(url_for("website_admin.settings"))
-        domain = (f.get("website_domain") or "").strip().lower().replace("https://", "").replace("http://", "").strip("/") or None
-        db.execute("UPDATE tenants SET website_domain = ? WHERE tenant_id = ?", (domain, g.tenant_id))
+        db.execute("UPDATE tenants SET website_domain = ? WHERE tenant_id = ?", (website.clean_domain(f.get("website_domain")), g.tenant_id))
         website.save_settings(db, g.tenant_id, values, logo=logo, hero=hero)
-        router = current_app.extensions.get("site_router")
-        if router:
-            router.refresh()  # a new domain or on/off takes effect now
         log_action("Update", "tenant_websites", g.tenant_id, "Updated the website settings")
         flash("Website settings saved.", "success")
         return redirect(url_for("website_admin.settings"))
+    key = website.ensure_site_key(db, g.tenant_id)
     s = website.settings(db, g.tenant_id)
     return render_template("website_admin/settings.html", s=s, groups=website.groups_admin(db, g.tenant_id),
-                           preview=site_url(s["tenant_code"]), help_id="website_admin/overview")
+                           site_key=key, api_base=request.host_url.rstrip("/") + url_for("site_api.site", key=key)[:-len("/site")],
+                           preview=site_url(s), help_id="website_admin/overview")
+
+
+@website_admin_bp.route("/new-key", methods=["POST"])
+@login_required
+def new_key():
+    _tenant()
+    if g.get("role") not in ("TenantAdmin", "SystemAdmin"):
+        abort(403)
+    website.new_site_key(get_db(), g.tenant_id)
+    log_action("Update", "tenant_websites", g.tenant_id, "Replaced the Website API key")
+    flash("New website key made. Put it in the website's js/config.js and redeploy the website: the old key no longer works.", "success")
+    return redirect(url_for("website_admin.settings") + "#api")
 
 
 @website_admin_bp.route("/groups/<int:group_id>", methods=["POST"])
@@ -136,7 +147,7 @@ def tours():
                          WHERE p.tenant_id = ? AND p.status != 'archived'
                          ORDER BY COALESCE(w.published, 0) DESC, pg.label, p.package_name""", (g.tenant_id,)).fetchall()
     s = website.settings(db, g.tenant_id)
-    return render_template("website_admin/tours.html", rows=rows, s=s, preview=site_url(s["tenant_code"]),
+    return render_template("website_admin/tours.html", rows=rows, s=s, preview=site_url(s),
                            help_id="website_admin/overview")
 
 
@@ -178,7 +189,7 @@ def _tour_page(db, p, form=None):
     auto = [i for i in website.tour_images(db, g.tenant_id, p["package_id"]) if i["kind"] != "tour"]
     deps = [website.departure_view(d, w, s, p["duration_days"]) for d in website.departures(db, g.tenant_id, p["package_id"])]
     return render_template("website_admin/tour.html", p=p, w=w, form=form, s=s, images=images, auto_images=auto,
-                           departures=deps, statuses=website.DEPARTURE_STATUSES, preview=site_url(s["tenant_code"]),
+                           departures=deps, statuses=website.DEPARTURE_STATUSES, preview=site_url(s),
                            help_id="website_admin/overview")
 
 

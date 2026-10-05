@@ -3,9 +3,12 @@ title: Website Overview
 order: 1
 keywords: [website, public site, domain, mavietours, groups, tours, departures, booking, enquiry, inbox, chat, policies, deposit, publish]
 ---
-TMS hosts your company's public website and fills it from your own tour
-data. Nothing is typed twice: the itinerary, hotels, restaurants and Points
-of Interest come straight from the Package. Costs are never shown.
+Your public website is its own small project (for Ma Vie Tours, the
+`ma-vie-tours-website` repository, running as its own app in Coolify on
+`www.mavietours.com`). It fills itself from your tour data in TMS through
+the **Website API**, so nothing is typed twice: the itinerary, hotels,
+restaurants and Points of Interest come straight from the Package. Costs,
+supplier contacts and internal notes are never shown.
 
 The **Website** menu in the sidebar has four screens.
 
@@ -13,14 +16,19 @@ The **Website** menu in the sidebar has four screens.
 
 - **Site details**: title, banner text, About Us text, contact email,
   phone, WhatsApp number, address, colours, logo and background image.
-- **Your domain**, e.g. `www.mavietours.com`. Point the domain's DNS at the
-  TMS server and add it to the TMS app in Coolify; TMS then serves your site
-  on it. Until then, preview it with **View the website** (`/site/<code>/`).
+- **Domain**, e.g. `www.mavietours.com`: where your website runs. Only
+  this domain (with or without `www.`) may show your tours.
+- **Connection to your website**: the **TMS address** and the **Website
+  key** your website needs (in its `js/config.js`). Use **Copy**. The key is
+  not a secret; **Make a new key** replaces it, and the website stops
+  working until its `js/config.js` has the new key and it is redeployed.
+- **Test addresses**: other web addresses that may show your tours, live or
+  not — e.g. `http://localhost:8080` while trying the site on your PC.
 - **Payments and policies**: payment methods, payment terms, deposit,
   booking terms, cancellation, refunds and privacy. Sensible wording is
   filled in to start with — edit it to your own.
-- **Live**: the site is visible to the public only once *Website is live*
-  is ticked. Before that, only your signed-in users can preview it.
+- **Live**: your domain shows your tours only once *Website is live* is
+  ticked. Before that, only the test addresses can.
 - **Groups**: each Package Group can have a box on the home page with an
   image and caption (e.g. *Sikh Gurdwaras*, *Northern Pakistan*). Tick
   *Show on the website* for the groups you want.

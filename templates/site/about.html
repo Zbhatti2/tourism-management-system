@@ -1,9 +1,0 @@
-{% extends "site/base.html" %}
-{% block title %}About Us — {{ site.site_title }}{% endblock %}
-{% block content %}
-<section class="site-section"><div class="container" style="max-width: 860px;">
-  <h1 class="section-title">About {{ site.site_title }}</h1>
-  {% for para in (site.about_text or 'Small-group journeys, planned with care.').split('\n\n') if para.strip() %}<p style="white-space: pre-line;">{{ para }}</p>{% endfor %}
-  <a class="btn btn-accent mt-2" href="{{ surl('home') }}">See our tours</a>
-</div></section>
-{% endblock %}

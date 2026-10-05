@@ -1,12 +1,15 @@
 """
-Tenant websites (Zeb, Oct 2026): "a website hosted by TMS on the tenant's own
-domain (www.mavietours.com) ... display ALL Groups, all Tours within that
+Tenant websites (Zeb, Oct 2026): "a website ... on the tenant's own domain
+(www.mavietours.com) ... display ALL Groups, all Tours within that
 Group, the Pricing of the Tour with a schedule, requirements, booking
 deadline, payment terms / methods, deposits, Booking Form, and other relevant
 info such as cancellation, refunds ... an Email and inquiry intake form
 besides a booking form ... a Chat Window".
 
-TMS is the tenant's back end; the public site (blueprints/site.py) only reads
+TMS is the tenant's back end. Each tenant's website is its own small site in
+its own repository (like GSS's tenant websites: e.g. Zbhatti2/
+ma-vie-tours-website), deployed as its own Coolify app; it reads and writes
+through the Website API (blueprints/site_api.py), which only ever gives out
 what the tenant chose to publish:
 
 * tenant_websites -- one row per tenant: on/off, title, banner, logo and
@@ -59,6 +62,8 @@ CREATE TABLE IF NOT EXISTS tenant_websites (
     notify_email    TEXT,                   -- who is told about new enquiries and bookings
     chat_enabled    INTEGER NOT NULL DEFAULT 1,
     chat_welcome    TEXT,
+    site_key        TEXT,                   -- public key the tenant's website uses to call the Website API
+    test_origins    TEXT,                   -- extra web addresses allowed to call it (one per line), e.g. a test site
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS package_web (
@@ -166,8 +171,15 @@ STATUSES = {"new": "New", "in_progress": "In progress", "confirmed": "Confirmed"
 DEPARTURE_STATUSES = {"open": "Open", "full": "Full", "closed": "Booking closed", "cancelled": "Cancelled"}
 
 
+SITE_COLUMNS = [("site_key", "TEXT"), ("test_origins", "TEXT")]
+
+
 def migrate(db, column_exists):
     db.executescript(DDL)
+    for col, decl in SITE_COLUMNS:  # databases that ran an early copy of this migration
+        if not column_exists(db, "tenant_websites", col):
+            db.execute(f"ALTER TABLE tenant_websites ADD COLUMN {col} {decl}")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_websites_key ON tenant_websites(site_key)")
     for col, decl in GROUP_COLUMNS:
         if not column_exists(db, "package_groups", col):
             db.execute(f"ALTER TABLE package_groups ADD COLUMN {col} {decl}")
@@ -200,7 +212,7 @@ def settings(db, tenant_id):
     return s
 
 
-SETTING_FIELDS = ["site_title", "banner_text", "about_text", "contact_email", "contact_phone", "whatsapp", "address",
+SETTING_FIELDS = ["test_origins", "site_title", "banner_text", "about_text", "contact_email", "contact_phone", "whatsapp", "address",
                   "color_primary", "color_accent", "payment_methods", "payment_terms", "deposit_policy", "booking_terms",
                   "cancellation_policy", "refund_policy", "privacy_policy", "notify_email", "chat_welcome"]
 
@@ -220,27 +232,72 @@ def save_settings(db, tenant_id, values, logo=None, hero=None):
     db.commit()
 
 
-def site_for_code(db, code):
-    """(tenant_id, settings) for a site address like /site/mavie, or None."""
-    t = db.execute("SELECT tenant_id FROM tenants WHERE lower(tenant_code) = lower(?) AND COALESCE(is_platform, 0) = 0",
-                   (code or "",)).fetchone()
+def ensure_site_key(db, tenant_id):
+    """The tenant's Website API key, made the first time it is needed."""
+    import secrets
+    if not db.execute("SELECT 1 FROM tenant_websites WHERE tenant_id = ?", (tenant_id,)).fetchone():
+        db.execute("INSERT INTO tenant_websites (tenant_id) VALUES (?)", (tenant_id,))
+    row = db.execute("SELECT site_key FROM tenant_websites WHERE tenant_id = ?", (tenant_id,)).fetchone()
+    if row[0]:
+        return row[0]
+    key = "site_" + secrets.token_urlsafe(18)
+    db.execute("UPDATE tenant_websites SET site_key = ? WHERE tenant_id = ?", (key, tenant_id))
+    db.commit()
+    return key
+
+
+def new_site_key(db, tenant_id):
+    """Replace the key (the old one stops working at once)."""
+    ensure_site_key(db, tenant_id)
+    db.execute("UPDATE tenant_websites SET site_key = NULL WHERE tenant_id = ?", (tenant_id,))
+    return ensure_site_key(db, tenant_id)
+
+
+def site_for_key(db, key):
+    """(tenant_id, settings) for a Website API key, or None."""
+    if not key or not key.startswith("site_"):
+        return None
+    t = db.execute("""SELECT w.tenant_id FROM tenant_websites w JOIN tenants t ON t.tenant_id = w.tenant_id
+                      WHERE w.site_key = ? AND COALESCE(t.is_platform, 0) = 0""", (key,)).fetchone()
     if t is None:
         return None
     return t[0], settings(db, t[0])
 
 
-def domain_map(db):
-    """{host: tenant code} for every enabled site with a domain -- both the
-    www. and the bare name."""
-    out = {}
-    for r in db.execute("""SELECT t.tenant_code, t.website_domain FROM tenants t
-                           JOIN tenant_websites w ON w.tenant_id = t.tenant_id
-                           WHERE w.enabled = 1 AND COALESCE(t.website_domain, '') != ''"""):
-        host = r[1].strip().lower().split("/")[0].split(":")[0]
-        bare = host[4:] if host.startswith("www.") else host
-        for h in (bare, "www." + bare):
-            out[h] = r[0].lower()
-    return out
+def clean_domain(raw):
+    return (raw or "").strip().lower().replace("https://", "").replace("http://", "").split("/")[0] or None
+
+
+def _origin(raw):
+    raw = (raw or "").strip().rstrip("/")
+    if not raw:
+        return None
+    if "://" not in raw:  # a bare name: https, except for this PC
+        raw = ("http://" if raw.startswith(("localhost", "127.0.0.1")) else "https://") + raw
+    scheme, _, rest = raw.partition("://")
+    return f"{scheme.lower()}://{rest.split('/')[0].lower()}"
+
+
+def live_origins(s):
+    """The web addresses of the live site: the domain with and without www."""
+    host = clean_domain(s.get("website_domain"))
+    if not host:
+        return set()
+    bare = host[4:] if host.startswith("www.") else host
+    return {f"https://{bare}", f"https://www.{bare}"}
+
+
+def test_origins(s):
+    return {o for o in (_origin(line) for line in (s.get("test_origins") or "").splitlines()) if o}
+
+
+def site_address(s):
+    """Where to look at the site: the domain, else the first test address."""
+    host = clean_domain(s.get("website_domain"))
+    if host:
+        return f"https://{host}/"
+    tests = [_origin(line) for line in (s.get("test_origins") or "").splitlines() if _origin(line)]
+    return tests[0] + "/" if tests else None
 
 
 # ---- groups --------------------------------------------------------------------------------
@@ -784,3 +841,28 @@ def new_count(db, tenant_id):
         return db.execute("SELECT COUNT(*) FROM web_enquiries WHERE tenant_id = ? AND status = 'new'", (tenant_id,)).fetchone()[0]
     except Exception:
         return 0
+
+
+def notify(db, site, enquiry_id):
+    """Email the tenant about a new enquiry / booking request and thank the
+    visitor (mailer.py; nothing is sent when email isn't set up)."""
+    import mailer
+    e = db.execute("""SELECT e.*, COALESCE(w.title, p.package_name) AS tour, d.start_date FROM web_enquiries e
+                      LEFT JOIN packages p ON p.package_id = e.package_id LEFT JOIN package_web w ON w.package_id = e.package_id
+                      LEFT JOIN package_departures d ON d.departure_id = e.departure_id WHERE e.enquiry_id = ?""",
+                   (enquiry_id,)).fetchone()
+    s = site
+    what = "booking request" if e["kind"] == "booking" else "enquiry"
+    lines = [f"New website {what} from {e['name']} <{e['email']}>",
+             f"Tour: {e['tour']}" if e["tour"] else None, f"Departure: {e['start_date']}" if e["start_date"] else None,
+             f"Travellers: {e['travellers']}" if e["travellers"] else None, f"Phone: {e['phone']}" if e["phone"] else None,
+             f"Country: {e['country']}" if e["country"] else None, "", e["message"] or "", "",
+             "Open the Website Inbox in TMS to follow it up."]
+    msgs = [(s.get("notify_email") or s.get("contact_email"), f"[{s['site_title']}] New {what}: {e['name']}",
+             "\n".join(x for x in lines if x is not None), e["email"])]
+    ack = (f"Dear {e['name']},\n\nThank you for your {what}" + (f" for {e['tour']}" if e["tour"] else "") +
+           ". We have received it and will reply within one business day.\n\n" +
+           ("Your place is not confirmed until we write to you with the deposit details.\n\n" if e["kind"] == "booking" else "") +
+           f"With best wishes,\n{s['site_title']}" + (f"\n{s['contact_phone']}" if s.get("contact_phone") else ""))
+    msgs.append((e["email"], f"{s['site_title']}: we received your {what}", ack, s.get("contact_email")))
+    mailer.send(msgs)

@@ -22,10 +22,16 @@ def validate_csrf():
         abort(400, description="Invalid or missing CSRF token — please retry the form.")
 
 
+# Public APIs called from other sites (no session cookie, no form token):
+# the tenant Website API (blueprints/site_api.py) guards itself with its
+# site key, allowed web addresses and per-visitor limits.
+EXEMPT_PREFIXES = ("/api/site/",)
+
+
 def init_app(app):
     app.jinja_env.globals["csrf_token"] = get_csrf_token
 
     @app.before_request
     def _check_csrf():
-        if request.method == "POST":
+        if request.method == "POST" and not request.path.startswith(EXEMPT_PREFIXES):
             validate_csrf()

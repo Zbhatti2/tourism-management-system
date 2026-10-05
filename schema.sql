@@ -3389,8 +3389,11 @@ CREATE TABLE IF NOT EXISTS tenant_websites (
     notify_email    TEXT,                   -- who is told about new enquiries and bookings
     chat_enabled    INTEGER NOT NULL DEFAULT 1,
     chat_welcome    TEXT,
+    site_key        TEXT,                   -- public key the tenant's website uses to call the Website API
+    test_origins    TEXT,                   -- extra web addresses allowed to call it (one per line), e.g. a test site
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_websites_key ON tenant_websites(site_key);
 CREATE TABLE IF NOT EXISTS package_web (
     package_id      INTEGER PRIMARY KEY REFERENCES packages(package_id),
     tenant_id       INTEGER NOT NULL REFERENCES tenants(tenant_id),
